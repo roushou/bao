@@ -6,6 +6,7 @@ mod command;
 mod context;
 mod error;
 mod file;
+mod validate;
 
 use std::{collections::HashMap, path::Path};
 
@@ -88,10 +89,29 @@ impl Schema {
     /// Validate the schema after parsing
     pub fn validate(&self, src: &str, filename: &str) -> Result<()> {
         for (name, command) in &self.commands {
+            // Validate command name is a valid Rust identifier
+            validate_name(name, "command", src, filename)?;
             command.validate(name, src, filename)?;
         }
         Ok(())
     }
+}
+
+/// Validate that a name is a valid Rust identifier
+fn validate_name(name: &str, context: &str, src: &str, filename: &str) -> Result<()> {
+    let span = validate::find_name_span(src, name);
+
+    if validate::is_rust_keyword(name) {
+        return Err(Error::reserved_keyword(name, context, src, filename, span));
+    }
+
+    if let Some(reason) = validate::validate_identifier(name) {
+        return Err(Error::invalid_identifier(
+            name, context, reason, src, filename, span,
+        ));
+    }
+
+    Ok(())
 }
 
 /// Parse a bao.toml file from the given path

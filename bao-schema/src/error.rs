@@ -70,6 +70,31 @@ pub enum Error {
         span: Option<SourceSpan>,
         message: String,
     },
+
+    #[error("'{name}' is a Rust reserved keyword")]
+    #[diagnostic(help("rename '{name}' to something else, e.g. '{name}_cmd' or '{name}_arg'"))]
+    ReservedKeyword {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("reserved keyword used here")]
+        span: Option<SourceSpan>,
+        name: String,
+        context: String,
+    },
+
+    #[error("invalid {context} name '{name}'")]
+    #[diagnostic(help(
+        "{reason}. Use only letters, numbers, and underscores, starting with a letter or underscore."
+    ))]
+    InvalidIdentifier {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("invalid identifier")]
+        span: Option<SourceSpan>,
+        name: String,
+        context: String,
+        reason: String,
+    },
 }
 
 impl Error {
@@ -103,6 +128,40 @@ impl Error {
             src: NamedSource::new(filename, src.to_string()),
             span: Some(span.into()),
             message: message.into(),
+        })
+    }
+
+    /// Create a reserved keyword error
+    pub fn reserved_keyword(
+        name: impl Into<String>,
+        context: impl Into<String>,
+        src: &str,
+        filename: &str,
+        span: Option<SourceSpan>,
+    ) -> Box<Self> {
+        Box::new(Error::ReservedKeyword {
+            src: NamedSource::new(filename, src.to_string()),
+            span,
+            name: name.into(),
+            context: context.into(),
+        })
+    }
+
+    /// Create an invalid identifier error
+    pub fn invalid_identifier(
+        name: impl Into<String>,
+        context: impl Into<String>,
+        reason: impl Into<String>,
+        src: &str,
+        filename: &str,
+        span: Option<SourceSpan>,
+    ) -> Box<Self> {
+        Box::new(Error::InvalidIdentifier {
+            src: NamedSource::new(filename, src.to_string()),
+            span,
+            name: name.into(),
+            context: context.into(),
+            reason: reason.into(),
         })
     }
 }

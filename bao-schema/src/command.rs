@@ -6,7 +6,10 @@ use serde::{
 };
 use toml::Spanned;
 
-use crate::error::{Error, Result};
+use crate::{
+    error::{Error, Result},
+    validate,
+};
 
 /// A CLI command or subcommand
 #[derive(Debug, Deserialize)]
@@ -42,10 +45,18 @@ struct ShortFlagInfo<'a> {
 impl Command {
     /// Validate command definition
     pub fn validate(&self, path: &str, src: &str, filename: &str) -> Result<()> {
-        // Check for duplicate short flags
+        // Validate argument names
+        for name in self.args.keys() {
+            validate_name(name, &format!("argument in '{}'", path), src, filename)?;
+        }
+
+        // Validate flag names and check for duplicate short flags
         let mut short_flags: HashMap<char, ShortFlagInfo> = HashMap::new();
 
         for (name, flag) in &self.flags {
+            // Validate flag name
+            validate_name(name, &format!("flag in '{}'", path), src, filename)?;
+
             if let Some(ref short) = flag.short {
                 let short_char = *short.get_ref();
                 let span = short.span();
@@ -74,6 +85,8 @@ impl Command {
 
         // Validate nested commands
         for (name, cmd) in &self.commands {
+            // Validate subcommand name
+            validate_name(name, &format!("subcommand in '{}'", path), src, filename)?;
             let nested_path = format!("{}.{}", path, name);
             cmd.validate(&nested_path, src, filename)?;
         }
@@ -232,6 +245,23 @@ where
     D: serde::Deserializer<'de>,
 {
     ArgsFormat::deserialize(deserializer).map(Into::into)
+}
+
+/// Validate that a name is a valid Rust identifier
+fn validate_name(name: &str, context: &str, src: &str, filename: &str) -> Result<()> {
+    let span = validate::find_name_span(src, name);
+
+    if validate::is_rust_keyword(name) {
+        return Err(Error::reserved_keyword(name, context, src, filename, span));
+    }
+
+    if let Some(reason) = validate::validate_identifier(name) {
+        return Err(Error::invalid_identifier(
+            name, context, reason, src, filename, span,
+        ));
+    }
+
+    Ok(())
 }
 
 /// Deserialize flags from either array or map format
@@ -694,5 +724,172 @@ mod tests {
         let seed = db.commands.get("seed").unwrap();
         assert_eq!(seed.args.len(), 1);
         assert!(seed.args.contains_key("file"));
+    }
+
+    // ========================================================================
+    // Validation tests (reserved keywords and invalid identifiers)
+    // ========================================================================
+
+    #[test]
+    fn test_reserved_keyword_command_name() {
+        let result = crate::parse_str(
+            r#"
+            [cli]
+            name = "test"
+
+            [commands.fn]
+            description = "This should fail"
+            "#,
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("reserved keyword"));
+    }
+
+    #[test]
+    fn test_reserved_keyword_arg_name() {
+        let result = crate::parse_str(
+            r#"
+            [cli]
+            name = "test"
+
+            [commands.hello]
+            description = "Say hello"
+
+            [commands.hello.args.struct]
+            type = "string"
+            "#,
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("reserved keyword"));
+    }
+
+    #[test]
+    fn test_reserved_keyword_flag_name() {
+        let result = crate::parse_str(
+            r#"
+            [cli]
+            name = "test"
+
+            [commands.hello]
+            description = "Say hello"
+
+            [commands.hello.flags.impl]
+            type = "bool"
+            "#,
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("reserved keyword"));
+    }
+
+    #[test]
+    fn test_reserved_keyword_subcommand_name() {
+        let result = crate::parse_str(
+            r#"
+            [cli]
+            name = "test"
+
+            [commands.db]
+            description = "Database commands"
+
+            [commands.db.commands.async]
+            description = "This should fail"
+            "#,
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("reserved keyword"));
+    }
+
+    #[test]
+    fn test_invalid_identifier_with_dash() {
+        let result = crate::parse_str(
+            r#"
+            [cli]
+            name = "test"
+
+            [commands.hello-world]
+            description = "This should fail"
+            "#,
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("invalid command name"));
+    }
+
+    #[test]
+    fn test_invalid_identifier_starting_with_number() {
+        let result = crate::parse_str(
+            r#"
+            [cli]
+            name = "test"
+
+            [commands.123cmd]
+            description = "This should fail"
+            "#,
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("invalid command name"));
+    }
+
+    #[test]
+    fn test_valid_identifiers_pass() {
+        let result = crate::parse_str(
+            r#"
+            [cli]
+            name = "test"
+
+            [commands.hello_world]
+            description = "Valid command"
+
+            [commands.hello_world.args.my_arg]
+            type = "string"
+
+            [commands.hello_world.flags.verbose_mode]
+            type = "bool"
+            short = "v"
+            "#,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_all_strict_keywords_rejected() {
+        let keywords = [
+            "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum",
+            "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod",
+            "move", "mut", "pub", "ref", "return", "self", "static", "struct", "super", "trait",
+            "true", "type", "unsafe", "use", "where", "while",
+        ];
+
+        for keyword in keywords {
+            let toml = format!(
+                r#"
+                [cli]
+                name = "test"
+
+                [commands.{}]
+                description = "Test"
+                "#,
+                keyword
+            );
+
+            let result = crate::parse_str(&toml);
+            assert!(
+                result.is_err(),
+                "Expected '{}' to be rejected as reserved keyword",
+                keyword
+            );
+        }
     }
 }
