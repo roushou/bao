@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = ["bao", "bao-core", "bao-schema", "bao-codegen-rust"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/roushou/bao"
+homepage = "https://github.com/roushou/bao"
+keywords = ["cli", "generator", "codegen", "clap"]
+categories = ["command-line-utilities", "development-tools"]
+
+[workspace.dependencies]
+# Internal crates
+baobao-core = { version = "0.1.0", path = "bao-core" }
+baobao-schema = { version = "0.1.0", path = "bao-schema" }
+baobao-codegen-rust = { version = "0.1.0", path = "bao-codegen-rust" }
+
+# External dependencies
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+serde = { version = "1", features = ["derive"] }
+toml = "0.9.2"
+thiserror = "2"
+miette = { version = "7", features = ["fancy"] }
+eyre = "0.6"
+color-eyre = "0.6"

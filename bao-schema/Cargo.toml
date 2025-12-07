@@ -1,0 +1,16 @@
+[package]
+name = "baobao-schema"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "TOML schema parsing and validation for Bao CLI generator"
+
+[dependencies]
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+miette = { workspace = true }

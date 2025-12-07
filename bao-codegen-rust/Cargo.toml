@@ -1,0 +1,16 @@
+[package]
+name = "baobao-codegen-rust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Rust code generator for Bao CLI generator"
+
+[dependencies]
+baobao-core = { workspace = true }
+baobao-schema = { workspace = true }
+eyre = { workspace = true }
+toml = { workspace = true }

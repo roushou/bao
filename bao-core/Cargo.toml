@@ -1,0 +1,16 @@
+[package]
+name = "baobao-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Core utilities for Bao CLI generator"
+
+[dependencies]
+eyre.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
