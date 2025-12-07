@@ -41,8 +41,8 @@ impl<'a> Generator<'a> {
 
         // Collect context field info
         let context_fields = self.collect_context_fields();
-        // Async if any context field exists
-        let is_async = !self.schema.context.is_empty();
+        // Async only if database context exists (HTTP is sync)
+        let is_async = self.schema.context.has_async();
 
         // context.rs
         files.push(PreviewFile {
@@ -126,8 +126,8 @@ impl<'a> Generator<'a> {
 
         // Collect context field info
         let context_fields = self.collect_context_fields();
-        // Async if any context field exists
-        let is_async = !self.schema.context.is_empty();
+        // Async only if database context exists (HTTP is sync)
+        let is_async = self.schema.context.has_async();
 
         // Generate context.rs
         ContextRs::new(context_fields).write(output_dir)?;
@@ -449,12 +449,16 @@ impl<'a> Generator<'a> {
         } else {
             // Leaf command - generate stub if file doesn't exist
             let pascal_name = to_pascal_case(name);
+            // Args types are always in the top-level command file, not nested modules
+            // So we only use the first segment of the path for the import
             let args_import = if prefix.is_empty() {
                 format!("crate::generated::commands::{}Args", pascal_name)
             } else {
+                // Get only the first segment (top-level command name)
+                let top_level_cmd = prefix.split('/').next().unwrap_or(prefix);
                 format!(
                     "crate::generated::commands::{}::{}Args",
-                    prefix, pascal_name
+                    top_level_cmd, pascal_name
                 )
             };
 
@@ -533,7 +537,7 @@ impl<'a> Generator<'a> {
 
     fn generate_subcommand_struct(
         &self,
-        name: &str,
+        handler_path: &str,
         pascal_name: &str,
         command: &Command,
         is_async: bool,
@@ -582,7 +586,7 @@ impl<'a> Generator<'a> {
             } else {
                 out.push_str(&format!(
                     "            {}Commands::{}(args) => crate::handlers::{}::{}::run(ctx, args){},\n",
-                    pascal_name, sub_pascal, name, sub_name, await_suffix
+                    pascal_name, sub_pascal, handler_path, sub_name, await_suffix
                 ));
             }
         }
@@ -594,8 +598,10 @@ impl<'a> Generator<'a> {
         for (sub_name, sub_command) in &command.commands {
             let sub_pascal = to_pascal_case(sub_name);
             if sub_command.has_subcommands() {
+                // Build nested handler path
+                let nested_path = format!("{}::{}", handler_path, sub_name);
                 out.push_str(&self.generate_subcommand_struct(
-                    sub_name,
+                    &nested_path,
                     &sub_pascal,
                     sub_command,
                     is_async,

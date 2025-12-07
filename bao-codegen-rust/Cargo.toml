@@ -14,3 +14,6 @@ baobao-core = { workspace = true }
 baobao-schema = { workspace = true }
 eyre = { workspace = true }
 toml = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

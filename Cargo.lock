@@ -112,6 +112,7 @@ dependencies = [
  "baobao-core",
  "baobao-schema",
  "eyre",
+ "tempfile",
  "toml",
 ]
 
