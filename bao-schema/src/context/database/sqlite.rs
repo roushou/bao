@@ -5,7 +5,10 @@ use crate::PoolConfig;
 /// Configuration for SQLite database
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct SqliteConfig {
-    /// Environment variable for database path
+    /// Direct file path to the SQLite database (e.g., "db.sqlite")
+    pub path: Option<String>,
+
+    /// Environment variable for database path (ignored if `path` is set)
     pub env: Option<String>,
 
     /// Pool configuration
@@ -111,7 +114,7 @@ mod tests {
             "#,
         );
 
-        let database = schema.context.get("database").unwrap();
+        let database = schema.context.database.as_ref().unwrap();
         assert!(matches!(database, ContextField::Sqlite(_)));
         assert_eq!(database.rust_type(), "sqlx::SqlitePool");
     }
@@ -136,7 +139,7 @@ mod tests {
             "#,
         );
 
-        let database = schema.context.get("database").unwrap();
+        let database = schema.context.database.as_ref().unwrap();
         let sqlite = database.sqlite_config().unwrap();
 
         assert!(sqlite.has_sqlite_options());
@@ -171,7 +174,7 @@ mod tests {
                 mode_str
             ));
 
-            let database = schema.context.get("database").unwrap();
+            let database = schema.context.database.as_ref().unwrap();
             let sqlite = database.sqlite_config().unwrap();
             assert_eq!(sqlite.journal_mode, Some(expected));
         }
@@ -196,7 +199,7 @@ mod tests {
                 mode_str
             ));
 
-            let database = schema.context.get("database").unwrap();
+            let database = schema.context.database.as_ref().unwrap();
             let sqlite = database.sqlite_config().unwrap();
             assert_eq!(sqlite.synchronous, Some(expected));
         }
@@ -215,8 +218,54 @@ mod tests {
             "#,
         );
 
-        let database = schema.context.get("database").unwrap();
+        let database = schema.context.database.as_ref().unwrap();
         let sqlite = database.sqlite_config().unwrap();
         assert_eq!(sqlite.read_only, Some(true));
+    }
+
+    #[test]
+    fn test_sqlite_with_path() {
+        let schema = parse(
+            r#"
+            [cli]
+            name = "test"
+
+            [context.database]
+            type = "sqlite"
+            path = "db.sqlite"
+            create_if_missing = true
+            "#,
+        );
+
+        let database = schema.context.database.as_ref().unwrap();
+        let sqlite = database.sqlite_config().unwrap();
+        assert_eq!(sqlite.path, Some("db.sqlite".to_string()));
+        assert_eq!(sqlite.create_if_missing, Some(true));
+        // env should be None when path is used
+        assert!(sqlite.env.is_none());
+    }
+
+    #[test]
+    fn test_sqlite_path_with_options() {
+        let schema = parse(
+            r#"
+            [cli]
+            name = "test"
+
+            [context.database]
+            type = "sqlite"
+            path = "data/app.db"
+            journal_mode = "wal"
+            foreign_keys = true
+            max_connections = 3
+            "#,
+        );
+
+        let database = schema.context.database.as_ref().unwrap();
+        let sqlite = database.sqlite_config().unwrap();
+        assert_eq!(sqlite.path, Some("data/app.db".to_string()));
+        assert_eq!(sqlite.journal_mode, Some(JournalMode::Wal));
+        assert_eq!(sqlite.foreign_keys, Some(true));
+        assert_eq!(sqlite.pool.max_connections, Some(3));
     }
 }

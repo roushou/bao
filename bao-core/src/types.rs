@@ -40,6 +40,8 @@ impl PoolConfigInfo {
 /// SQLite-specific configuration for code generation
 #[derive(Clone, Default)]
 pub struct SqliteConfigInfo {
+    /// Direct file path (e.g., "db.sqlite") - takes precedence over env var
+    pub path: Option<String>,
     pub create_if_missing: Option<bool>,
     pub read_only: Option<bool>,
     pub journal_mode: Option<String>,

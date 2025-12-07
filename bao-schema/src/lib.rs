@@ -23,44 +23,46 @@ pub struct Schema {
     pub cli: CliConfig,
 
     /// Application context (shared resources)
+    /// Only [context.database] and [context.http] are allowed
     #[serde(default, deserialize_with = "deserialize_context")]
-    pub context: HashMap<String, ContextField>,
+    pub context: Context,
 
     /// Top-level commands
     #[serde(default)]
     pub commands: HashMap<String, Command>,
 }
 
-fn deserialize_context<'de, D>(
-    deserializer: D,
-) -> std::result::Result<HashMap<String, ContextField>, D::Error>
+fn deserialize_context<'de, D>(deserializer: D) -> std::result::Result<Context, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     use context::DatabaseContextField;
     use serde::de::Error;
 
-    let raw: HashMap<String, toml::Value> = HashMap::deserialize(deserializer)?;
-    let mut result = HashMap::new();
-
-    for (key, value) in raw {
-        let field = if key == "http" {
-            // [context.http] is always an HTTP client
-            let config: HttpConfig = value
-                .try_into()
-                .map_err(|e: toml::de::Error| D::Error::custom(e.message()))?;
-            ContextField::Http(config)
-        } else {
-            // All other context fields must have a type (database types)
-            let db: DatabaseContextField = value
-                .try_into()
-                .map_err(|e: toml::de::Error| D::Error::custom(e.message()))?;
-            db.into()
-        };
-        result.insert(key, field);
+    #[derive(Deserialize)]
+    struct RawContext {
+        database: Option<toml::Value>,
+        http: Option<toml::Value>,
     }
 
-    Ok(result)
+    let raw: RawContext = RawContext::deserialize(deserializer)?;
+    let mut ctx = Context::default();
+
+    if let Some(db_value) = raw.database {
+        let db: DatabaseContextField = db_value
+            .try_into()
+            .map_err(|e: toml::de::Error| D::Error::custom(e.message()))?;
+        ctx.database = Some(db.into());
+    }
+
+    if let Some(http_value) = raw.http {
+        let http: HttpConfig = http_value
+            .try_into()
+            .map_err(|e: toml::de::Error| D::Error::custom(e.message()))?;
+        ctx.http = Some(http);
+    }
+
+    Ok(ctx)
 }
 
 impl Schema {

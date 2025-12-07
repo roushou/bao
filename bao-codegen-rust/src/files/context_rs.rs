@@ -109,10 +109,12 @@ fn generate_sqlx_pool_init(field: &ContextFieldInfo) -> String {
 }
 
 fn generate_sqlite_init(field: &ContextFieldInfo) -> String {
+    let has_path = field.sqlite.as_ref().is_some_and(|s| s.path.is_some());
     let has_sqlite_opts = field.sqlite.as_ref().is_some_and(|s| s.has_config());
     let has_pool_opts = field.pool.has_config();
 
-    if !has_sqlite_opts && !has_pool_opts {
+    // Simple case: no options, just connect
+    if !has_path && !has_sqlite_opts && !has_pool_opts {
         return format!(
             "sqlx::SqlitePool::connect(&std::env::var(\"{}\")?).await?",
             field.env_var
@@ -121,11 +123,19 @@ fn generate_sqlite_init(field: &ContextFieldInfo) -> String {
 
     let mut code = String::new();
 
-    // Build connection options
-    code.push_str(&format!(
-        "{{\n            let options = sqlx::sqlite::SqliteConnectOptions::from_str(&std::env::var(\"{}\")?)?",
-        field.env_var
-    ));
+    // Build connection options - use path directly or from env var
+    if has_path {
+        let path = field.sqlite.as_ref().unwrap().path.as_ref().unwrap();
+        code.push_str(&format!(
+            "{{\n            let options = sqlx::sqlite::SqliteConnectOptions::new()\n                .filename(\"{}\")",
+            path
+        ));
+    } else {
+        code.push_str(&format!(
+            "{{\n            let options = sqlx::sqlite::SqliteConnectOptions::from_str(&std::env::var(\"{}\")?)?",
+            field.env_var
+        ));
+    }
 
     if let Some(sqlite) = &field.sqlite {
         if let Some(create) = sqlite.create_if_missing {

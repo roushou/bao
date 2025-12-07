@@ -176,6 +176,61 @@ impl PoolConfig {
     }
 }
 
+/// Application context configuration
+/// Only allows [context.database] and [context.http]
+#[derive(Debug, Clone, Default)]
+pub struct Context {
+    /// Database connection pool (postgres, mysql, or sqlite)
+    pub database: Option<ContextField>,
+    /// HTTP client
+    pub http: Option<HttpConfig>,
+}
+
+impl Context {
+    /// Returns true if no context is configured
+    pub fn is_empty(&self) -> bool {
+        self.database.is_none() && self.http.is_none()
+    }
+
+    /// Returns the number of configured context fields
+    pub fn len(&self) -> usize {
+        let mut count = 0;
+        if self.database.is_some() {
+            count += 1;
+        }
+        if self.http.is_some() {
+            count += 1;
+        }
+        count
+    }
+
+    /// Returns true if any async context is configured (database)
+    pub fn has_async(&self) -> bool {
+        self.database.is_some()
+    }
+
+    /// Check if a context field exists by name
+    pub fn has_field(&self, name: &str) -> bool {
+        match name {
+            "database" => self.database.is_some(),
+            "http" => self.http.is_some(),
+            _ => false,
+        }
+    }
+
+    /// Get all context fields as a vector of (name, field) pairs
+    pub fn fields(&self) -> Vec<(&'static str, ContextField)> {
+        let mut fields = Vec::new();
+        if let Some(db) = &self.database {
+            fields.push(("database", db.clone()));
+        }
+        if let Some(http) = &self.http {
+            fields.push(("http", ContextField::Http(http.clone())));
+        }
+        fields
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::Schema;
@@ -201,51 +256,59 @@ mod tests {
 
         assert_eq!(schema.context.len(), 2);
 
-        let database = schema.context.get("database").unwrap();
+        let database = schema.context.database.as_ref().unwrap();
         assert!(matches!(database, super::ContextField::Postgres(_)));
         assert!(database.is_async());
 
-        let http = schema.context.get("http").unwrap();
-        assert!(matches!(http, super::ContextField::Http(_)));
-        assert!(http.env().is_none());
+        let http = schema.context.http.as_ref().unwrap();
+        assert_eq!(http.timeout, None);
     }
 
     #[test]
-    fn test_context_all_types() {
+    fn test_context_database_types() {
+        // Test postgres
         let schema = parse(
             r#"
             [cli]
             name = "test"
 
-            [context.pg]
+            [context.database]
             type = "postgres"
-
-            [context.my]
-            type = "mysql"
-
-            [context.lite]
-            type = "sqlite"
-
-            [context.http]
             "#,
         );
-
-        assert_eq!(schema.context.len(), 4);
         assert!(matches!(
-            schema.context.get("pg").unwrap(),
+            schema.context.database.as_ref().unwrap(),
             super::ContextField::Postgres(_)
         ));
+
+        // Test mysql
+        let schema = parse(
+            r#"
+            [cli]
+            name = "test"
+
+            [context.database]
+            type = "mysql"
+            "#,
+        );
         assert!(matches!(
-            schema.context.get("my").unwrap(),
+            schema.context.database.as_ref().unwrap(),
             super::ContextField::Mysql(_)
         ));
+
+        // Test sqlite
+        let schema = parse(
+            r#"
+            [cli]
+            name = "test"
+
+            [context.database]
+            type = "sqlite"
+            "#,
+        );
         assert!(matches!(
-            schema.context.get("lite").unwrap(),
+            schema.context.database.as_ref().unwrap(),
             super::ContextField::Sqlite(_)
-        ));
-        assert!(matches!(
-            schema.context.get("http").unwrap(),
-            super::ContextField::Http(_)
         ));
     }
 

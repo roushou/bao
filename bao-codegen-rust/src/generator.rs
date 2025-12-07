@@ -187,7 +187,8 @@ impl<'a> Generator<'a> {
     fn collect_context_fields(&self) -> Vec<ContextFieldInfo> {
         self.schema
             .context
-            .iter()
+            .fields()
+            .into_iter()
             .map(|(name, field)| {
                 let env_var = field
                     .env()
@@ -206,6 +207,7 @@ impl<'a> Generator<'a> {
                     .unwrap_or_default();
 
                 let sqlite = field.sqlite_config().map(|s| SqliteConfigInfo {
+                    path: s.path.clone(),
                     create_if_missing: s.create_if_missing,
                     read_only: s.read_only,
                     journal_mode: s.journal_mode.as_ref().map(|m| m.as_str().to_string()),
@@ -215,7 +217,7 @@ impl<'a> Generator<'a> {
                 });
 
                 ContextFieldInfo {
-                    name: name.clone(),
+                    name: name.to_string(),
                     rust_type: field.rust_type().to_string(),
                     env_var,
                     is_async: field.is_async(),
@@ -245,7 +247,7 @@ impl<'a> Generator<'a> {
             seen_dependencies.insert("tokio");
         }
 
-        for field in self.schema.context.values() {
+        for (_, field) in self.schema.context.fields() {
             for (dep_name, dep_version) in field.dependencies() {
                 if seen_dependencies.insert(dep_name) {
                     dependencies.push((dep_name.to_string(), dep_version.to_string()));

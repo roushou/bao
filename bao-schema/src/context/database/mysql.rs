@@ -34,8 +34,7 @@ mod tests {
             "#,
         );
 
-        assert_eq!(schema.context.len(), 1);
-        let database = schema.context.get("database").unwrap();
+        let database = schema.context.database.as_ref().unwrap();
         assert!(matches!(database, ContextField::Postgres(_)));
         assert_eq!(database.env(), Some("DATABASE_URL"));
     }
@@ -52,7 +51,7 @@ mod tests {
             "#,
         );
 
-        let database = schema.context.get("database").unwrap();
+        let database = schema.context.database.as_ref().unwrap();
         assert_eq!(database.env(), None);
         assert_eq!(database.default_env(), "DATABASE_URL");
     }
@@ -75,7 +74,7 @@ mod tests {
             "#,
         );
 
-        let database = schema.context.get("database").unwrap();
+        let database = schema.context.database.as_ref().unwrap();
         let pool = database.pool_config().unwrap();
         assert!(pool.has_config());
         assert_eq!(pool.max_connections, Some(20));
@@ -98,7 +97,7 @@ mod tests {
             "#,
         );
 
-        let database = schema.context.get("database").unwrap();
+        let database = schema.context.database.as_ref().unwrap();
         let pool = database.pool_config().unwrap();
         assert!(pool.has_config());
         assert_eq!(pool.max_connections, Some(10));
@@ -117,7 +116,7 @@ mod tests {
             "#,
         );
 
-        let database = schema.context.get("database").unwrap();
+        let database = schema.context.database.as_ref().unwrap();
         let pool = database.pool_config().unwrap();
         assert!(!pool.has_config());
     }
@@ -134,7 +133,7 @@ mod tests {
             "#,
         );
 
-        let database = schema.context.get("database").unwrap();
+        let database = schema.context.database.as_ref().unwrap();
         let pool = database.pool_config().unwrap();
         assert!(pool.has_config());
         assert_eq!(pool.max_connections, Some(15));

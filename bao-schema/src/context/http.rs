@@ -29,11 +29,9 @@ mod tests {
             "#,
         );
 
-        let http = schema.context.get("http").unwrap();
-        assert!(matches!(http, super::super::ContextField::Http(_)));
-        assert_eq!(http.env(), None);
-        assert_eq!(http.rust_type(), "reqwest::Client");
-        assert!(!http.is_async());
+        let http = schema.context.http.as_ref().unwrap();
+        assert_eq!(http.timeout, None);
+        assert_eq!(http.user_agent, None);
     }
 
     #[test]
@@ -49,12 +47,8 @@ mod tests {
             "#,
         );
 
-        let http = schema.context.get("http").unwrap();
-        if let super::super::ContextField::Http(config) = http {
-            assert_eq!(config.timeout, Some(30));
-            assert_eq!(config.user_agent, Some("my-cli/1.0".to_string()));
-        } else {
-            panic!("Expected Http variant");
-        }
+        let http = schema.context.http.as_ref().unwrap();
+        assert_eq!(http.timeout, Some(30));
+        assert_eq!(http.user_agent, Some("my-cli/1.0".to_string()));
     }
 }

@@ -81,7 +81,7 @@ impl RemoveCommand {
     fn remove_context(args: &RemoveContextArgs) -> Result<()> {
         let mut bao_toml = BaoToml::open(&args.config)?;
 
-        if !bao_toml.schema().context.contains_key(&args.name) {
+        if !bao_toml.schema().context.has_field(&args.name) {
             bail!("Context field '{}' does not exist", args.name);
         }
 

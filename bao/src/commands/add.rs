@@ -120,7 +120,7 @@ impl AddCommand {
                 _ => "database".to_string(),
             });
 
-        if bao_toml.schema().context.contains_key(&field_name) {
+        if bao_toml.schema().context.has_field(&field_name) {
             bail!("Context field '{}' already exists", field_name);
         }
 

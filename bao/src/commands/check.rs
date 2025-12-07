@@ -51,10 +51,7 @@ impl CheckCommand {
                 ctx_count,
                 if ctx_count == 1 { "" } else { "s" }
             );
-            let mut names: Vec<_> = schema.context.keys().collect();
-            names.sort();
-            for name in names {
-                let field = &schema.context[name];
+            for (name, field) in schema.context.fields() {
                 println!("    {} ({})", name, field.rust_type());
             }
         }
