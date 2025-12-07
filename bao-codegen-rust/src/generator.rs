@@ -1,6 +1,10 @@
 use std::{collections::HashSet, path::Path};
 
-use baobao_core::{CommandInfo, ContextFieldInfo, GeneratedFile, PoolConfigInfo, SqliteConfigInfo};
+use baobao_core::{
+    CommandInfo, ContextFieldInfo, ContextFieldType, DatabaseType, GenerateResult, GeneratedFile,
+    LanguageCodegen, PoolConfigInfo, PreviewFile, SqliteConfigInfo, to_pascal_case, to_snake_case,
+    toml_value_to_string,
+};
 use baobao_schema::{ArgType, Command, Schema};
 use eyre::Result;
 
@@ -9,25 +13,27 @@ use crate::files::{
     HandlersMod, MainRs,
 };
 
-/// Result of code generation
-pub struct GenerateResult {
-    /// Handler files that were created (stubs for new commands)
-    pub created_handlers: Vec<String>,
-    /// Handler files that exist but are no longer used
-    pub orphan_handlers: Vec<String>,
-}
-
-/// A generated file for preview
-pub struct PreviewFile {
-    /// Relative path from output directory
-    pub path: String,
-    /// File content
-    pub content: String,
-}
-
 /// Rust code generator that produces clap-based CLI code
 pub struct Generator<'a> {
     schema: &'a Schema,
+}
+
+impl LanguageCodegen for Generator<'_> {
+    fn language(&self) -> &'static str {
+        "rust"
+    }
+
+    fn file_extension(&self) -> &'static str {
+        "rs"
+    }
+
+    fn preview(&self) -> Vec<PreviewFile> {
+        self.preview_files()
+    }
+
+    fn generate(&self, output_dir: &Path) -> Result<GenerateResult> {
+        self.generate_files(output_dir)
+    }
 }
 
 impl<'a> Generator<'a> {
@@ -36,7 +42,7 @@ impl<'a> Generator<'a> {
     }
 
     /// Preview generated files without writing to disk
-    pub fn preview(&self) -> Vec<PreviewFile> {
+    fn preview_files(&self) -> Vec<PreviewFile> {
         let mut files = Vec::new();
 
         // Collect context field info
@@ -121,7 +127,7 @@ impl<'a> Generator<'a> {
     }
 
     /// Generate all files into the specified output directory
-    pub fn generate(&self, output_dir: &Path) -> Result<GenerateResult> {
+    fn generate_files(&self, output_dir: &Path) -> Result<GenerateResult> {
         let handlers_dir = output_dir.join("src").join("handlers");
 
         // Collect context field info
@@ -185,6 +191,8 @@ impl<'a> Generator<'a> {
     }
 
     fn collect_context_fields(&self) -> Vec<ContextFieldInfo> {
+        use baobao_schema::ContextField;
+
         self.schema
             .context
             .fields()
@@ -216,9 +224,17 @@ impl<'a> Generator<'a> {
                     foreign_keys: s.foreign_keys,
                 });
 
+                // Convert schema ContextField to core ContextFieldType
+                let field_type = match &field {
+                    ContextField::Postgres(_) => ContextFieldType::Database(DatabaseType::Postgres),
+                    ContextField::Mysql(_) => ContextFieldType::Database(DatabaseType::Mysql),
+                    ContextField::Sqlite(_) => ContextFieldType::Database(DatabaseType::Sqlite),
+                    ContextField::Http(_) => ContextFieldType::Http,
+                };
+
                 ContextFieldInfo {
                     name: name.to_string(),
-                    rust_type: field.rust_type().to_string(),
+                    field_type,
                     env_var,
                     is_async: field.is_async(),
                     pool,
@@ -612,38 +628,5 @@ impl<'a> Generator<'a> {
         }
 
         out
-    }
-}
-
-fn to_pascal_case(s: &str) -> String {
-    s.split('_')
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(c) => c.to_uppercase().chain(chars).collect(),
-            }
-        })
-        .collect()
-}
-
-fn to_snake_case(s: &str) -> String {
-    let mut result = String::new();
-    for (i, c) in s.chars().enumerate() {
-        if c.is_uppercase() && i > 0 {
-            result.push('_');
-        }
-        result.push(c.to_lowercase().next().unwrap());
-    }
-    result.replace('-', "_")
-}
-
-fn toml_value_to_string(value: &toml::Value) -> String {
-    match value {
-        toml::Value::String(s) => s.clone(),
-        toml::Value::Integer(i) => i.to_string(),
-        toml::Value::Float(f) => f.to_string(),
-        toml::Value::Boolean(b) => b.to_string(),
-        _ => String::new(),
     }
 }

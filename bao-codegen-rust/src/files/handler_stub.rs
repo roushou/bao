@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, GeneratedFile, Overwrite};
+use baobao_core::{FileRules, GeneratedFile, Overwrite, to_pascal_case};
 
 /// A handler stub file for a command
 pub struct HandlerStub {
@@ -46,16 +46,4 @@ pub {}fn run(_ctx: &Context, args: {}Args) -> eyre::Result<()> {{
             self.args_import, async_kw, pascal, self.command
         )
     }
-}
-
-fn to_pascal_case(s: &str) -> String {
-    s.split('_')
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(c) => c.to_uppercase().chain(chars).collect(),
-            }
-        })
-        .collect()
 }

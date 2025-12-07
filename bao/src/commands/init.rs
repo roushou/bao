@@ -4,7 +4,7 @@ use baobao_codegen_rust::{
     Generator,
     files::{BaoToml, CargoToml, GitIgnore, MainRs},
 };
-use baobao_core::{File, GeneratedFile};
+use baobao_core::{File, GeneratedFile, LanguageCodegen};
 use clap::Args;
 use eyre::{Context, Result};
 use miette::Report;

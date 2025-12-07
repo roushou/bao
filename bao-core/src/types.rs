@@ -6,11 +6,36 @@ pub struct CommandInfo {
     pub has_subcommands: bool,
 }
 
+/// Database type for context fields
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DatabaseType {
+    Postgres,
+    Mysql,
+    Sqlite,
+}
+
+/// Context field type - language-agnostic representation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContextFieldType {
+    /// Database connection pool
+    Database(DatabaseType),
+    /// HTTP client
+    Http,
+}
+
+impl ContextFieldType {
+    /// Returns true if this field type requires async initialization
+    pub fn is_async(&self) -> bool {
+        matches!(self, ContextFieldType::Database(_))
+    }
+}
+
 /// Info about a context field for code generation
 #[derive(Clone)]
 pub struct ContextFieldInfo {
     pub name: String,
-    pub rust_type: String,
+    /// Language-agnostic field type
+    pub field_type: ContextFieldType,
     pub env_var: String,
     pub is_async: bool,
     pub pool: PoolConfigInfo,

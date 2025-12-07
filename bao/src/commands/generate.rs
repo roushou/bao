@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use baobao_codegen_rust::Generator;
+use baobao_core::LanguageCodegen;
 use baobao_schema::{BaoToml, Command, Schema};
 use clap::Args;
 use eyre::{Context, Result};
