@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["bao", "bao-codegen-rust", "bao-core", "bao-schema"]
+members = ["bao", "bao-codegen", "bao-codegen-rust", "bao-core", "bao-schema"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,6 +13,7 @@ categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
 # Internal crates
+baobao-codegen = { path = "bao-codegen", version = "0.1.0" }
 baobao-codegen-rust = { path = "bao-codegen-rust", version = "0.1.0" }
 baobao-core = { path = "bao-core", version = "0.1.0" }
 baobao-schema = { path = "bao-schema", version = "0.1.0" }
@@ -21,6 +22,7 @@ clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 color-eyre = "0.6"
 eyre = "0.6"
+indexmap = "2"
 miette = { version = "7", features = ["fancy"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"

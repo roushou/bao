@@ -95,6 +95,7 @@ dependencies = [
 name = "baobao"
 version = "0.1.0"
 dependencies = [
+ "baobao-codegen",
  "baobao-codegen-rust",
  "baobao-core",
  "baobao-schema",
@@ -106,9 +107,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "baobao-codegen"
+version = "0.1.0"
+dependencies = [
+ "baobao-core",
+ "baobao-schema",
+ "eyre",
+ "indexmap",
+ "tempfile",
+]
+
+[[package]]
 name = "baobao-codegen-rust"
 version = "0.1.0"
 dependencies = [
+ "baobao-codegen",
  "baobao-core",
  "baobao-schema",
  "eyre",

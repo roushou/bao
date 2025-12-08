@@ -1,8 +1,11 @@
 use std::{collections::HashSet, path::Path};
 
+use baobao_codegen::{
+    CommandInfo, ContextFieldInfo, GenerateResult, HandlerPaths, LanguageCodegen, PoolConfigInfo,
+    PreviewFile, SqliteConfigInfo, collect_handler_paths,
+};
 use baobao_core::{
-    CommandInfo, ContextFieldInfo, ContextFieldType, DatabaseType, GenerateResult, GeneratedFile,
-    LanguageCodegen, PoolConfigInfo, PreviewFile, SqliteConfigInfo, to_pascal_case, to_snake_case,
+    ContextFieldType, DatabaseType, GeneratedFile, to_pascal_case, to_snake_case,
     toml_value_to_string,
 };
 use baobao_schema::{ArgType, Command, Schema};
@@ -371,10 +374,9 @@ impl<'a> Generator<'a> {
         is_async: bool,
     ) -> Result<GenerateResult> {
         let mut created_handlers = Vec::new();
-        let mut expected_handlers = HashSet::new();
 
-        // Collect all leaf commands (commands without subcommands)
-        self.collect_leaf_commands(&self.schema.commands, "", &mut expected_handlers);
+        // Collect all expected handler paths using shared utility
+        let expected_handlers = collect_handler_paths(self.schema);
 
         // Generate handlers/mod.rs (always regenerated)
         HandlersMod::new(self.schema.commands.keys().cloned().collect()).write(output_dir)?;
@@ -386,36 +388,14 @@ impl<'a> Generator<'a> {
             created_handlers.extend(created);
         }
 
-        // Find orphan handlers
-        let orphan_handlers = self.find_orphan_handlers(handlers_dir, &expected_handlers)?;
+        // Find orphan handlers using shared utility
+        let handler_paths = HandlerPaths::new(handlers_dir, "rs");
+        let orphan_handlers = handler_paths.find_orphans(&expected_handlers)?;
 
         Ok(GenerateResult {
             created_handlers,
             orphan_handlers,
         })
-    }
-
-    /// Collect all leaf command paths (e.g., "hello", "db/migrate")
-    fn collect_leaf_commands(
-        &self,
-        commands: &std::collections::HashMap<String, Command>,
-        prefix: &str,
-        result: &mut HashSet<String>,
-    ) {
-        for (name, command) in commands {
-            let path = if prefix.is_empty() {
-                name.clone()
-            } else {
-                format!("{}/{}", prefix, name)
-            };
-
-            if command.has_subcommands() {
-                result.insert(path.clone()); // Parent directory
-                self.collect_leaf_commands(&command.commands, &path, result);
-            } else {
-                result.insert(path);
-            }
-        }
     }
 
     /// Generate stub handler files for a command (recursively for subcommands)
@@ -487,68 +467,6 @@ impl<'a> Generator<'a> {
         }
 
         Ok(created)
-    }
-
-    /// Find handler files that exist but are no longer used
-    fn find_orphan_handlers(
-        &self,
-        handlers_dir: &Path,
-        expected: &HashSet<String>,
-    ) -> Result<Vec<String>> {
-        let mut orphans = Vec::new();
-        self.scan_handler_files(handlers_dir, "", expected, &mut orphans)?;
-        Ok(orphans)
-    }
-
-    /// Recursively scan for .rs files and find orphans
-    fn scan_handler_files(
-        &self,
-        dir: &Path,
-        prefix: &str,
-        expected: &HashSet<String>,
-        orphans: &mut Vec<String>,
-    ) -> Result<()> {
-        if !dir.exists() {
-            return Ok(());
-        }
-
-        for entry in std::fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            let file_name = path.file_name().unwrap().to_string_lossy();
-
-            if file_name == "mod.rs" {
-                continue; // Skip mod.rs files
-            }
-
-            if path.is_dir() {
-                let new_prefix = if prefix.is_empty() {
-                    file_name.to_string()
-                } else {
-                    format!("{}/{}", prefix, file_name)
-                };
-
-                // Check if this directory is expected
-                if !expected.contains(&new_prefix) {
-                    orphans.push(new_prefix.clone());
-                } else {
-                    self.scan_handler_files(&path, &new_prefix, expected, orphans)?;
-                }
-            } else if path.extension().is_some_and(|ext| ext == "rs") {
-                let name = path.file_stem().unwrap().to_string_lossy();
-                let handler_path = if prefix.is_empty() {
-                    name.to_string()
-                } else {
-                    format!("{}/{}", prefix, name)
-                };
-
-                if !expected.contains(&handler_path) {
-                    orphans.push(handler_path);
-                }
-            }
-        }
-
-        Ok(())
     }
 
     fn generate_subcommand_struct(

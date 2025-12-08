@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
+use baobao_codegen::{LanguageCodegen, leaf_commands};
 use baobao_codegen_rust::Generator;
-use baobao_core::LanguageCodegen;
 use baobao_schema::{BaoToml, Command, Schema};
 use clap::Args;
 use eyre::{Context, Result};
@@ -99,18 +99,7 @@ impl GenerateCommand {
     }
 
     fn count_commands(schema: &Schema) -> usize {
-        fn count(commands: &std::collections::HashMap<String, Command>) -> usize {
-            let mut total = 0;
-            for cmd in commands.values() {
-                if cmd.has_subcommands() {
-                    total += count(&cmd.commands);
-                } else {
-                    total += 1;
-                }
-            }
-            total
-        }
-        count(&schema.commands)
+        leaf_commands(schema).len()
     }
 
     fn print_commands(commands: &std::collections::HashMap<String, Command>, indent: &str) {

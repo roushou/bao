@@ -5,8 +5,7 @@
 
 use std::{path::Path, process::Command};
 
-use baobao_codegen_rust::Generator;
-use baobao_core::LanguageCodegen;
+use baobao_codegen_rust::{Generator, LanguageCodegen};
 use baobao_schema::parse_str;
 use tempfile::TempDir;
 

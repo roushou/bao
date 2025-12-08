@@ -2,16 +2,17 @@
 
 use std::path::Path;
 
+use baobao_core::{ArgType, ContextFieldType};
 use eyre::Result;
 
 /// Trait for language-specific code generators.
 ///
 /// Implement this trait to add support for generating CLI code in a new language.
 pub trait LanguageCodegen {
-    /// Language identifier (e.g., "rust", "typescript", "python")
+    /// Language identifier (e.g., "rust", "typescript", "go")
     fn language(&self) -> &'static str;
 
-    /// File extension for generated source files (e.g., "rs", "ts", "py")
+    /// File extension for generated source files (e.g., "rs", "ts", "go")
     fn file_extension(&self) -> &'static str;
 
     /// Preview generated files without writing to disk
@@ -37,4 +38,24 @@ pub struct PreviewFile {
     pub path: String,
     /// File content
     pub content: String,
+}
+
+/// Trait for mapping schema types to language-specific type strings.
+///
+/// Implement this trait for each target language to provide type mappings.
+pub trait TypeMapper {
+    /// The target language name
+    fn language(&self) -> &'static str;
+
+    /// Map an argument type to a language-specific type string
+    fn map_arg_type(&self, arg_type: ArgType) -> &'static str;
+
+    /// Map an optional argument type (e.g., `Option<String>` in Rust, `string | undefined` in TS)
+    fn map_optional_arg_type(&self, arg_type: ArgType) -> String {
+        // Default implementation - languages can override
+        format!("Option<{}>", self.map_arg_type(arg_type))
+    }
+
+    /// Map a context field type to a language-specific type string
+    fn map_context_type(&self, field_type: &ContextFieldType) -> &'static str;
 }

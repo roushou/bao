@@ -1,13 +1,19 @@
-mod codegen;
+//! Core utilities and types for Bao CLI generator.
+//!
+//! This crate provides fundamental types and utilities used across
+//! the Bao ecosystem.
+
 mod file;
 mod type_mapper;
 mod types;
 mod utils;
 
-pub use codegen::{GenerateResult, LanguageCodegen, PreviewFile};
+// File operations
 pub use file::{File, FileRules, GeneratedFile, Overwrite, WriteResult};
-pub use type_mapper::{ArgType, RustTypeMapper, TypeMapper};
-pub use types::{
-    CommandInfo, ContextFieldInfo, ContextFieldType, DatabaseType, PoolConfigInfo, SqliteConfigInfo,
+// Fundamental types
+pub use type_mapper::ArgType;
+pub use types::{ContextFieldType, DatabaseType};
+// String utilities
+pub use utils::{
+    to_camel_case, to_kebab_case, to_pascal_case, to_snake_case, toml_value_to_string,
 };
-pub use utils::{to_pascal_case, to_snake_case, toml_value_to_string};

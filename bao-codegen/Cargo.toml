@@ -1,8 +1,8 @@
 [package]
-name = "baobao-codegen-rust"
+name = "baobao-codegen"
 version.workspace = true
 edition.workspace = true
-description = "Rust code generator for Bao CLI generator"
+description = "Shared code generation utilities for Bao CLI generator"
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
@@ -10,11 +10,17 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-baobao-codegen = { workspace = true }
 baobao-core = { workspace = true }
 baobao-schema = { workspace = true }
-eyre = { workspace = true }
-toml = { workspace = true }
+eyre.workspace = true
+indexmap.workspace = true
+
+[features]
+testing = ["dep:tempfile"]
 
 [dev-dependencies]
 tempfile = "3"
+
+[dependencies.tempfile]
+version = "3"
+optional = true

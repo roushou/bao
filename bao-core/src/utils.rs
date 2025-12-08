@@ -25,6 +25,21 @@ pub fn to_snake_case(s: &str) -> String {
     result.replace('-', "_")
 }
 
+/// Convert to camelCase
+pub fn to_camel_case(s: &str) -> String {
+    let pascal = to_pascal_case(s);
+    let mut chars = pascal.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(c) => c.to_lowercase().chain(chars).collect(),
+    }
+}
+
+/// Convert to kebab-case
+pub fn to_kebab_case(s: &str) -> String {
+    to_snake_case(s).replace('_', "-")
+}
+
 /// Convert a TOML value to its string representation
 pub fn toml_value_to_string(value: &toml::Value) -> String {
     match value {
