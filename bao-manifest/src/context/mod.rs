@@ -144,6 +144,14 @@ impl ContextField {
             _ => None,
         }
     }
+
+    /// Get HTTP-specific configuration
+    pub fn http_config(&self) -> Option<&HttpConfig> {
+        match self {
+            ContextField::Http(c) => Some(c),
+            _ => None,
+        }
+    }
 }
 
 /// Database connection pool configuration
@@ -182,8 +190,8 @@ impl PoolConfig {
 pub struct Context {
     /// Database connection pool (postgres, mysql, or sqlite)
     pub database: Option<ContextField>,
-    /// HTTP client
-    pub http: Option<HttpConfig>,
+    /// HTTP client (stored as ContextField for uniform iteration)
+    pub http: Option<ContextField>,
 }
 
 impl Context {
@@ -219,15 +227,20 @@ impl Context {
     }
 
     /// Get all context fields as a vector of (name, field) pairs
-    pub fn fields(&self) -> Vec<(&'static str, ContextField)> {
+    pub fn fields(&self) -> Vec<(&'static str, &ContextField)> {
         let mut fields = Vec::new();
         if let Some(db) = &self.database {
-            fields.push(("database", db.clone()));
+            fields.push(("database", db));
         }
         if let Some(http) = &self.http {
-            fields.push(("http", ContextField::Http(http.clone())));
+            fields.push(("http", http));
         }
         fields
+    }
+
+    /// Get the HTTP configuration if present
+    pub fn http_config(&self) -> Option<&HttpConfig> {
+        self.http.as_ref().and_then(|f| f.http_config())
     }
 }
 
@@ -260,7 +273,7 @@ mod tests {
         assert!(matches!(database, super::ContextField::Postgres(_)));
         assert!(database.is_async());
 
-        let http = schema.context.http.as_ref().unwrap();
+        let http = schema.context.http_config().unwrap();
         assert_eq!(http.timeout, None);
     }
 

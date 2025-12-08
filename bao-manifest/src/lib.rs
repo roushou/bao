@@ -37,7 +37,7 @@ fn deserialize_context<'de, D>(deserializer: D) -> std::result::Result<Context, 
 where
     D: serde::Deserializer<'de>,
 {
-    use context::DatabaseContextField;
+    use context::{ContextField, DatabaseContextField};
     use serde::de::Error;
 
     #[derive(Deserialize)]
@@ -60,7 +60,7 @@ where
         let http: HttpConfig = http_value
             .try_into()
             .map_err(|e: toml::de::Error| D::Error::custom(e.message()))?;
-        ctx.http = Some(http);
+        ctx.http = Some(ContextField::Http(http));
     }
 
     Ok(ctx)

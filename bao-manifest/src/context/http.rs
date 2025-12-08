@@ -29,7 +29,7 @@ mod tests {
             "#,
         );
 
-        let http = schema.context.http.as_ref().unwrap();
+        let http = schema.context.http_config().unwrap();
         assert_eq!(http.timeout, None);
         assert_eq!(http.user_agent, None);
     }
@@ -47,7 +47,7 @@ mod tests {
             "#,
         );
 
-        let http = schema.context.http.as_ref().unwrap();
+        let http = schema.context.http_config().unwrap();
         assert_eq!(http.timeout, Some(30));
         assert_eq!(http.user_agent, Some("my-cli/1.0".to_string()));
     }
