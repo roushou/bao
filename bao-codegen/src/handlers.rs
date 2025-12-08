@@ -5,10 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use baobao_manifest::Schema;
 use eyre::Result;
-
-use crate::commands::flatten_commands;
 
 /// Manages handler file paths for a code generator.
 ///
@@ -146,35 +143,6 @@ impl HandlerPaths {
 
         Ok(())
     }
-}
-
-/// Collect all handler paths from a schema.
-///
-/// Returns a set of path strings like "db/migrate", "hello".
-pub fn collect_handler_paths(schema: &Schema) -> HashSet<String> {
-    let commands = flatten_commands(schema);
-    let mut paths = HashSet::new();
-
-    for cmd in commands {
-        let path_str = cmd.path_str("/");
-        paths.insert(path_str);
-    }
-
-    paths
-}
-
-/// Collect only leaf handler paths (actual handler files, not parent directories).
-pub fn collect_leaf_handler_paths(schema: &Schema) -> HashSet<String> {
-    let commands = flatten_commands(schema);
-    let mut paths = HashSet::new();
-
-    for cmd in commands {
-        if cmd.is_leaf {
-            paths.insert(cmd.path_str("/"));
-        }
-    }
-
-    paths
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use baobao_codegen::{LanguageCodegen, leaf_commands};
+use baobao_codegen::{CommandTree, LanguageCodegen};
 use baobao_codegen_rust::Generator;
 use baobao_manifest::{BaoToml, Command, Schema};
 use clap::Args;
@@ -94,7 +94,7 @@ impl BakeCommand {
     }
 
     fn count_commands(schema: &Schema) -> usize {
-        leaf_commands(schema).len()
+        CommandTree::new(schema).leaf_count()
     }
 
     fn print_commands(commands: &std::collections::HashMap<String, Command>, indent: &str) {

@@ -18,11 +18,9 @@ pub mod testing;
 
 // Re-export utilities
 pub use code_builder::CodeBuilder;
-pub use commands::{
-    CommandVisitor, FlatCommand, flatten_commands, leaf_commands, parent_commands, walk_commands,
-};
+pub use commands::{CommandTree, FlatCommand};
 pub use file_builder::FileBuilder;
-pub use handlers::{HandlerPaths, collect_handler_paths, collect_leaf_handler_paths};
+pub use handlers::HandlerPaths;
 pub use imports::{DependencyCollector, DependencySpec, ImportCollector};
 pub use indent::Indent;
 pub use naming::NamingConvention;

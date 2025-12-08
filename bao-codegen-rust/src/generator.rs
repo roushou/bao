@@ -1,8 +1,8 @@
 use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
-    CodeBuilder, CommandInfo, ContextFieldInfo, FileBuilder, GenerateResult, HandlerPaths,
-    LanguageCodegen, PoolConfigInfo, PreviewFile, SqliteConfigInfo, collect_handler_paths,
+    CodeBuilder, CommandInfo, CommandTree, ContextFieldInfo, FileBuilder, GenerateResult,
+    HandlerPaths, LanguageCodegen, PoolConfigInfo, PreviewFile, SqliteConfigInfo,
 };
 use baobao_core::{
     ContextFieldType, DatabaseType, GeneratedFile, to_pascal_case, to_snake_case,
@@ -366,8 +366,8 @@ impl<'a> Generator<'a> {
     ) -> Result<GenerateResult> {
         let mut created_handlers = Vec::new();
 
-        // Collect all expected handler paths using shared utility
-        let expected_handlers = collect_handler_paths(self.schema);
+        // Collect all expected handler paths
+        let expected_handlers = CommandTree::new(self.schema).collect_paths();
 
         // Generate handlers/mod.rs (always regenerated)
         HandlersMod::new(self.schema.commands.keys().cloned().collect()).write(output_dir)?;
