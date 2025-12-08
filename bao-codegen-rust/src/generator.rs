@@ -12,7 +12,7 @@ use baobao_schema::{ArgType, Command, Schema};
 use eyre::Result;
 
 use crate::{
-    Enum, Field, Fn, Impl, Param, RustFileBuilder, Struct, Variant,
+    Arm, Enum, Field, Fn, Impl, Match, Param, RustFileBuilder, Struct, Variant,
     files::{
         AppRs, CargoToml, CliRs, CommandRs, CommandsMod, ContextRs, GeneratedMod, HandlerStub,
         HandlersMod, MainRs,
@@ -499,34 +499,32 @@ impl<'a> Generator<'a> {
         }
 
         // Dispatch impl
-        let match_body = command
-            .commands
-            .iter()
-            .map(|(sub_name, sub_command)| {
-                let sub_pascal = to_pascal_case(sub_name);
-                if sub_command.has_subcommands() {
+        let mut match_expr = Match::new("self.command");
+        for (sub_name, sub_command) in &command.commands {
+            let sub_pascal = to_pascal_case(sub_name);
+            let (pattern, body) = if sub_command.has_subcommands() {
+                (
+                    format!("{}Commands::{}(cmd)", pascal_name, sub_pascal),
+                    format!("cmd.dispatch(ctx){}", await_suffix),
+                )
+            } else {
+                (
+                    format!("{}Commands::{}(args)", pascal_name, sub_pascal),
                     format!(
-                        "{}Commands::{}(cmd) => cmd.dispatch(ctx){},",
-                        pascal_name, sub_pascal, await_suffix
-                    )
-                } else {
-                    format!(
-                        "{}Commands::{}(args) => crate::handlers::{}::{}::run(ctx, args){},",
-                        pascal_name, sub_pascal, handler_path, sub_name, await_suffix
-                    )
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n    ");
-
-        let body = format!("match self.command {{\n    {}\n}}", match_body);
+                        "crate::handlers::{}::{}::run(ctx, args){}",
+                        handler_path, sub_name, await_suffix
+                    ),
+                )
+            };
+            match_expr = match_expr.arm(Arm::new(pattern).body(body));
+        }
 
         let mut dispatch = Fn::new("dispatch")
             .doc("Dispatch the parsed subcommand to the appropriate handler")
             .param(Param::new("self", ""))
             .param(Param::new("ctx", "&Context"))
             .returns("eyre::Result<()>")
-            .body(body);
+            .body_match(&match_expr);
 
         if is_async {
             dispatch = dispatch.async_();

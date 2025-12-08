@@ -9,6 +9,6 @@ mod impls;
 mod structs;
 
 pub use enums::{Enum, Variant};
-pub use fns::{Fn, Param};
+pub use fns::{Arm, Fn, Match, Param};
 pub use impls::Impl;
 pub use structs::{Field, Struct};
