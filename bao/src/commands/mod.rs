@@ -18,6 +18,23 @@ use list::ListCommand;
 use remove::RemoveCommand;
 use run::RunCommand;
 
+/// Extension trait for exiting on manifest errors with pretty formatting
+pub(crate) trait UnwrapOrExit<T> {
+    fn unwrap_or_exit(self) -> T;
+}
+
+impl<T> UnwrapOrExit<T> for baobao_manifest::Result<T> {
+    fn unwrap_or_exit(self) -> T {
+        match self {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("{:?}", miette::Report::new(*e));
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(name = "bao")]
 #[command(version)]

@@ -4,6 +4,8 @@ use baobao_manifest::{BaoToml, Command};
 use clap::Args;
 use eyre::Result;
 
+use super::UnwrapOrExit;
+
 #[derive(Args)]
 pub struct ListCommand {
     /// Path to bao.toml (defaults to ./bao.toml)
@@ -13,14 +15,7 @@ pub struct ListCommand {
 
 impl ListCommand {
     pub fn run(&self) -> Result<()> {
-        let bao_toml = match BaoToml::open(&self.config) {
-            Ok(f) => f,
-            Err(e) => {
-                eprintln!("{:?}", miette::Report::new(*e));
-                std::process::exit(1);
-            }
-        };
-
+        let bao_toml = BaoToml::open(&self.config).unwrap_or_exit();
         let schema = bao_toml.schema();
 
         if schema.commands.is_empty() {
