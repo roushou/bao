@@ -3,11 +3,21 @@
 //! These tests generate Rust code from various schema configurations and run
 //! `cargo check` to ensure the generated code is valid Rust.
 
-use std::{path::Path, process::Command};
+use std::{path::Path, process::Command, sync::Mutex};
 
 use baobao_codegen_rust::{Generator, LanguageCodegen};
 use baobao_schema::parse_str;
 use tempfile::TempDir;
+
+/// Shared target directory for faster compilation across tests.
+/// Dependencies are compiled once and reused.
+fn shared_target_dir() -> std::path::PathBuf {
+    std::env::temp_dir().join("bao-codegen-test-target")
+}
+
+/// Mutex to serialize cargo check calls to avoid race conditions
+/// when multiple tests try to compile to the same target directory.
+static CARGO_LOCK: Mutex<()> = Mutex::new(());
 
 /// Generate code from a schema and verify it compiles with `cargo check`
 fn assert_generated_code_compiles(schema_toml: &str) {
@@ -21,9 +31,14 @@ fn assert_generated_code_compiles(schema_toml: &str) {
         .generate(output_dir)
         .expect("Failed to generate code");
 
-    // Run cargo check on the generated code
+    // Serialize cargo check calls to avoid race conditions on shared target dir
+    let _lock = CARGO_LOCK.lock().unwrap();
+
+    // Run cargo check on the generated code with shared target dir
+    // This dramatically speeds up tests by reusing compiled dependencies
     let status = Command::new("cargo")
         .args(["check", "--message-format=short"])
+        .env("CARGO_TARGET_DIR", shared_target_dir())
         .current_dir(output_dir)
         .output()
         .expect("Failed to run cargo check");
