@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 
+use baobao_codegen::FileBuilder;
 use baobao_core::{FileRules, GeneratedFile, Overwrite, to_pascal_case};
+
+use crate::{Fn, Param, RustFileBuilder};
 
 /// A handler stub file for a command
 pub struct HandlerStub {
@@ -17,6 +20,22 @@ impl HandlerStub {
             is_async,
         }
     }
+
+    fn build_run_fn(&self) -> Fn {
+        let pascal = to_pascal_case(&self.command);
+
+        let mut f = Fn::new("run")
+            .param(Param::new("_ctx", "&Context"))
+            .param(Param::new("args", format!("{}Args", pascal)))
+            .returns("eyre::Result<()>")
+            .body_line(format!("todo!(\"implement {} command\")", self.command));
+
+        if self.is_async {
+            f = f.async_();
+        }
+
+        f
+    }
 }
 
 impl GeneratedFile for HandlerStub {
@@ -32,18 +51,10 @@ impl GeneratedFile for HandlerStub {
     }
 
     fn render(&self) -> String {
-        let pascal = to_pascal_case(&self.command);
-        let async_kw = if self.is_async { "async " } else { "" };
-
-        format!(
-            r#"use crate::context::Context;
-use {};
-
-pub {}fn run(_ctx: &Context, args: {}Args) -> eyre::Result<()> {{
-    todo!("implement {} command")
-}}
-"#,
-            self.args_import, async_kw, pascal, self.command
-        )
+        FileBuilder::rust()
+            .add_import("crate::context", "Context")
+            .add_module(&self.args_import)
+            .with_code(|c| self.build_run_fn().render(c))
+            .render_rust()
     }
 }

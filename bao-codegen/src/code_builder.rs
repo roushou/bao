@@ -1,5 +1,7 @@
 //! Code builder utility for generating properly indented code.
 
+use crate::Indent;
+
 /// Fluent API for building code with proper indentation.
 ///
 /// # Example
@@ -7,7 +9,7 @@
 /// ```
 /// use baobao_codegen::CodeBuilder;
 ///
-/// let code = CodeBuilder::new("    ")
+/// let code = CodeBuilder::new(Default::default())
 ///     .line("fn main() {")
 ///     .indent()
 ///     .line("println!(\"Hello, world!\");")
@@ -20,38 +22,33 @@
 #[derive(Debug, Clone)]
 pub struct CodeBuilder {
     indent_level: usize,
-    indent_str: String,
+    indent: Indent,
     buffer: String,
 }
 
 impl CodeBuilder {
-    /// Create a new CodeBuilder with the specified indentation string.
-    ///
-    /// Common choices:
-    /// - `"    "` (4 spaces) for Rust, Python
-    /// - `"  "` (2 spaces) for JavaScript, TypeScript, YAML
-    /// - `"\t"` (tab) for Go
-    pub fn new(indent: &str) -> Self {
+    /// Create a new CodeBuilder with the specified indentation.
+    pub fn new(indent: Indent) -> Self {
         Self {
             indent_level: 0,
-            indent_str: indent.to_string(),
+            indent,
             buffer: String::new(),
         }
     }
 
     /// Create a new CodeBuilder with 4-space indentation (Rust default).
     pub fn rust() -> Self {
-        Self::new("    ")
+        Self::new(Indent::RUST)
     }
 
     /// Create a new CodeBuilder with 2-space indentation (JS/TS default).
     pub fn typescript() -> Self {
-        Self::new("  ")
+        Self::new(Indent::TYPESCRIPT)
     }
 
     /// Create a new CodeBuilder with tab indentation (Go default).
     pub fn go() -> Self {
-        Self::new("\t")
+        Self::new(Indent::GO)
     }
 
     /// Add a line of code with current indentation.
@@ -189,7 +186,7 @@ impl CodeBuilder {
 
     fn write_indent(&mut self) {
         for _ in 0..self.indent_level {
-            self.buffer.push_str(&self.indent_str);
+            self.buffer.push_str(self.indent.as_str());
         }
     }
 }

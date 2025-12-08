@@ -1,8 +1,7 @@
 //! Rust type mapper implementation.
 
+use baobao_codegen::TypeMapper;
 use baobao_core::{ArgType, ContextFieldType, DatabaseType};
-
-use crate::TypeMapper;
 
 /// Rust type mapper implementation.
 pub struct RustTypeMapper;

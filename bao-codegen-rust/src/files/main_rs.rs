@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 
+use baobao_codegen::CodeBuilder;
 use baobao_core::{FileRules, GeneratedFile, Overwrite};
+
+use crate::Fn;
 
 /// The main.rs entry point file (user-editable)
 pub struct MainRs {
@@ -10,6 +13,25 @@ pub struct MainRs {
 impl MainRs {
     pub fn new(is_async: bool) -> Self {
         Self { is_async }
+    }
+
+    fn build_main_fn(&self) -> Fn {
+        let body = if self.is_async {
+            "app::run().await"
+        } else {
+            "app::run()"
+        };
+
+        let mut f = Fn::new("main")
+            .private()
+            .returns("eyre::Result<()>")
+            .body(body);
+
+        if self.is_async {
+            f = f.async_().attr("tokio::main");
+        }
+
+        f
     }
 }
 
@@ -26,29 +48,13 @@ impl GeneratedFile for MainRs {
     }
 
     fn render(&self) -> String {
-        if self.is_async {
-            r#"mod app;
-mod context;
-mod generated;
-mod handlers;
+        let builder = CodeBuilder::rust()
+            .line("mod app;")
+            .line("mod context;")
+            .line("mod generated;")
+            .line("mod handlers;")
+            .blank();
 
-#[tokio::main]
-async fn main() -> eyre::Result<()> {
-    app::run().await
-}
-"#
-            .to_string()
-        } else {
-            r#"mod app;
-mod context;
-mod generated;
-mod handlers;
-
-fn main() -> eyre::Result<()> {
-    app::run()
-}
-"#
-            .to_string()
-        }
+        self.build_main_fn().render(builder).build()
     }
 }
