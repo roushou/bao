@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use baobao_codegen::{LanguageCodegen, leaf_commands};
 use baobao_codegen_rust::Generator;
-use baobao_schema::{BaoToml, Command, Schema};
+use baobao_manifest::{BaoToml, Command, Schema};
 use clap::Args;
 use eyre::{Context, Result};
 

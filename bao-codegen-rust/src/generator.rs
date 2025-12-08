@@ -8,7 +8,7 @@ use baobao_core::{
     ContextFieldType, DatabaseType, GeneratedFile, to_pascal_case, to_snake_case,
     toml_value_to_string,
 };
-use baobao_schema::{ArgType, Command, Schema};
+use baobao_manifest::{ArgType, Command, Schema};
 use eyre::Result;
 
 use crate::{
@@ -197,7 +197,7 @@ impl<'a> Generator<'a> {
     }
 
     fn collect_context_fields(&self) -> Vec<ContextFieldInfo> {
-        use baobao_schema::ContextField;
+        use baobao_manifest::ContextField;
 
         self.schema
             .context

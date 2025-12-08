@@ -11,7 +11,7 @@ categories.workspace = true
 
 [dependencies]
 baobao-core = { workspace = true }
-baobao-schema = { workspace = true }
+baobao-manifest = { workspace = true }
 eyre.workspace = true
 indexmap.workspace = true
 

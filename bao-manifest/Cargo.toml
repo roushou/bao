@@ -1,8 +1,8 @@
 [package]
-name = "baobao-schema"
+name = "baobao-manifest"
 version.workspace = true
 edition.workspace = true
-description = "TOML schema parsing and validation for Bao CLI generator"
+description = "TOML manifest parsing and validation for Bao CLI generator"
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true

@@ -1,6 +1,6 @@
 //! Command tree traversal utilities.
 
-use baobao_schema::{Command, Schema};
+use baobao_manifest::{Command, Schema};
 
 /// Flattened command info for easier processing.
 ///

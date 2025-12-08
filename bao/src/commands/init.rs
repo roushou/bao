@@ -88,7 +88,7 @@ pub fn run(_ctx: &Context, args: HelloArgs) -> eyre::Result<()> {
 
         // Generate code from bao.toml
         let bao_toml_path = output_dir.join("bao.toml");
-        let schema = match baobao_schema::parse_file(&bao_toml_path) {
+        let schema = match baobao_manifest::parse_file(&bao_toml_path) {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("{:?}", Report::new(*e));

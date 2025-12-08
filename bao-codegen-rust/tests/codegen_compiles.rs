@@ -6,7 +6,7 @@
 use std::{path::Path, process::Command, sync::Mutex};
 
 use baobao_codegen_rust::{Generator, LanguageCodegen};
-use baobao_schema::parse_str;
+use baobao_manifest::parse_str;
 use tempfile::TempDir;
 
 /// Shared target directory for faster compilation across tests.

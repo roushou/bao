@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use baobao_schema::Schema;
+use baobao_manifest::Schema;
 use eyre::Result;
 
 use crate::commands::flatten_commands;

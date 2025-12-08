@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use baobao_schema::BaoToml;
+use baobao_manifest::BaoToml;
 use clap::{Args, Subcommand};
 use eyre::{Result, bail};
 

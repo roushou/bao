@@ -98,7 +98,7 @@ dependencies = [
  "baobao-codegen",
  "baobao-codegen-rust",
  "baobao-core",
- "baobao-schema",
+ "baobao-manifest",
  "clap",
  "clap_complete",
  "color-eyre",
@@ -111,7 +111,7 @@ name = "baobao-codegen"
 version = "0.1.0"
 dependencies = [
  "baobao-core",
- "baobao-schema",
+ "baobao-manifest",
  "eyre",
  "indexmap",
  "tempfile",
@@ -123,7 +123,7 @@ version = "0.1.0"
 dependencies = [
  "baobao-codegen",
  "baobao-core",
- "baobao-schema",
+ "baobao-manifest",
  "eyre",
  "tempfile",
  "toml",
@@ -139,7 +139,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "baobao-schema"
+name = "baobao-manifest"
 version = "0.1.0"
 dependencies = [
  "miette",
