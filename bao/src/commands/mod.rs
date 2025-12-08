@@ -1,18 +1,18 @@
 mod add;
+mod bake;
 mod check;
 mod completions;
-mod generate;
 mod init;
 mod list;
 mod remove;
 mod run;
 
 use add::AddCommand;
+use bake::BakeCommand;
 use check::CheckCommand;
 use clap::{Parser, Subcommand};
 use completions::CompletionsCommand;
 use eyre::Result;
-use generate::GenerateCommand;
 use init::InitCommand;
 use list::ListCommand;
 use remove::RemoveCommand;
@@ -31,7 +31,7 @@ impl Cli {
     pub fn run(&self) -> Result<()> {
         match &self.command {
             Commands::Init(cmd) => cmd.run(),
-            Commands::Generate(cmd) => cmd.run(),
+            Commands::Bake(cmd) => cmd.run(),
             Commands::Check(cmd) => cmd.run(),
             Commands::Add(cmd) => cmd.run(),
             Commands::Remove(cmd) => cmd.run(),
@@ -48,7 +48,7 @@ enum Commands {
     Init(InitCommand),
 
     /// Generate CLI code from bao.toml
-    Generate(GenerateCommand),
+    Bake(BakeCommand),
 
     /// Validate bao.toml without generating code
     Check(CheckCommand),

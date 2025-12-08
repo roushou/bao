@@ -7,7 +7,7 @@ use clap::Args;
 use eyre::{Context, Result};
 
 #[derive(Args)]
-pub struct GenerateCommand {
+pub struct BakeCommand {
     /// Path to bao.toml (defaults to ./bao.toml)
     #[arg(short, long, default_value = "bao.toml")]
     pub config: PathBuf,
@@ -21,8 +21,8 @@ pub struct GenerateCommand {
     pub dry_run: bool,
 }
 
-impl GenerateCommand {
-    /// Run the generate command
+impl BakeCommand {
+    /// Run the bake command
     pub fn run(&self) -> Result<()> {
         let bao_toml = match BaoToml::open(&self.config) {
             Ok(f) => f,
