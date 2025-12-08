@@ -1,15 +1,11 @@
+mod deserialize;
+mod validate;
+
 use std::collections::HashMap;
 
-use serde::{
-    Deserialize,
-    de::{self, Deserializer, MapAccess, SeqAccess, Visitor},
-};
+use deserialize::{deserialize_args, deserialize_flags};
+use serde::Deserialize;
 use toml::Spanned;
-
-use crate::{
-    error::{Error, Result},
-    validate,
-};
 
 /// A CLI command or subcommand
 #[derive(Debug, Deserialize)]
@@ -36,64 +32,7 @@ pub struct Command {
     pub commands: HashMap<String, Command>,
 }
 
-/// Info about a short flag for error reporting
-struct ShortFlagInfo<'a> {
-    flag_name: &'a str,
-    span: std::ops::Range<usize>,
-}
-
 impl Command {
-    /// Validate command definition
-    pub fn validate(&self, path: &str, src: &str, filename: &str) -> Result<()> {
-        // Validate argument names
-        for name in self.args.keys() {
-            validate_name(name, &format!("argument in '{}'", path), src, filename)?;
-        }
-
-        // Validate flag names and check for duplicate short flags
-        let mut short_flags: HashMap<char, ShortFlagInfo> = HashMap::new();
-
-        for (name, flag) in &self.flags {
-            // Validate flag name
-            validate_name(name, &format!("flag in '{}'", path), src, filename)?;
-
-            if let Some(ref short) = flag.short {
-                let short_char = *short.get_ref();
-                let span = short.span();
-
-                if let Some(existing) = short_flags.get(&short_char) {
-                    return Err(Box::new(Error::DuplicateShortFlag {
-                        src: miette::NamedSource::new(filename, src.to_string()),
-                        first_span: (existing.span.start, existing.span.end - existing.span.start)
-                            .into(),
-                        second_span: (span.start, span.end - span.start).into(),
-                        short: short_char,
-                        first_flag: existing.flag_name.to_string(),
-                        second_flag: name.clone(),
-                    }));
-                }
-
-                short_flags.insert(
-                    short_char,
-                    ShortFlagInfo {
-                        flag_name: name,
-                        span,
-                    },
-                );
-            }
-        }
-
-        // Validate nested commands
-        for (name, cmd) in &self.commands {
-            // Validate subcommand name
-            validate_name(name, &format!("subcommand in '{}'", path), src, filename)?;
-            let nested_path = format!("{}.{}", path, name);
-            cmd.validate(&nested_path, src, filename)?;
-        }
-
-        Ok(())
-    }
-
     /// Returns true if this command has subcommands
     pub fn has_subcommands(&self) -> bool {
         !self.commands.is_empty()
@@ -118,7 +57,7 @@ pub struct Arg {
     pub default: Option<toml::Value>,
 }
 
-fn default_true() -> bool {
+pub(crate) fn default_true() -> bool {
     true
 }
 
@@ -138,13 +77,6 @@ pub struct Flag {
 
     /// Default value
     pub default: Option<toml::Value>,
-}
-
-impl Flag {
-    /// Get the short flag character, if any
-    pub fn short_char(&self) -> Option<char> {
-        self.short.as_ref().map(|s| *s.get_ref())
-    }
 }
 
 /// Supported argument types
@@ -181,135 +113,6 @@ impl ArgType {
             ArgType::Path => "std::path::PathBuf",
         }
     }
-}
-
-// ============================================================================
-// Custom deserializers for args/flags to support both array and map formats
-// ============================================================================
-
-/// Arg with name field for array format deserialization
-#[derive(Debug, Deserialize)]
-struct ArgWithName {
-    name: String,
-    #[serde(rename = "type")]
-    arg_type: ArgType,
-    #[serde(default = "default_true")]
-    required: bool,
-    description: Option<String>,
-    default: Option<toml::Value>,
-}
-
-/// Flag with name field for array format deserialization
-#[derive(Debug, Deserialize)]
-struct FlagWithName {
-    name: String,
-    #[serde(rename = "type", default)]
-    flag_type: ArgType,
-    short: Option<char>,
-    description: Option<String>,
-    default: Option<toml::Value>,
-}
-
-/// Untagged enum to support both array and map formats for args
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum ArgsFormat {
-    Array(Vec<ArgWithName>),
-    Map(HashMap<String, Arg>),
-}
-
-impl From<ArgsFormat> for HashMap<String, Arg> {
-    fn from(format: ArgsFormat) -> Self {
-        match format {
-            ArgsFormat::Array(vec) => vec
-                .into_iter()
-                .map(|a| {
-                    (
-                        a.name.clone(),
-                        Arg {
-                            arg_type: a.arg_type,
-                            required: a.required,
-                            description: a.description,
-                            default: a.default,
-                        },
-                    )
-                })
-                .collect(),
-            ArgsFormat::Map(map) => map,
-        }
-    }
-}
-
-fn deserialize_args<'de, D>(deserializer: D) -> std::result::Result<HashMap<String, Arg>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    ArgsFormat::deserialize(deserializer).map(Into::into)
-}
-
-/// Validate that a name is a valid Rust identifier
-fn validate_name(name: &str, context: &str, src: &str, filename: &str) -> Result<()> {
-    let span = validate::find_name_span(src, name);
-
-    if validate::is_rust_keyword(name) {
-        return Err(Error::reserved_keyword(name, context, src, filename, span));
-    }
-
-    if let Some(reason) = validate::validate_identifier(name) {
-        return Err(Error::invalid_identifier(
-            name, context, reason, src, filename, span,
-        ));
-    }
-
-    Ok(())
-}
-
-/// Deserialize flags from either array or map format
-/// Uses manual Visitor because Flag.short uses Spanned which doesn't work with untagged enums
-fn deserialize_flags<'de, D>(
-    deserializer: D,
-) -> std::result::Result<HashMap<String, Flag>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    struct FlagsVisitor;
-
-    impl<'de> Visitor<'de> for FlagsVisitor {
-        type Value = HashMap<String, Flag>;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a map of flags or an array of flags with name field")
-        }
-
-        fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
-        where
-            A: SeqAccess<'de>,
-        {
-            let mut map = HashMap::new();
-            while let Some(item) = seq.next_element::<FlagWithName>()? {
-                map.insert(
-                    item.name.clone(),
-                    Flag {
-                        flag_type: item.flag_type,
-                        // Use empty span for array format (span info not available)
-                        short: item.short.map(|c| Spanned::new(0..0, c)),
-                        description: item.description,
-                        default: item.default,
-                    },
-                );
-            }
-            Ok(map)
-        }
-
-        fn visit_map<M>(self, map: M) -> std::result::Result<Self::Value, M::Error>
-        where
-            M: MapAccess<'de>,
-        {
-            HashMap::deserialize(de::value::MapAccessDeserializer::new(map))
-        }
-    }
-
-    deserializer.deserialize_any(FlagsVisitor)
 }
 
 #[cfg(test)]
