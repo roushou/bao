@@ -2,23 +2,23 @@
 name = "baobao"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
-repository.workspace = true
+description = "Generate type-safe CLI applications from a simple TOML schema"
 homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Generate type-safe CLI applications from a simple TOML schema"
 
 [[bin]]
 name = "bao"
 path = "src/main.rs"
 
 [dependencies]
+baobao-codegen-rust = { workspace = true }
 baobao-core = { workspace = true }
 baobao-schema = { workspace = true }
-baobao-codegen-rust = { workspace = true }
 clap = { workspace = true }
 clap_complete = { workspace = true }
-eyre = { workspace = true }
 color-eyre = { workspace = true }
+eyre = { workspace = true }
 miette = { workspace = true }

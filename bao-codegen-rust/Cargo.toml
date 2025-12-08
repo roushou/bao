@@ -2,12 +2,12 @@
 name = "baobao-codegen-rust"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
-repository.workspace = true
+description = "Rust code generator for Bao CLI generator"
 homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Rust code generator for Bao CLI generator"
 
 [dependencies]
 baobao-core = { workspace = true }

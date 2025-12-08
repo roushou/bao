@@ -2,12 +2,12 @@
 name = "baobao-core"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
-repository.workspace = true
+description = "Core utilities for Bao CLI generator"
 homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Core utilities for Bao CLI generator"
 
 [dependencies]
 eyre.workspace = true
