@@ -117,10 +117,12 @@ impl ArgType {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::Schema;
+    use std::str::FromStr;
 
-    fn parse(content: &str) -> Schema {
+    use super::*;
+    use crate::Manifest;
+
+    fn parse(content: &str) -> Manifest {
         toml::from_str(content).expect("Failed to parse TOML")
     }
 
@@ -535,7 +537,7 @@ mod tests {
 
     #[test]
     fn test_reserved_keyword_command_name() {
-        let result = crate::parse_str(
+        let result = Manifest::from_str(
             r#"
             [cli]
             name = "test"
@@ -552,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_reserved_keyword_arg_name() {
-        let result = crate::parse_str(
+        let result = Manifest::from_str(
             r#"
             [cli]
             name = "test"
@@ -572,7 +574,7 @@ mod tests {
 
     #[test]
     fn test_reserved_keyword_flag_name() {
-        let result = crate::parse_str(
+        let result = Manifest::from_str(
             r#"
             [cli]
             name = "test"
@@ -592,7 +594,7 @@ mod tests {
 
     #[test]
     fn test_reserved_keyword_subcommand_name() {
-        let result = crate::parse_str(
+        let result = Manifest::from_str(
             r#"
             [cli]
             name = "test"
@@ -612,7 +614,7 @@ mod tests {
 
     #[test]
     fn test_invalid_identifier_with_dash() {
-        let result = crate::parse_str(
+        let result = Manifest::from_str(
             r#"
             [cli]
             name = "test"
@@ -629,7 +631,7 @@ mod tests {
 
     #[test]
     fn test_invalid_identifier_starting_with_number() {
-        let result = crate::parse_str(
+        let result = Manifest::from_str(
             r#"
             [cli]
             name = "test"
@@ -646,7 +648,7 @@ mod tests {
 
     #[test]
     fn test_valid_identifiers_pass() {
-        let result = crate::parse_str(
+        let result = Manifest::from_str(
             r#"
             [cli]
             name = "test"
@@ -687,7 +689,7 @@ mod tests {
                 keyword
             );
 
-            let result = crate::parse_str(&toml);
+            let result = Manifest::from_str(&toml);
             assert!(
                 result.is_err(),
                 "Expected '{}' to be rejected as reserved keyword",

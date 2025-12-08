@@ -12,9 +12,9 @@ pub struct HttpConfig {
 
 #[cfg(test)]
 mod tests {
-    use crate::Schema;
+    use crate::Manifest;
 
-    fn parse(content: &str) -> Schema {
+    fn parse(content: &str) -> Manifest {
         toml::from_str(content).expect("Failed to parse TOML")
     }
 

@@ -8,7 +8,7 @@ use baobao_core::{
     ContextFieldType, DatabaseType, GeneratedFile, to_pascal_case, to_snake_case,
     toml_value_to_string,
 };
-use baobao_manifest::{ArgType, Command, Schema};
+use baobao_manifest::{ArgType, Command, Manifest};
 use eyre::Result;
 
 use crate::{
@@ -21,7 +21,7 @@ use crate::{
 
 /// Rust code generator that produces clap-based CLI code
 pub struct Generator<'a> {
-    schema: &'a Schema,
+    schema: &'a Manifest,
 }
 
 impl LanguageCodegen for Generator<'_> {
@@ -43,7 +43,7 @@ impl LanguageCodegen for Generator<'_> {
 }
 
 impl<'a> Generator<'a> {
-    pub fn new(schema: &'a Schema) -> Self {
+    pub fn new(schema: &'a Manifest) -> Self {
         Self { schema }
     }
 

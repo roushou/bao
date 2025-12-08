@@ -2,6 +2,8 @@
 
 use miette::SourceSpan;
 
+use crate::{Error, Result};
+
 /// Rust reserved keywords that cannot be used as identifiers
 /// Source: https://doc.rust-lang.org/reference/keywords.html
 pub(crate) const RUST_KEYWORDS: &[&str] = &[
@@ -82,6 +84,23 @@ pub(crate) fn validate_identifier(name: &str) -> Option<&'static str> {
     // but technically valid, so we allow them
 
     None
+}
+
+/// Validate that a name is a valid Rust identifier, returning an error if invalid
+pub(crate) fn validate_name(name: &str, context: &str, src: &str, filename: &str) -> Result<()> {
+    let span = find_name_span(src, name);
+
+    if is_rust_keyword(name) {
+        return Err(Error::reserved_keyword(name, context, src, filename, span));
+    }
+
+    if let Some(reason) = validate_identifier(name) {
+        return Err(Error::invalid_identifier(
+            name, context, reason, src, filename, span,
+        ));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

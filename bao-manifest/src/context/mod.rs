@@ -244,11 +244,44 @@ impl Context {
     }
 }
 
+/// Custom deserializer for Context that handles database and http fields
+pub(crate) fn deserialize<'de, D>(deserializer: D) -> std::result::Result<Context, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    #[derive(Deserialize)]
+    struct RawContext {
+        database: Option<toml::Value>,
+        http: Option<toml::Value>,
+    }
+
+    let raw: RawContext = RawContext::deserialize(deserializer)?;
+    let mut ctx = Context::default();
+
+    if let Some(db_value) = raw.database {
+        let db: DatabaseContextField = db_value
+            .try_into()
+            .map_err(|e: toml::de::Error| D::Error::custom(e.message()))?;
+        ctx.database = Some(db.into());
+    }
+
+    if let Some(http_value) = raw.http {
+        let http: HttpConfig = http_value
+            .try_into()
+            .map_err(|e: toml::de::Error| D::Error::custom(e.message()))?;
+        ctx.http = Some(ContextField::Http(http));
+    }
+
+    Ok(ctx)
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::Schema;
+    use crate::Manifest;
 
-    fn parse(content: &str) -> Schema {
+    fn parse(content: &str) -> Manifest {
         toml::from_str(content).expect("Failed to parse TOML")
     }
 

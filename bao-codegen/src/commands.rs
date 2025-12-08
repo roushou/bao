@@ -26,7 +26,7 @@
 //! }
 //! ```
 
-use baobao_manifest::{Command, Schema};
+use baobao_manifest::{Command, Manifest};
 
 /// A traversable view of the command tree in a schema.
 ///
@@ -39,7 +39,7 @@ pub struct CommandTree<'a> {
 
 impl<'a> CommandTree<'a> {
     /// Create a new CommandTree from a schema.
-    pub fn new(schema: &'a Schema) -> Self {
+    pub fn new(schema: &'a Manifest) -> Self {
         let mut commands = Vec::new();
         Self::flatten_recursive(&schema.commands, Vec::new(), 0, &mut commands);
         Self { commands }

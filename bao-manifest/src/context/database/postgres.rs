@@ -15,9 +15,9 @@ pub struct PostgresConfig {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ContextField, Schema};
+    use crate::{ContextField, Manifest};
 
-    fn parse(content: &str) -> Schema {
+    fn parse(content: &str) -> Manifest {
         toml::from_str(content).expect("Failed to parse TOML")
     }
 

@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 
-use crate::{Result, Schema, parse_str_with_filename};
+use crate::{Manifest, Result};
 
-/// Represents a bao.toml file with both raw content and parsed schema.
+/// Represents a bao.toml file with both raw content and parsed manifest.
 pub struct BaoToml {
     path: PathBuf,
     content: String,
-    schema: Schema,
+    manifest: Manifest,
 }
 
 impl BaoToml {
@@ -20,12 +20,12 @@ impl BaoToml {
             })
         })?;
         let filename = path.display().to_string();
-        let schema = parse_str_with_filename(&content, &filename)?;
+        let manifest = Manifest::from_str_with_filename(&content, &filename)?;
 
         Ok(Self {
             path,
             content,
-            schema,
+            manifest,
         })
     }
 
@@ -39,17 +39,17 @@ impl BaoToml {
         &self.content
     }
 
-    /// Get the parsed schema.
-    pub fn schema(&self) -> &Schema {
-        &self.schema
+    /// Get the parsed manifest.
+    pub fn schema(&self) -> &Manifest {
+        &self.manifest
     }
 
-    /// Update content and re-parse the schema.
+    /// Update content and re-parse the manifest.
     pub fn set_content(&mut self, content: String) -> Result<()> {
         let filename = self.path.display().to_string();
-        let schema = parse_str_with_filename(&content, &filename)?;
+        let manifest = Manifest::from_str_with_filename(&content, &filename)?;
         self.content = content;
-        self.schema = schema;
+        self.manifest = manifest;
         Ok(())
     }
 

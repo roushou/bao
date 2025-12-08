@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use baobao_codegen::{CommandTree, LanguageCodegen};
 use baobao_codegen_rust::Generator;
-use baobao_manifest::{BaoToml, Command, Schema};
+use baobao_manifest::{BaoToml, Command, Manifest};
 use clap::Args;
 use eyre::{Context, Result};
 
@@ -37,7 +37,7 @@ impl BakeCommand {
         }
     }
 
-    fn run_generation(&self, generator: &Generator, schema: &Schema) -> Result<()> {
+    fn run_generation(&self, generator: &Generator, schema: &Manifest) -> Result<()> {
         let result = generator
             .generate(&self.output)
             .wrap_err("Failed to generate code")?;
@@ -93,7 +93,7 @@ impl BakeCommand {
         Ok(())
     }
 
-    fn count_commands(schema: &Schema) -> usize {
+    fn count_commands(schema: &Manifest) -> usize {
         CommandTree::new(schema).leaf_count()
     }
 
