@@ -1,4 +1,4 @@
-//! Validation utilities for Rust identifiers
+//! Validation context and utilities for manifest parsing.
 
 use std::sync::Arc;
 

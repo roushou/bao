@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::{Manifest, Result};
+use super::Manifest;
+use crate::Result;
 
 /// Represents a bao.toml file with both raw content and parsed manifest.
 pub struct BaoToml {

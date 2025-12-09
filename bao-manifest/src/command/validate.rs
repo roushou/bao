@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::{Command, Flag};
 use crate::{
     error::{Error, Result},
-    validate::ParseContext,
+    manifest::ParseContext,
 };
 
 /// Info about a short flag for error reporting
