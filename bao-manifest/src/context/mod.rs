@@ -2,6 +2,7 @@ mod database;
 mod http;
 
 pub use database::{
+    DatabaseConfig, PoolConfig,
     mysql::MySqlConfig,
     postgres::PostgresConfig,
     sqlite::{JournalMode, SqliteConfig, SynchronousMode},
@@ -42,99 +43,61 @@ impl From<DatabaseContextField> for ContextField {
 }
 
 impl ContextField {
+    /// Get the database configuration if this is a database type.
+    ///
+    /// Returns `Some(&dyn DatabaseConfig)` for Postgres, MySQL, and SQLite,
+    /// or `None` for HTTP.
+    pub fn as_database(&self) -> Option<&dyn DatabaseConfig> {
+        match self {
+            ContextField::Postgres(c) => Some(c),
+            ContextField::Mysql(c) => Some(c),
+            ContextField::Sqlite(c) => Some(c),
+            ContextField::Http(_) => None,
+        }
+    }
+
     /// Get the Rust type for this context field
     pub fn rust_type(&self) -> &'static str {
-        match self {
-            ContextField::Postgres(_) => "sqlx::PgPool",
-            ContextField::Mysql(_) => "sqlx::MySqlPool",
-            ContextField::Sqlite(_) => "sqlx::SqlitePool",
-            ContextField::Http(_) => "reqwest::Client",
+        match self.as_database() {
+            Some(db) => db.rust_type(),
+            None => "reqwest::Client",
         }
     }
 
     /// Get the environment variable for this field
     pub fn env(&self) -> Option<&str> {
-        match self {
-            ContextField::Postgres(c) => c.env.as_deref(),
-            ContextField::Mysql(c) => c.env.as_deref(),
-            ContextField::Sqlite(c) => c.env.as_deref(),
-            ContextField::Http(_) => None,
-        }
+        self.as_database().and_then(|db| db.env())
     }
 
     /// Get the default environment variable name
     pub fn default_env(&self) -> &'static str {
-        match self {
-            ContextField::Postgres(_) | ContextField::Mysql(_) | ContextField::Sqlite(_) => {
-                "DATABASE_URL"
-            }
-            ContextField::Http(_) => "",
+        match self.as_database() {
+            Some(db) => db.default_env(),
+            None => "",
         }
     }
 
     /// Get the cargo dependencies needed for this type
     pub fn dependencies(&self) -> Vec<(&'static str, &'static str)> {
-        match self {
-            ContextField::Postgres(_) => vec![
-                (
-                    "sqlx",
-                    r#"{ version = "0.8", features = ["runtime-tokio", "postgres"] }"#,
-                ),
-                (
-                    "tokio",
-                    r#"{ version = "1", features = ["rt-multi-thread", "macros"] }"#,
-                ),
-            ],
-            ContextField::Mysql(_) => vec![
-                (
-                    "sqlx",
-                    r#"{ version = "0.8", features = ["runtime-tokio", "mysql"] }"#,
-                ),
-                (
-                    "tokio",
-                    r#"{ version = "1", features = ["rt-multi-thread", "macros"] }"#,
-                ),
-            ],
-            ContextField::Sqlite(_) => vec![
-                (
-                    "sqlx",
-                    r#"{ version = "0.8", features = ["runtime-tokio", "sqlite"] }"#,
-                ),
-                (
-                    "tokio",
-                    r#"{ version = "1", features = ["rt-multi-thread", "macros"] }"#,
-                ),
-            ],
-            ContextField::Http(_) => {
-                vec![("reqwest", r#"{ version = "0.12", features = ["json"] }"#)]
-            }
+        match self.as_database() {
+            Some(db) => db.dependencies(),
+            None => vec![("reqwest", r#"{ version = "0.12", features = ["json"] }"#)],
         }
     }
 
     /// Returns true if this type requires async initialization
     pub fn is_async(&self) -> bool {
-        matches!(
-            self,
-            ContextField::Postgres(_) | ContextField::Mysql(_) | ContextField::Sqlite(_)
-        )
+        self.as_database().is_some()
     }
 
     /// Returns true if this is a database type
     pub fn is_database(&self) -> bool {
-        matches!(
-            self,
-            ContextField::Postgres(_) | ContextField::Mysql(_) | ContextField::Sqlite(_)
-        )
+        self.as_database().is_some()
     }
 
     /// Get pool configuration if this is a database type
     pub fn pool_config(&self) -> Option<&PoolConfig> {
-        match self {
-            ContextField::Postgres(c) => Some(&c.pool),
-            ContextField::Mysql(c) => Some(&c.pool),
-            ContextField::Sqlite(c) => Some(&c.pool),
-            _ => None,
-        }
+        self.as_database().map(|db| db.pool())
     }
 
     /// Get SQLite-specific configuration
@@ -151,36 +114,6 @@ impl ContextField {
             ContextField::Http(c) => Some(c),
             _ => None,
         }
-    }
-}
-
-/// Database connection pool configuration
-#[derive(Debug, Deserialize, Clone, Default)]
-pub struct PoolConfig {
-    /// Maximum number of connections in the pool (default: 10)
-    pub max_connections: Option<u32>,
-
-    /// Minimum number of connections to maintain (default: 0)
-    pub min_connections: Option<u32>,
-
-    /// Timeout for acquiring a connection from the pool, in seconds (default: 30)
-    pub acquire_timeout: Option<u64>,
-
-    /// Maximum time a connection can remain idle before being closed, in seconds (default: 600)
-    pub idle_timeout: Option<u64>,
-
-    /// Maximum lifetime of a connection, in seconds (default: 1800)
-    pub max_lifetime: Option<u64>,
-}
-
-impl PoolConfig {
-    /// Returns true if any pool option is configured
-    pub fn has_config(&self) -> bool {
-        self.max_connections.is_some()
-            || self.min_connections.is_some()
-            || self.acquire_timeout.is_some()
-            || self.idle_timeout.is_some()
-            || self.max_lifetime.is_some()
     }
 }
 

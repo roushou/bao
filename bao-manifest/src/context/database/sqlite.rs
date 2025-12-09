@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::PoolConfig;
+use super::PoolConfig;
 
 /// Configuration for SQLite database
 #[derive(Debug, Deserialize, Clone, Default)]

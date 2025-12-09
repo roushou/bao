@@ -15,8 +15,8 @@ pub use cli::CliConfig;
 pub use command::{Arg, ArgType, Command, Flag};
 // Context
 pub use context::{
-    Context, ContextField, HttpConfig, JournalMode, MySqlConfig, PoolConfig, PostgresConfig,
-    SqliteConfig, SynchronousMode,
+    Context, ContextField, DatabaseConfig, HttpConfig, JournalMode, MySqlConfig, PoolConfig,
+    PostgresConfig, SqliteConfig, SynchronousMode,
 };
 // Error
 pub use error::{Error, Result};

@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::PoolConfig;
+use super::PoolConfig;
 
 /// Configuration for PostgreSQL and MySQL databases
 #[derive(Debug, Deserialize, Clone, Default)]
