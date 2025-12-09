@@ -4,7 +4,7 @@ mod validate;
 use std::collections::HashMap;
 
 use deserialize::{deserialize_args, deserialize_flags};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use toml::Spanned;
 
 /// A CLI command or subcommand
@@ -80,7 +80,7 @@ pub struct Flag {
 }
 
 /// Supported argument types
-#[derive(Debug, Default, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ArgType {
     String,

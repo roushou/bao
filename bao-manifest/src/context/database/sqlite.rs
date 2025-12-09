@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::PoolConfig;
 
@@ -47,7 +47,7 @@ impl SqliteConfig {
 }
 
 /// SQLite journal mode
-#[derive(Debug, Deserialize, Clone, PartialEq, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum JournalMode {
     #[default]
@@ -73,7 +73,7 @@ impl JournalMode {
 }
 
 /// SQLite synchronous mode
-#[derive(Debug, Deserialize, Clone, PartialEq, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SynchronousMode {
     #[default]

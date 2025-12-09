@@ -5,6 +5,7 @@ mod command;
 mod context;
 mod error;
 mod manifest;
+mod serialize;
 
 // Command
 pub use command::{Arg, ArgType, Command, Flag};

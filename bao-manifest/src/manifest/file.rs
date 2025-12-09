@@ -64,4 +64,12 @@ impl BaoToml {
         })?;
         Ok(())
     }
+
+    /// Format the manifest as a canonical TOML string.
+    ///
+    /// This strips comments, sorts sections in canonical order (cli, context, commands),
+    /// and sorts keys alphabetically within each section.
+    pub fn to_formatted_string(&self) -> String {
+        crate::serialize::to_formatted_string(&self.manifest)
+    }
 }

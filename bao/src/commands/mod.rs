@@ -3,6 +3,7 @@ mod bake;
 mod check;
 mod clean;
 mod completions;
+mod fmt;
 mod init;
 mod list;
 mod remove;
@@ -15,6 +16,7 @@ use clap::{Parser, Subcommand};
 use clean::CleanCommand;
 use completions::CompletionsCommand;
 use eyre::Result;
+use fmt::FmtCommand;
 use init::InitCommand;
 use list::ListCommand;
 use remove::RemoveCommand;
@@ -53,6 +55,7 @@ impl Cli {
             Commands::Bake(cmd) => cmd.run(),
             Commands::Check(cmd) => cmd.run(),
             Commands::Clean(cmd) => cmd.run(),
+            Commands::Fmt(cmd) => cmd.run(),
             Commands::Add(cmd) => cmd.run(),
             Commands::Remove(cmd) => cmd.run(),
             Commands::List(cmd) => cmd.run(),
@@ -75,6 +78,9 @@ enum Commands {
 
     /// Remove orphaned generated files
     Clean(CleanCommand),
+
+    /// Format bao.toml
+    Fmt(FmtCommand),
 
     /// Add a command or context to bao.toml
     Add(AddCommand),
