@@ -1,8 +1,10 @@
 //! Validation utilities for Rust identifiers
 
+use std::sync::Arc;
+
 use miette::SourceSpan;
 
-use crate::{Error, Result};
+use crate::{Result, error::SourceContext};
 
 /// Parsing and validation context that carries source information.
 ///
@@ -22,32 +24,34 @@ use crate::{Error, Result};
 /// ```
 #[derive(Debug, Clone)]
 pub struct ParseContext<'a> {
-    /// The raw TOML source content
-    src: &'a str,
-    /// The filename for error reporting
-    filename: &'a str,
+    /// Source context for error reporting (shared across nested contexts)
+    source: Arc<SourceContext>,
     /// Path segments for nested validation (e.g., ["commands", "db", "migrate"])
     path: Vec<&'a str>,
 }
 
 impl<'a> ParseContext<'a> {
     /// Create a new parse context with the given source and filename.
-    pub fn new(src: &'a str, filename: &'a str) -> Self {
+    pub fn new(src: &str, filename: &str) -> Self {
         Self {
-            src,
-            filename,
+            source: Arc::new(SourceContext::new(src, filename)),
             path: Vec::new(),
         }
     }
 
     /// Get the source content.
-    pub fn src(&self) -> &'a str {
-        self.src
+    pub fn src(&self) -> &str {
+        self.source.src()
     }
 
     /// Get the filename.
-    pub fn filename(&self) -> &'a str {
-        self.filename
+    pub fn filename(&self) -> &str {
+        self.source.filename()
+    }
+
+    /// Get the source context for error creation.
+    pub fn source_context(&self) -> &SourceContext {
+        &self.source
     }
 
     /// Push a path segment and return a new context.
@@ -57,8 +61,7 @@ impl<'a> ParseContext<'a> {
         let mut new_path = self.path.clone();
         new_path.push(segment);
         Self {
-            src: self.src,
-            filename: self.filename,
+            source: Arc::clone(&self.source),
             path: new_path,
         }
     }
@@ -84,30 +87,7 @@ impl<'a> ParseContext<'a> {
 
     /// Find the span of a name in the source.
     pub fn find_span(&self, name: &str) -> Option<SourceSpan> {
-        find_name_span(self.src, name)
-    }
-
-    /// Create a reserved keyword error.
-    pub fn reserved_keyword_error(&self, name: &str, kind: &str) -> Box<Error> {
-        Error::reserved_keyword(
-            name,
-            self.context_for(kind),
-            self.src,
-            self.filename,
-            self.find_span(name),
-        )
-    }
-
-    /// Create an invalid identifier error.
-    pub fn invalid_identifier_error(&self, name: &str, kind: &str, reason: &str) -> Box<Error> {
-        Error::invalid_identifier(
-            name,
-            self.context_for(kind),
-            reason,
-            self.src,
-            self.filename,
-            self.find_span(name),
-        )
+        find_name_span(self.source.src(), name)
     }
 
     /// Validate that a name is a valid identifier.
@@ -115,11 +95,20 @@ impl<'a> ParseContext<'a> {
     /// Checks for reserved keywords and valid identifier format.
     pub fn validate_name(&self, name: &str, kind: &str) -> Result<()> {
         if is_rust_keyword(name) {
-            return Err(self.reserved_keyword_error(name, kind));
+            return Err(self.source.reserved_keyword_error(
+                name,
+                self.context_for(kind),
+                self.find_span(name),
+            ));
         }
 
         if let Some(reason) = validate_identifier(name) {
-            return Err(self.invalid_identifier_error(name, kind, reason));
+            return Err(self.source.invalid_identifier_error(
+                name,
+                self.context_for(kind),
+                reason,
+                self.find_span(name),
+            ));
         }
 
         Ok(())

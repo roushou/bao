@@ -2,7 +2,9 @@ use std::{collections::HashMap, path::Path, str::FromStr};
 
 use serde::Deserialize;
 
-use crate::{CliConfig, Command, Context, Error, Result, validate::ParseContext};
+use crate::{
+    CliConfig, Command, Context, Error, Result, error::SourceContext, validate::ParseContext,
+};
 
 /// Root manifest for bao.toml
 #[derive(Debug, Deserialize)]
@@ -43,8 +45,8 @@ impl Manifest {
 
     /// Parse a bao.toml from a string with a custom filename for error reporting
     pub fn from_str_with_filename(content: &str, filename: &str) -> Result<Self> {
-        let manifest: Self =
-            toml::from_str(content).map_err(|e| Error::parse(e, content, filename))?;
+        let source_ctx = SourceContext::new(content, filename);
+        let manifest: Self = toml::from_str(content).map_err(|e| source_ctx.parse_error(e))?;
         manifest.validate(content, filename)?;
         Ok(manifest)
     }

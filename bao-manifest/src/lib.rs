@@ -19,7 +19,7 @@ pub use context::{
     PostgresConfig, SqliteConfig, SynchronousMode,
 };
 // Error
-pub use error::{Error, Result};
+pub use error::{Error, Result, SourceContext};
 // File
 pub use file::BaoToml;
 // Manifest
