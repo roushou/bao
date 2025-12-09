@@ -4,6 +4,7 @@ mod check;
 mod clean;
 mod completions;
 mod fmt;
+mod info;
 mod init;
 mod list;
 mod remove;
@@ -17,6 +18,7 @@ use clean::CleanCommand;
 use completions::CompletionsCommand;
 use eyre::Result;
 use fmt::FmtCommand;
+use info::InfoCommand;
 use init::InitCommand;
 use list::ListCommand;
 use remove::RemoveCommand;
@@ -56,6 +58,7 @@ impl Cli {
             Commands::Check(cmd) => cmd.run(),
             Commands::Clean(cmd) => cmd.run(),
             Commands::Fmt(cmd) => cmd.run(),
+            Commands::Info(cmd) => cmd.run(),
             Commands::Add(cmd) => cmd.run(),
             Commands::Remove(cmd) => cmd.run(),
             Commands::List(cmd) => cmd.run(),
@@ -81,6 +84,9 @@ enum Commands {
 
     /// Format bao.toml
     Fmt(FmtCommand),
+
+    /// Show project information
+    Info(InfoCommand),
 
     /// Add a command or context to bao.toml
     Add(AddCommand),
