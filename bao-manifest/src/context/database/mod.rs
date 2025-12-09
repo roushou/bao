@@ -49,40 +49,18 @@ pub trait DatabaseConfig {
     }
 }
 
-impl DatabaseConfig for postgres::PostgresConfig {
-    fn env(&self) -> Option<&str> {
-        self.env.as_deref()
-    }
+/// Basic database configuration shared by PostgreSQL and MySQL.
+///
+/// This struct contains the common fields for connection-string-based databases.
+/// SQLite has additional options and uses its own struct.
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct BasicDbConfig {
+    /// Environment variable for connection string
+    pub env: Option<String>,
 
-    fn pool(&self) -> &PoolConfig {
-        &self.pool
-    }
-
-    fn rust_type(&self) -> &'static str {
-        "sqlx::PgPool"
-    }
-
-    fn sqlx_feature(&self) -> &'static str {
-        "postgres"
-    }
-}
-
-impl DatabaseConfig for mysql::MySqlConfig {
-    fn env(&self) -> Option<&str> {
-        self.env.as_deref()
-    }
-
-    fn pool(&self) -> &PoolConfig {
-        &self.pool
-    }
-
-    fn rust_type(&self) -> &'static str {
-        "sqlx::MySqlPool"
-    }
-
-    fn sqlx_feature(&self) -> &'static str {
-        "mysql"
-    }
+    /// Pool configuration
+    #[serde(flatten)]
+    pub pool: PoolConfig,
 }
 
 impl DatabaseConfig for sqlite::SqliteConfig {

@@ -1,16 +1,43 @@
 use serde::Deserialize;
 
-use super::PoolConfig;
+use super::{BasicDbConfig, DatabaseConfig, PoolConfig};
 
-/// Configuration for PostgreSQL and MySQL databases
+/// Configuration for PostgreSQL database.
+///
+/// A newtype wrapper around [`BasicDbConfig`] that provides PostgreSQL-specific
+/// trait implementations.
 #[derive(Debug, Deserialize, Clone, Default)]
-pub struct PostgresConfig {
-    /// Environment variable for connection string
-    pub env: Option<String>,
+#[serde(transparent)]
+pub struct PostgresConfig(pub BasicDbConfig);
 
-    /// Pool configuration
-    #[serde(flatten)]
-    pub pool: PoolConfig,
+impl PostgresConfig {
+    /// Get the environment variable for connection string.
+    pub fn env(&self) -> Option<&str> {
+        self.0.env.as_deref()
+    }
+
+    /// Get the pool configuration.
+    pub fn pool(&self) -> &PoolConfig {
+        &self.0.pool
+    }
+}
+
+impl DatabaseConfig for PostgresConfig {
+    fn env(&self) -> Option<&str> {
+        self.0.env.as_deref()
+    }
+
+    fn pool(&self) -> &PoolConfig {
+        &self.0.pool
+    }
+
+    fn rust_type(&self) -> &'static str {
+        "sqlx::PgPool"
+    }
+
+    fn sqlx_feature(&self) -> &'static str {
+        "postgres"
+    }
 }
 
 #[cfg(test)]
