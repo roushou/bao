@@ -8,6 +8,7 @@ mod info;
 mod init;
 mod list;
 mod remove;
+mod rename;
 mod run;
 
 use add::AddCommand;
@@ -22,6 +23,7 @@ use info::InfoCommand;
 use init::InitCommand;
 use list::ListCommand;
 use remove::RemoveCommand;
+use rename::RenameCommand;
 use run::RunCommand;
 
 /// Extension trait for exiting on manifest errors with pretty formatting
@@ -61,6 +63,7 @@ impl Cli {
             Commands::Info(cmd) => cmd.run(),
             Commands::Add(cmd) => cmd.run(),
             Commands::Remove(cmd) => cmd.run(),
+            Commands::Rename(cmd) => cmd.run(),
             Commands::List(cmd) => cmd.run(),
             Commands::Completions(cmd) => cmd.run(),
             Commands::Run(cmd) => cmd.run(),
@@ -93,6 +96,9 @@ enum Commands {
 
     /// Remove a command or context from bao.toml
     Remove(RemoveCommand),
+
+    /// Rename a command in bao.toml
+    Rename(RenameCommand),
 
     /// List commands and context defined in bao.toml
     List(ListCommand),
