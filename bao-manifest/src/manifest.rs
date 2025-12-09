@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::Path, str::FromStr};
 
 use serde::Deserialize;
 
-use crate::{CliConfig, Command, Context, Error, Result, validate};
+use crate::{CliConfig, Command, Context, Error, Result, validate::ParseContext};
 
 /// Root manifest for bao.toml
 #[derive(Debug, Deserialize)]
@@ -70,9 +70,14 @@ impl Manifest {
 
     /// Validate the manifest after parsing
     fn validate(&self, src: &str, filename: &str) -> Result<()> {
+        let ctx = ParseContext::new(src, filename);
+
         for (name, command) in &self.commands {
-            validate::validate_name(name, "command", src, filename)?;
-            command.validate(name, src, filename)?;
+            ctx.validate_name(name, "command")?;
+
+            // Create a context with the command name for nested validation
+            let cmd_ctx = ctx.push(name);
+            command.validate(&cmd_ctx)?;
         }
         Ok(())
     }

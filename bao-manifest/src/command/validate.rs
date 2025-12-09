@@ -3,38 +3,24 @@ use std::collections::HashMap;
 use super::{Command, Flag};
 use crate::{
     error::{Error, Result},
-    validate,
+    validate::ParseContext,
 };
 
 /// Info about a short flag for error reporting
-pub(super) struct ShortFlagInfo<'a> {
+struct ShortFlagInfo<'a> {
     flag_name: &'a str,
     span: std::ops::Range<usize>,
 }
 
-/// Validate that a name is a valid Rust identifier
-pub(super) fn validate_name(name: &str, context: &str, src: &str, filename: &str) -> Result<()> {
-    let span = validate::find_name_span(src, name);
-
-    if validate::is_rust_keyword(name) {
-        return Err(Error::reserved_keyword(name, context, src, filename, span));
-    }
-
-    if let Some(reason) = validate::validate_identifier(name) {
-        return Err(Error::invalid_identifier(
-            name, context, reason, src, filename, span,
-        ));
-    }
-
-    Ok(())
-}
-
 impl Command {
-    /// Validate command definition
-    pub fn validate(&self, path: &str, src: &str, filename: &str) -> Result<()> {
+    /// Validate command definition using the given parse context.
+    ///
+    /// The context tracks the current path through the command hierarchy,
+    /// making error messages more informative.
+    pub fn validate(&self, ctx: &ParseContext) -> Result<()> {
         // Validate argument names
         for name in self.args.keys() {
-            validate_name(name, &format!("argument in '{}'", path), src, filename)?;
+            ctx.validate_name(name, "argument")?;
         }
 
         // Validate flag names and check for duplicate short flags
@@ -42,7 +28,7 @@ impl Command {
 
         for (name, flag) in &self.flags {
             // Validate flag name
-            validate_name(name, &format!("flag in '{}'", path), src, filename)?;
+            ctx.validate_name(name, "flag")?;
 
             if let Some(ref short) = flag.short {
                 let short_char = *short.get_ref();
@@ -50,7 +36,7 @@ impl Command {
 
                 if let Some(existing) = short_flags.get(&short_char) {
                     return Err(Box::new(Error::DuplicateShortFlag {
-                        src: miette::NamedSource::new(filename, src.to_string()),
+                        src: miette::NamedSource::new(ctx.filename(), ctx.src().to_string()),
                         first_span: (existing.span.start, existing.span.end - existing.span.start)
                             .into(),
                         second_span: (span.start, span.end - span.start).into(),
@@ -73,9 +59,11 @@ impl Command {
         // Validate nested commands
         for (name, cmd) in &self.commands {
             // Validate subcommand name
-            validate_name(name, &format!("subcommand in '{}'", path), src, filename)?;
-            let nested_path = format!("{}.{}", path, name);
-            cmd.validate(&nested_path, src, filename)?;
+            ctx.validate_name(name, "subcommand")?;
+
+            // Create a nested context with the subcommand path
+            let nested_ctx = ctx.push(name);
+            cmd.validate(&nested_ctx)?;
         }
 
         Ok(())

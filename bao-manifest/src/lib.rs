@@ -7,7 +7,7 @@ mod context;
 mod error;
 mod file;
 mod manifest;
-pub(crate) mod validate;
+mod validate;
 
 // CLI
 pub use cli::CliConfig;
@@ -24,3 +24,5 @@ pub use error::{Error, Result};
 pub use file::BaoToml;
 // Manifest
 pub use manifest::Manifest;
+// Validation
+pub use validate::ParseContext;
