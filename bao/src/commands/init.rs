@@ -13,7 +13,8 @@ use miette::Report;
 
 #[derive(Args)]
 pub struct InitCommand {
-    /// Project name
+    /// Project name (defaults to current directory)
+    #[arg(default_value = ".")]
     pub name: String,
 
     /// Output directory (defaults to ./<name>)
