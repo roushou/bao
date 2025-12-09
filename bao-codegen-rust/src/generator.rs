@@ -123,8 +123,10 @@ impl<'a> Generator<'a> {
         // Individual command files
         for (name, command) in &self.schema.commands {
             let content = self.generate_command_file(name, command, is_async);
+            // Use snake_case for file names (handles dashed names like "my-command" -> "my_command")
+            let file_name = to_snake_case(name);
             files.push(PreviewFile {
-                path: format!("src/generated/commands/{}.rs", name),
+                path: format!("src/generated/commands/{}.rs", file_name),
                 content: CommandRs::new(name, content).render(),
             });
         }
@@ -366,8 +368,18 @@ impl<'a> Generator<'a> {
     ) -> Result<GenerateResult> {
         let mut created_handlers = Vec::new();
 
-        // Collect all expected handler paths
-        let expected_handlers = CommandTree::new(self.schema).collect_paths();
+        // Collect all expected handler paths, converting to snake_case for Rust file names
+        let expected_handlers: std::collections::HashSet<String> = CommandTree::new(self.schema)
+            .collect_paths()
+            .into_iter()
+            .map(|path| {
+                // Convert each segment of the path to snake_case
+                path.split('/')
+                    .map(to_snake_case)
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .collect();
 
         // Generate handlers/mod.rs (always regenerated)
         HandlersMod::new(self.schema.commands.keys().cloned().collect()).write(output_dir)?;
@@ -403,25 +415,29 @@ impl<'a> Generator<'a> {
 
         let mut created = Vec::new();
 
-        // Path for display/tracking purposes
+        // Path for display/tracking purposes (use snake_case to match actual file names)
+        let snake_name = to_snake_case(name);
         let display_path = if prefix.is_empty() {
-            name.to_string()
+            snake_name.clone()
         } else {
-            format!("{}/{}", prefix, name)
+            format!("{}/{}", prefix, snake_name)
         };
 
         if command.has_subcommands() {
             // Create mod.rs for the subcommand directory
-            let subdir = handlers_dir.join(name);
+            // Use snake_case for directory names (handles dashed names)
+            let dir_name = to_snake_case(name);
+            let subdir = handlers_dir.join(&dir_name);
             let handlers_mod = HandlersMod::new(command.commands.keys().cloned().collect());
             File::new(subdir.join("mod.rs"), handlers_mod.render()).write()?;
 
             // Recursively generate stubs for subcommands
             for (sub_name, sub_command) in &command.commands {
+                // Use snake_case for prefix to match directory structure
                 let new_prefix = if prefix.is_empty() {
-                    name.to_string()
+                    snake_name.clone()
                 } else {
-                    format!("{}/{}", prefix, name)
+                    format!("{}/{}", prefix, snake_name)
                 };
                 let sub_created = self.generate_handler_stubs(
                     &subdir,
@@ -438,10 +454,15 @@ impl<'a> Generator<'a> {
             let pascal_name = to_pascal_case(name);
             // Args types are always in the top-level command file, not nested modules
             // So we only use the first segment of the path for the import
+            // Use snake_case for module paths (handles dashed names)
             let args_import = if prefix.is_empty() {
-                format!("crate::generated::commands::{}Args", pascal_name)
+                format!(
+                    "crate::generated::commands::{}::{}Args",
+                    snake_name, pascal_name
+                )
             } else {
                 // Get only the first segment (top-level command name)
+                // prefix is already snake_case from our recursive calls
                 let top_level_cmd = prefix.split('/').next().unwrap_or(prefix);
                 format!(
                     "crate::generated::commands::{}::{}Args",
@@ -508,11 +529,19 @@ impl<'a> Generator<'a> {
                     format!("cmd.dispatch(ctx){}", await_suffix),
                 )
             } else {
+                // Use snake_case for module paths (handles dashed names like "my-command" -> "my_command")
+                // handler_path uses :: as separator (e.g., "db::migrate"), convert each segment
+                let handler_module = handler_path
+                    .split("::")
+                    .map(to_snake_case)
+                    .collect::<Vec<_>>()
+                    .join("::");
+                let sub_module = to_snake_case(sub_name);
                 (
                     format!("{}Commands::{}(args)", pascal_name, sub_pascal),
                     format!(
                         "crate::handlers::{}::{}::run(ctx, args){}",
-                        handler_path, sub_name, await_suffix
+                        handler_module, sub_module, await_suffix
                     ),
                 )
             };

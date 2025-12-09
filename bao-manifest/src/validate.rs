@@ -52,19 +52,28 @@ pub(crate) fn find_name_span(src: &str, name: &str) -> Option<SourceSpan> {
     None
 }
 
-/// Validate that a name is a valid Rust identifier
+/// Validate that a name is a valid Rust identifier (or dashed identifier for commands)
 /// Returns None if valid, Some(reason) if invalid
+///
+/// Allows dashes in names (e.g., "my-command") which will be converted to
+/// snake_case for Rust identifiers during code generation.
 pub(crate) fn validate_identifier(name: &str) -> Option<&'static str> {
     if name.is_empty() {
         return Some("name cannot be empty");
     }
 
-    // Check if it's a reserved keyword
+    // Check if it's a reserved keyword (exact match)
     if is_rust_keyword(name) {
         return Some("name is a Rust reserved keyword");
     }
 
-    let mut chars = name.chars();
+    // Also check if the snake_case version would be a reserved keyword
+    let snake_case = name.replace('-', "_");
+    if is_rust_keyword(&snake_case) {
+        return Some("name converts to a Rust reserved keyword");
+    }
+
+    let mut chars = name.chars().peekable();
 
     // First character must be a letter or underscore
     match chars.next() {
@@ -73,11 +82,25 @@ pub(crate) fn validate_identifier(name: &str) -> Option<&'static str> {
         None => return Some("name cannot be empty"),
     }
 
-    // Remaining characters must be alphanumeric or underscore
+    let mut prev_was_dash = false;
+
+    // Remaining characters must be alphanumeric, underscore, or dash
     for c in chars {
-        if !c.is_ascii_alphanumeric() && c != '_' {
-            return Some("name must contain only letters, numbers, and underscores");
+        if c == '-' {
+            if prev_was_dash {
+                return Some("name cannot contain consecutive dashes");
+            }
+            prev_was_dash = true;
+        } else if c.is_ascii_alphanumeric() || c == '_' {
+            prev_was_dash = false;
+        } else {
+            return Some("name must contain only letters, numbers, underscores, and dashes");
         }
+    }
+
+    // Name cannot end with a dash
+    if prev_was_dash {
+        return Some("name cannot end with a dash");
     }
 
     // Names starting with underscore followed by nothing or only underscores are unusual
@@ -115,6 +138,10 @@ mod tests {
         assert!(validate_identifier("_private").is_none());
         assert!(validate_identifier("arg1").is_none());
         assert!(validate_identifier("my_var_2").is_none());
+        // Dashed identifiers are now allowed
+        assert!(validate_identifier("hello-world").is_none());
+        assert!(validate_identifier("my-long-command").is_none());
+        assert!(validate_identifier("db-migrate").is_none());
     }
 
     #[test]
@@ -148,11 +175,28 @@ mod tests {
 
     #[test]
     fn test_invalid_characters() {
-        assert!(validate_identifier("hello-world").is_some());
         assert!(validate_identifier("hello.world").is_some());
         assert!(validate_identifier("hello world").is_some());
         assert!(validate_identifier("hello!").is_some());
         assert!(validate_identifier("name@test").is_some());
+    }
+
+    #[test]
+    fn test_invalid_dashes() {
+        // Dashes at start or end are invalid
+        assert!(validate_identifier("-hello").is_some());
+        assert!(validate_identifier("hello-").is_some());
+        // Consecutive dashes are invalid
+        assert!(validate_identifier("hello--world").is_some());
+    }
+
+    #[test]
+    fn test_dashed_keyword_conversion() {
+        // Names that convert to reserved keywords should be rejected
+        // "fn_test" is not a keyword, so "fn-test" is allowed
+        assert!(validate_identifier("fn-test").is_none());
+        // But exact keywords are still rejected
+        assert!(validate_identifier("fn").is_some());
     }
 
     #[test]

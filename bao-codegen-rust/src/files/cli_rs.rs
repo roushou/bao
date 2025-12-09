@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use baobao_codegen::{CommandInfo, FileBuilder};
-use baobao_core::{FileRules, GeneratedFile, Overwrite, to_pascal_case};
+use baobao_core::{FileRules, GeneratedFile, Overwrite, to_pascal_case, to_snake_case};
 
 use crate::{Arm, Enum, Field, Fn, Impl, Match, Param, RustFileBuilder, Struct, Variant};
 
@@ -60,11 +60,13 @@ impl CliRs {
                     format!("cmd.dispatch(ctx){}", await_suffix),
                 )
             } else {
+                // Use snake_case for module paths (handles dashed names like "my-command" -> "my_command")
+                let module_name = to_snake_case(&cmd.name);
                 (
                     format!("Commands::{}(args)", pascal),
                     format!(
                         "crate::handlers::{}::run(ctx, args){}",
-                        cmd.name, await_suffix
+                        module_name, await_suffix
                     ),
                 )
             };

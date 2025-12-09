@@ -1,8 +1,8 @@
 //! Shared utility functions for code generation.
 
-/// Convert a string to PascalCase (e.g., "hello_world" -> "HelloWorld")
+/// Convert a string to PascalCase (e.g., "hello_world" -> "HelloWorld", "hello-world" -> "HelloWorld")
 pub fn to_pascal_case(s: &str) -> String {
-    s.split('_')
+    s.split(['_', '-'])
         .map(|part| {
             let mut chars = part.chars();
             match chars.next() {
@@ -62,6 +62,12 @@ mod tests {
         assert_eq!(to_pascal_case("foo_bar_baz"), "FooBarBaz");
         assert_eq!(to_pascal_case("hElLo"), "HElLo");
         assert_eq!(to_pascal_case(""), "");
+        // Dashed names
+        assert_eq!(to_pascal_case("hello-world"), "HelloWorld");
+        assert_eq!(to_pascal_case("my-long-command"), "MyLongCommand");
+        assert_eq!(to_pascal_case("db-migrate"), "DbMigrate");
+        // Mixed underscores and dashes
+        assert_eq!(to_pascal_case("hello_world-test"), "HelloWorldTest");
     }
 
     #[test]

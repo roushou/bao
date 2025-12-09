@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use baobao_codegen::FileBuilder;
-use baobao_core::{FileRules, GeneratedFile, Overwrite, to_pascal_case};
+use baobao_core::{FileRules, GeneratedFile, Overwrite, to_pascal_case, to_snake_case};
 
 use crate::{Fn, Param, RustFileBuilder};
 
@@ -40,7 +40,9 @@ impl HandlerStub {
 
 impl GeneratedFile for HandlerStub {
     fn path(&self, base: &Path) -> PathBuf {
-        base.join(format!("{}.rs", self.command))
+        // Use snake_case for file names (handles dashed names like "my-command" -> "my_command")
+        let file_name = to_snake_case(&self.command);
+        base.join(format!("{}.rs", file_name))
     }
 
     fn rules(&self) -> FileRules {

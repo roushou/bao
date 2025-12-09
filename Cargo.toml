@@ -3,7 +3,7 @@ resolver = "2"
 members = ["bao", "bao-codegen", "bao-codegen-rust", "bao-core", "bao-manifest"]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 homepage = "https://github.com/roushou/bao"
 repository = "https://github.com/roushou/bao"

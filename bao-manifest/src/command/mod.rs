@@ -613,13 +613,48 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_identifier_with_dash() {
+    fn test_valid_identifier_with_dash() {
+        // Dashes are now allowed in command names
         let result = Manifest::from_str(
             r#"
             [cli]
             name = "test"
 
             [commands.hello-world]
+            description = "This should work"
+            "#,
+        );
+
+        assert!(result.is_ok());
+        let manifest = result.unwrap();
+        assert!(manifest.commands.contains_key("hello-world"));
+    }
+
+    #[test]
+    fn test_invalid_identifier_with_trailing_dash() {
+        let result = Manifest::from_str(
+            r#"
+            [cli]
+            name = "test"
+
+            [commands.hello-]
+            description = "This should fail"
+            "#,
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("invalid command name"));
+    }
+
+    #[test]
+    fn test_invalid_identifier_with_consecutive_dashes() {
+        let result = Manifest::from_str(
+            r#"
+            [cli]
+            name = "test"
+
+            [commands.hello--world]
             description = "This should fail"
             "#,
         );
