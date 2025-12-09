@@ -3,7 +3,7 @@ resolver = "2"
 members = ["bao", "bao-codegen", "bao-codegen-rust", "bao-core", "bao-manifest"]
 
 [workspace.package]
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 homepage = "https://github.com/roushou/bao"
 repository = "https://github.com/roushou/bao"
@@ -13,10 +13,10 @@ categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
 # Internal crates
-baobao-codegen = { path = "bao-codegen", version = "0.1.4" }
-baobao-codegen-rust = { path = "bao-codegen-rust", version = "0.1.4" }
-baobao-core = { path = "bao-core", version = "0.1.4" }
-baobao-manifest = { path = "bao-manifest", version = "0.1.4" }
+baobao-codegen = { path = "bao-codegen", version = "0.1.5" }
+baobao-codegen-rust = { path = "bao-codegen-rust", version = "0.1.5" }
+baobao-core = { path = "bao-core", version = "0.1.5" }
+baobao-manifest = { path = "bao-manifest", version = "0.1.5" }
 # External dependencies
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"

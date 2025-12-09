@@ -1,8 +1,9 @@
 use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
-    CodeBuilder, CommandInfo, CommandTree, ContextFieldInfo, FileBuilder, GenerateResult,
-    HandlerPaths, LanguageCodegen, PoolConfigInfo, PreviewFile, SqliteConfigInfo,
+    CleanResult, CodeBuilder, CommandInfo, CommandTree, ContextFieldInfo, FileBuilder,
+    GenerateResult, HandlerPaths, LanguageCodegen, PoolConfigInfo, PreviewFile, SqliteConfigInfo,
+    find_orphan_commands,
 };
 use baobao_core::{
     ContextFieldType, DatabaseType, GeneratedFile, to_pascal_case, to_snake_case,
@@ -196,6 +197,143 @@ impl<'a> Generator<'a> {
         let result = self.generate_handlers(&handlers_dir, output_dir, is_async)?;
 
         Ok(result)
+    }
+
+    /// Clean orphaned generated files
+    ///
+    /// Removes:
+    /// - Generated command files in `src/generated/commands/` that are no longer in the manifest
+    /// - Unmodified handler stubs in `src/handlers/` that are no longer in the manifest
+    ///
+    /// Handler files that have been modified by the user are not deleted.
+    pub fn clean(&self, output_dir: &Path) -> Result<CleanResult> {
+        let mut result = CleanResult::default();
+
+        // Collect expected command names (snake_case for file names)
+        let expected_commands: HashSet<String> = self
+            .schema
+            .commands
+            .keys()
+            .map(|name| to_snake_case(name))
+            .collect();
+
+        // Collect expected handler paths (snake_case)
+        let expected_handlers: HashSet<String> = CommandTree::new(self.schema)
+            .collect_paths()
+            .into_iter()
+            .map(|path| {
+                path.split('/')
+                    .map(to_snake_case)
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .collect();
+
+        // Find and delete orphaned generated command files
+        let commands_dir = output_dir.join("src").join("generated").join("commands");
+        let orphan_commands = find_orphan_commands(&commands_dir, "rs", &expected_commands)?;
+        for path in orphan_commands {
+            std::fs::remove_file(&path)?;
+            let relative = path.strip_prefix(output_dir).unwrap_or(&path);
+            result.deleted_commands.push(relative.display().to_string());
+        }
+
+        // Find and handle orphaned handler files
+        let handlers_dir = output_dir.join("src").join("handlers");
+        let handler_paths = HandlerPaths::new(&handlers_dir, "rs");
+        let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
+
+        for orphan in orphan_handlers {
+            if orphan.is_unmodified {
+                // Safe to delete - it's still just a stub
+                std::fs::remove_file(&orphan.full_path)?;
+                result
+                    .deleted_handlers
+                    .push(format!("src/handlers/{}.rs", orphan.relative_path));
+
+                // Try to clean up empty parent directories
+                if let Some(parent) = orphan.full_path.parent() {
+                    let _ = Self::remove_empty_dirs(parent, &handlers_dir);
+                }
+            } else {
+                // User has modified this file, skip it
+                result
+                    .skipped_handlers
+                    .push(format!("src/handlers/{}.rs", orphan.relative_path));
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Preview what would be cleaned without actually deleting files
+    pub fn preview_clean(&self, output_dir: &Path) -> Result<CleanResult> {
+        let mut result = CleanResult::default();
+
+        // Collect expected command names (snake_case for file names)
+        let expected_commands: HashSet<String> = self
+            .schema
+            .commands
+            .keys()
+            .map(|name| to_snake_case(name))
+            .collect();
+
+        // Collect expected handler paths (snake_case)
+        let expected_handlers: HashSet<String> = CommandTree::new(self.schema)
+            .collect_paths()
+            .into_iter()
+            .map(|path| {
+                path.split('/')
+                    .map(to_snake_case)
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .collect();
+
+        // Find orphaned generated command files
+        let commands_dir = output_dir.join("src").join("generated").join("commands");
+        let orphan_commands = find_orphan_commands(&commands_dir, "rs", &expected_commands)?;
+        for path in orphan_commands {
+            let relative = path.strip_prefix(output_dir).unwrap_or(&path);
+            result.deleted_commands.push(relative.display().to_string());
+        }
+
+        // Find orphaned handler files
+        let handlers_dir = output_dir.join("src").join("handlers");
+        let handler_paths = HandlerPaths::new(&handlers_dir, "rs");
+        let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
+
+        for orphan in orphan_handlers {
+            if orphan.is_unmodified {
+                result
+                    .deleted_handlers
+                    .push(format!("src/handlers/{}.rs", orphan.relative_path));
+            } else {
+                result
+                    .skipped_handlers
+                    .push(format!("src/handlers/{}.rs", orphan.relative_path));
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Remove empty directories up to but not including the base directory
+    fn remove_empty_dirs(dir: &Path, base: &Path) -> Result<()> {
+        if dir == base || !dir.starts_with(base) {
+            return Ok(());
+        }
+
+        // Check if directory is empty
+        if std::fs::read_dir(dir)?.next().is_none() {
+            std::fs::remove_dir(dir)?;
+            // Try to remove parent too
+            if let Some(parent) = dir.parent() {
+                let _ = Self::remove_empty_dirs(parent, base);
+            }
+        }
+
+        Ok(())
     }
 
     fn collect_context_fields(&self) -> Vec<ContextFieldInfo> {

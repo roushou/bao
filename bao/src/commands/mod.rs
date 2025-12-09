@@ -1,6 +1,7 @@
 mod add;
 mod bake;
 mod check;
+mod clean;
 mod completions;
 mod init;
 mod list;
@@ -11,6 +12,7 @@ use add::AddCommand;
 use bake::BakeCommand;
 use check::CheckCommand;
 use clap::{Parser, Subcommand};
+use clean::CleanCommand;
 use completions::CompletionsCommand;
 use eyre::Result;
 use init::InitCommand;
@@ -50,6 +52,7 @@ impl Cli {
             Commands::Init(cmd) => cmd.run(),
             Commands::Bake(cmd) => cmd.run(),
             Commands::Check(cmd) => cmd.run(),
+            Commands::Clean(cmd) => cmd.run(),
             Commands::Add(cmd) => cmd.run(),
             Commands::Remove(cmd) => cmd.run(),
             Commands::List(cmd) => cmd.run(),
@@ -69,6 +72,9 @@ enum Commands {
 
     /// Validate bao.toml without generating code
     Check(CheckCommand),
+
+    /// Remove orphaned generated files
+    Clean(CleanCommand),
 
     /// Add a command or context to bao.toml
     Add(AddCommand),

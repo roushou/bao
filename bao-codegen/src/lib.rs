@@ -20,10 +20,10 @@ pub mod testing;
 pub use code_builder::CodeBuilder;
 pub use commands::{CommandTree, FlatCommand};
 pub use file_builder::FileBuilder;
-pub use handlers::HandlerPaths;
+pub use handlers::{HandlerPaths, OrphanHandler, find_orphan_commands};
 pub use imports::{DependencyCollector, DependencySpec, ImportCollector};
 pub use indent::Indent;
 pub use naming::NamingConvention;
-pub use traits::{GenerateResult, LanguageCodegen, PreviewFile, TypeMapper};
+pub use traits::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile, TypeMapper};
 // Re-export types
 pub use types::{CommandInfo, ContextFieldInfo, PoolConfigInfo, SqliteConfigInfo};

@@ -7,6 +7,9 @@ use std::{
 
 use eyre::Result;
 
+/// Marker indicating an unmodified handler stub
+const HANDLER_STUB_MARKER: &str = "todo!(\"implement";
+
 /// Manages handler file paths for a code generator.
 ///
 /// Provides utilities for:
@@ -143,6 +146,180 @@ impl HandlerPaths {
 
         Ok(())
     }
+
+    /// Find orphaned handler files with their full paths and modification status.
+    ///
+    /// Returns tuples of (relative_path, full_path, is_unmodified).
+    /// A handler is considered unmodified if it contains the `todo!("implement` marker.
+    pub fn find_orphans_with_status(
+        &self,
+        expected_paths: &HashSet<String>,
+    ) -> Result<Vec<OrphanHandler>> {
+        let mut orphans = Vec::new();
+        self.scan_for_orphans_with_status(&self.base_dir, "", expected_paths, &mut orphans)?;
+        Ok(orphans)
+    }
+
+    fn scan_for_orphans_with_status(
+        &self,
+        dir: &Path,
+        prefix: &str,
+        expected: &HashSet<String>,
+        orphans: &mut Vec<OrphanHandler>,
+    ) -> Result<()> {
+        if !dir.exists() {
+            return Ok(());
+        }
+
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let file_name = path.file_name().unwrap().to_string_lossy();
+
+            // Skip mod files
+            if file_name == format!("mod.{}", self.extension) {
+                continue;
+            }
+
+            if path.is_dir() {
+                let new_prefix = if prefix.is_empty() {
+                    file_name.to_string()
+                } else {
+                    format!("{}/{}", prefix, file_name)
+                };
+
+                // Check if this directory is expected
+                if !expected.contains(&new_prefix) {
+                    // Recursively collect all files in this orphaned directory
+                    self.collect_all_files(&path, &new_prefix, orphans)?;
+                } else {
+                    self.scan_for_orphans_with_status(&path, &new_prefix, expected, orphans)?;
+                }
+            } else if path
+                .extension()
+                .is_some_and(|ext| ext == self.extension.as_str())
+            {
+                let stem = path.file_stem().unwrap().to_string_lossy();
+                let relative_path = if prefix.is_empty() {
+                    stem.to_string()
+                } else {
+                    format!("{}/{}", prefix, stem)
+                };
+
+                if !expected.contains(&relative_path) {
+                    let is_unmodified = Self::is_handler_unmodified(&path);
+                    orphans.push(OrphanHandler {
+                        relative_path,
+                        full_path: path,
+                        is_unmodified,
+                    });
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Collect all files in an orphaned directory (recursively).
+    fn collect_all_files(
+        &self,
+        dir: &Path,
+        prefix: &str,
+        orphans: &mut Vec<OrphanHandler>,
+    ) -> Result<()> {
+        if !dir.exists() {
+            return Ok(());
+        }
+
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let file_name = path.file_name().unwrap().to_string_lossy();
+
+            if path.is_dir() {
+                let new_prefix = format!("{}/{}", prefix, file_name);
+                self.collect_all_files(&path, &new_prefix, orphans)?;
+            } else if path
+                .extension()
+                .is_some_and(|ext| ext == self.extension.as_str())
+            {
+                let stem = path.file_stem().unwrap().to_string_lossy();
+                let relative_path = format!("{}/{}", prefix, stem);
+                let is_unmodified = Self::is_handler_unmodified(&path);
+                orphans.push(OrphanHandler {
+                    relative_path,
+                    full_path: path,
+                    is_unmodified,
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if a handler file is unmodified (still contains the stub marker).
+    fn is_handler_unmodified(path: &Path) -> bool {
+        std::fs::read_to_string(path)
+            .map(|content| content.contains(HANDLER_STUB_MARKER))
+            .unwrap_or(false)
+    }
+}
+
+/// Information about an orphaned handler file.
+#[derive(Debug, Clone)]
+pub struct OrphanHandler {
+    /// Path relative to the handlers directory (e.g., "db/migrate")
+    pub relative_path: String,
+    /// Full filesystem path
+    pub full_path: PathBuf,
+    /// Whether the handler is unmodified (still contains `todo!` marker)
+    pub is_unmodified: bool,
+}
+
+/// Find orphaned generated command files in a directory.
+///
+/// Scans the given directory for files with the specified extension that are
+/// not in the expected set of command names.
+pub fn find_orphan_commands(
+    commands_dir: &Path,
+    extension: &str,
+    expected_commands: &HashSet<String>,
+) -> Result<Vec<PathBuf>> {
+    let mut orphans = Vec::new();
+
+    if !commands_dir.exists() {
+        return Ok(orphans);
+    }
+
+    for entry in std::fs::read_dir(commands_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        // Skip directories and mod files
+        if path.is_dir() {
+            continue;
+        }
+
+        let file_name = path.file_name().unwrap().to_string_lossy();
+        if file_name == format!("mod.{}", extension) {
+            continue;
+        }
+
+        // Check if this is a source file
+        if path.extension().is_none_or(|ext| ext != extension) {
+            continue;
+        }
+
+        // Get the command name (file stem)
+        let stem = path.file_stem().unwrap().to_string_lossy();
+
+        // Check if this command is expected
+        if !expected_commands.contains(stem.as_ref()) {
+            orphans.push(path);
+        }
+    }
+
+    Ok(orphans)
 }
 
 #[cfg(test)]

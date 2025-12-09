@@ -31,6 +31,17 @@ pub struct GenerateResult {
     pub orphan_handlers: Vec<String>,
 }
 
+/// Result of cleaning orphaned files
+#[derive(Debug, Default)]
+pub struct CleanResult {
+    /// Generated command files that were deleted
+    pub deleted_commands: Vec<String>,
+    /// Handler files that were deleted (unmodified stubs)
+    pub deleted_handlers: Vec<String>,
+    /// Handler files that were skipped (modified by user)
+    pub skipped_handlers: Vec<String>,
+}
+
 /// A generated file for preview
 #[derive(Debug)]
 pub struct PreviewFile {
