@@ -54,6 +54,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "mysql"
@@ -73,6 +74,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "mysql"
@@ -90,6 +92,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "mysql"

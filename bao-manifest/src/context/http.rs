@@ -24,6 +24,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.http]
             "#,
@@ -40,6 +41,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.http]
             timeout = 30

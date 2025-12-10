@@ -107,6 +107,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "sqlite"
@@ -125,6 +126,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "sqlite"
@@ -166,6 +168,7 @@ mod tests {
                 r#"
                 [cli]
                 name = "test"
+                language = "rust"
 
                 [context.database]
                 type = "sqlite"
@@ -191,6 +194,7 @@ mod tests {
                 r#"
                 [cli]
                 name = "test"
+                language = "rust"
 
                 [context.database]
                 type = "sqlite"
@@ -211,6 +215,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "sqlite"
@@ -229,6 +234,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "sqlite"
@@ -251,6 +257,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "sqlite"

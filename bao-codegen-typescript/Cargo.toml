@@ -1,0 +1,20 @@
+[package]
+name = "baobao-codegen-typescript"
+version.workspace = true
+edition.workspace = true
+description = "TypeScript code generator for Bao CLI generator"
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+baobao-codegen = { workspace = true }
+baobao-core = { workspace = true }
+baobao-manifest = { workspace = true }
+eyre = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

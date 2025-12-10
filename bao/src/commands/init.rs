@@ -2,11 +2,15 @@ use std::path::{Path, PathBuf};
 
 use baobao_codegen::LanguageCodegen;
 use baobao_codegen_rust::{
-    Generator,
-    files::{BaoToml, CargoToml, GitIgnore, MainRs},
+    Generator as RustGenerator,
+    files::{BaoToml as RustBaoToml, CargoToml, GitIgnore as RustGitIgnore, MainRs},
+};
+use baobao_codegen_typescript::{
+    Generator as TypeScriptGenerator,
+    files::{BaoToml as TsBaoToml, GitIgnore as TsGitIgnore, IndexTs, PackageJson, TsConfig},
 };
 use baobao_core::{File, GeneratedFile};
-use baobao_manifest::Manifest;
+use baobao_manifest::{Language, Manifest};
 use clap::Args;
 use eyre::{Context, Result};
 use miette::Report;
@@ -20,12 +24,19 @@ pub struct InitCommand {
     /// Output directory (defaults to ./<name>)
     #[arg(short, long)]
     pub output: Option<PathBuf>,
+
+    /// Target language for code generation
+    #[arg(short, long)]
+    pub language: Language,
 }
 
 impl InitCommand {
     pub fn run(&self) -> Result<()> {
         let (project_name, output_dir) = Self::resolve_paths(&self.name, self.output.clone())?;
-        Self::create_project(&project_name, &output_dir)
+        match self.language {
+            Language::Rust => Self::create_rust_project(&project_name, &output_dir),
+            Language::TypeScript => Self::create_typescript_project(&project_name, &output_dir),
+        }
     }
 
     fn resolve_paths(name: &str, output: Option<PathBuf>) -> Result<(String, PathBuf)> {
@@ -44,9 +55,9 @@ impl InitCommand {
         }
     }
 
-    fn create_project(name: &str, output_dir: &Path) -> Result<()> {
+    fn create_rust_project(name: &str, output_dir: &Path) -> Result<()> {
         // Create bao.toml
-        BaoToml::new(name).write(output_dir)?;
+        RustBaoToml::new(name).write(output_dir)?;
 
         // Create Cargo.toml
         CargoToml::new(name)
@@ -60,13 +71,12 @@ impl InitCommand {
             .write(output_dir)?;
 
         // Create .gitignore
-        GitIgnore.write(output_dir)?;
+        RustGitIgnore.write(output_dir)?;
 
         // Create main.rs (not async for basic init)
         MainRs::new(false).write(output_dir)?;
 
         // Create handlers/hello.rs with a working example
-        // (generator will skip this since file exists, and create handlers/mod.rs)
         File::new(
             output_dir.join("src").join("handlers").join("hello.rs"),
             r#"use crate::context::Context;
@@ -98,18 +108,85 @@ pub fn run(_ctx: &Context, args: HelloArgs) -> eyre::Result<()> {
             }
         };
 
-        let generator = Generator::new(&schema);
+        let generator = RustGenerator::new(&schema);
         let _ = generator
             .generate(output_dir)
             .wrap_err("Failed to generate code")?;
 
-        println!("Created new CLI project in {}", output_dir.display());
+        println!("Created new Rust CLI project in {}", output_dir.display());
         println!();
         println!("Next steps:");
         if output_dir != Path::new(".") {
             println!("  cd {}", output_dir.display());
         }
         println!("  cargo run -- hello --help");
+
+        Ok(())
+    }
+
+    fn create_typescript_project(name: &str, output_dir: &Path) -> Result<()> {
+        // Create bao.toml
+        TsBaoToml::new(name).write(output_dir)?;
+
+        // Create package.json
+        PackageJson::new(name).write(output_dir)?;
+
+        // Create tsconfig.json
+        TsConfig.write(output_dir)?;
+
+        // Create .gitignore
+        TsGitIgnore.write(output_dir)?;
+
+        // Create index.ts
+        IndexTs.write(output_dir)?;
+
+        // Create handlers/hello.ts with a working example
+        std::fs::create_dir_all(output_dir.join("src").join("handlers"))?;
+        File::new(
+            output_dir.join("src").join("handlers").join("hello.ts"),
+            r#"import type { Context } from "../context.ts";
+import type { HelloArgs } from "../commands/hello.ts";
+
+export async function run(ctx: Context, args: HelloArgs): Promise<void> {
+  const name = args.name ?? "World";
+  const greeting = `Hello, ${name}!`;
+
+  if (args.uppercase) {
+    console.log(greeting.toUpperCase());
+  } else {
+    console.log(greeting);
+  }
+}
+"#,
+        )
+        .write()?;
+
+        // Generate code from bao.toml
+        let bao_toml_path = output_dir.join("bao.toml");
+        let schema = match Manifest::from_file(&bao_toml_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("{:?}", Report::new(*e));
+                std::process::exit(1);
+            }
+        };
+
+        let generator = TypeScriptGenerator::new(&schema);
+        let _ = generator
+            .generate(output_dir)
+            .wrap_err("Failed to generate code")?;
+
+        println!(
+            "Created new TypeScript CLI project in {}",
+            output_dir.display()
+        );
+        println!();
+        println!("Next steps:");
+        if output_dir != Path::new(".") {
+            println!("  cd {}", output_dir.display());
+        }
+        println!("  bun install");
+        println!("  bun run dev -- hello --help");
 
         Ok(())
     }

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["bao", "bao-codegen", "bao-codegen-rust", "bao-core", "bao-manifest"]
+members = ["bao", "bao-codegen", "bao-codegen-rust", "bao-codegen-typescript", "bao-core", "bao-manifest"]
 
 [workspace.package]
 version = "0.2.0"
@@ -15,6 +15,7 @@ categories = ["command-line-utilities", "development-tools"]
 # Internal crates
 baobao-codegen = { path = "bao-codegen", version = "0.2.0" }
 baobao-codegen-rust = { path = "bao-codegen-rust", version = "0.2.0" }
+baobao-codegen-typescript = { path = "bao-codegen-typescript", version = "0.2.0" }
 baobao-core = { path = "bao-core", version = "0.2.0" }
 baobao-manifest = { path = "bao-manifest", version = "0.2.0" }
 # External dependencies

@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
 use baobao_codegen::{CommandTree, LanguageCodegen};
-use baobao_codegen_rust::Generator;
-use baobao_manifest::{BaoToml, Command, Manifest};
+use baobao_codegen_rust::Generator as RustGenerator;
+use baobao_codegen_typescript::Generator as TypeScriptGenerator;
+use baobao_manifest::{BaoToml, Command, Language, Manifest};
 use clap::Args;
 use eyre::{Context, Result};
 
@@ -21,6 +22,10 @@ pub struct BakeCommand {
     /// Preview generated code without writing to disk
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Target language (overrides bao.toml setting)
+    #[arg(short, long)]
+    pub language: Option<Language>,
 }
 
 impl BakeCommand {
@@ -28,16 +33,31 @@ impl BakeCommand {
     pub fn run(&self) -> Result<()> {
         let bao_toml = BaoToml::open(&self.config).unwrap_or_exit();
         let schema = bao_toml.schema();
-        let generator = Generator::new(schema);
 
-        if self.dry_run {
-            self.run_preview(&generator)
-        } else {
-            self.run_generation(&generator, schema)
+        // Use CLI flag if provided, otherwise use manifest setting
+        let language = self.language.unwrap_or(schema.cli.language);
+
+        match language {
+            Language::Rust => {
+                let generator = RustGenerator::new(schema);
+                if self.dry_run {
+                    self.run_preview(&generator)
+                } else {
+                    self.run_rust_generation(&generator, schema)
+                }
+            }
+            Language::TypeScript => {
+                let generator = TypeScriptGenerator::new(schema);
+                if self.dry_run {
+                    self.run_preview(&generator)
+                } else {
+                    self.run_typescript_generation(&generator, schema)
+                }
+            }
         }
     }
 
-    fn run_generation(&self, generator: &Generator, schema: &Manifest) -> Result<()> {
+    fn run_rust_generation(&self, generator: &RustGenerator, schema: &Manifest) -> Result<()> {
         let result = generator
             .generate(&self.output)
             .wrap_err("Failed to generate code")?;
@@ -79,7 +99,53 @@ impl BakeCommand {
         Ok(())
     }
 
-    fn run_preview(&self, generator: &Generator) -> Result<()> {
+    fn run_typescript_generation(
+        &self,
+        generator: &TypeScriptGenerator,
+        schema: &Manifest,
+    ) -> Result<()> {
+        let result = generator
+            .generate(&self.output)
+            .wrap_err("Failed to generate code")?;
+
+        // Print header
+        println!("{} v{}", schema.cli.name, schema.cli.version);
+        if let Some(desc) = &schema.cli.description {
+            println!("{}", desc);
+        }
+        println!();
+
+        // Print commands
+        let total = Self::count_commands(schema);
+        println!("Commands ({}):", total);
+        Self::print_commands(&schema.commands, "  ");
+        println!();
+
+        // Print generation summary
+        println!("Generated: {}/src/", self.output.display());
+
+        // Report created handler stubs
+        if !result.created_handlers.is_empty() {
+            println!();
+            println!("New handlers:");
+            for handler in &result.created_handlers {
+                println!("  + src/handlers/{}", handler);
+            }
+        }
+
+        // Warn about orphan handlers
+        if !result.orphan_handlers.is_empty() {
+            println!();
+            println!("Unused handlers:");
+            for orphan in &result.orphan_handlers {
+                println!("  - src/handlers/{}.ts", orphan);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn run_preview<G: LanguageCodegen>(&self, generator: &G) -> Result<()> {
         let files = generator.preview();
 
         for file in &files {

@@ -54,6 +54,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "postgres"
@@ -72,6 +73,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "postgres"
@@ -89,6 +91,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "postgres"
@@ -117,6 +120,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "postgres"
@@ -137,6 +141,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context.database]
             type = "postgres"
@@ -154,6 +159,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [context]
             database = { type = "postgres", max_connections = 15, min_connections = 2 }

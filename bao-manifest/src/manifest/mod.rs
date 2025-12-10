@@ -2,6 +2,7 @@
 
 mod cli;
 mod file;
+mod language;
 mod parse;
 mod validate;
 
@@ -9,6 +10,7 @@ use std::collections::HashMap;
 
 pub use cli::CliConfig;
 pub use file::BaoToml;
+pub use language::Language;
 use serde::Deserialize;
 pub use validate::ParseContext;
 

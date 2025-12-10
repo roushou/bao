@@ -14,6 +14,7 @@ Bao is a **very** opinionated tool to generate CLI applications in multiple prog
 | [baobao-manifest](https://crates.io/crates/baobao-manifest) | TOML manifest parsing and validation |
 | [baobao-codegen](https://crates.io/crates/baobao-codegen) | Shared code generation utilities |
 | [baobao-codegen-rust](https://crates.io/crates/baobao-codegen-rust) | Rust code generator |
+| [baobao-codegen-typescript](https://crates.io/crates/baobao-codegen-typescript) | TypeScript code generator |
 
 
 ## Installation

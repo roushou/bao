@@ -17,4 +17,4 @@ pub use context::{
 // Error
 pub use error::{Error, Result, SourceContext};
 // Manifest
-pub use manifest::{BaoToml, CliConfig, Manifest, ParseContext};
+pub use manifest::{BaoToml, CliConfig, Language, Manifest, ParseContext};

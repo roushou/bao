@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use super::Language;
+
 /// CLI metadata configuration
 #[derive(Debug, Deserialize)]
 pub struct CliConfig {
@@ -15,6 +17,9 @@ pub struct CliConfig {
 
     /// Author information
     pub author: Option<String>,
+
+    /// Target language for code generation
+    pub language: Language,
 }
 
 fn default_version() -> String {

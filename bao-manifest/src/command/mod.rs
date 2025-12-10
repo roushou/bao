@@ -136,6 +136,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello]
             description = "Say hello"
@@ -163,6 +164,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.copy]
             description = "Copy files"
@@ -193,6 +195,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello]
             description = "Say hello"
@@ -220,6 +223,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.build]
             description = "Build project"
@@ -268,6 +272,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello]
             description = "Say hello"
@@ -294,6 +299,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.copy]
             description = "Copy files"
@@ -320,6 +326,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello]
             description = "Say hello"
@@ -345,6 +352,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello]
             description = "Say hello"
@@ -368,6 +376,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello]
             description = "Say hello"
@@ -385,6 +394,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello]
             description = "Say hello"
@@ -410,6 +420,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello]
             description = "Say hello"
@@ -434,6 +445,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.test]
             description = "Test types"
@@ -474,6 +486,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello]
             description = "Say hello"
@@ -497,6 +510,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.db]
             description = "Database commands"
@@ -541,6 +555,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.fn]
             description = "This should fail"
@@ -558,6 +573,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello]
             description = "Say hello"
@@ -578,6 +594,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello]
             description = "Say hello"
@@ -598,6 +615,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.db]
             description = "Database commands"
@@ -619,6 +637,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello-world]
             description = "This should work"
@@ -636,6 +655,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello-]
             description = "This should fail"
@@ -653,6 +673,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello--world]
             description = "This should fail"
@@ -670,6 +691,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.123cmd]
             description = "This should fail"
@@ -687,6 +709,7 @@ mod tests {
             r#"
             [cli]
             name = "test"
+            language = "rust"
 
             [commands.hello_world]
             description = "Valid command"

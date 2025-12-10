@@ -8,8 +8,8 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 use crate::{
-    ArgType, CliConfig, Command, Context, ContextField, HttpConfig, JournalMode, Manifest,
-    SynchronousMode,
+    ArgType, CliConfig, Command, Context, ContextField, HttpConfig, JournalMode, Language,
+    Manifest, SynchronousMode,
 };
 
 /// Serializable manifest for canonical TOML output.
@@ -44,10 +44,11 @@ impl From<&Manifest> for SerializableManifest {
 
 /// Serializable CLI configuration.
 ///
-/// Fields ordered: name, version, author, description
+/// Fields ordered: name, language, version, author, description
 #[derive(Debug, Serialize)]
 pub struct SerializableCliConfig {
     pub name: String,
+    pub language: Language,
     #[serde(skip_serializing_if = "is_default_version")]
     pub version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -64,6 +65,7 @@ impl From<&CliConfig> for SerializableCliConfig {
     fn from(c: &CliConfig) -> Self {
         Self {
             name: c.name.clone(),
+            language: c.language,
             version: c.version.clone(),
             author: c.author.clone(),
             description: c.description.clone(),
@@ -320,6 +322,7 @@ mod tests {
         let input = r#"
 [cli]
 name = "test"
+language = "rust"
 
 [commands.hello]
 description = "Say hello"
@@ -337,6 +340,7 @@ description = "Say hello"
         let input = r#"
 [cli]
 name = "test"
+language = "rust"
 
 [commands.zebra]
 description = "Z command"
@@ -370,6 +374,7 @@ type = "postgres"
 
 [cli]
 name = "test"
+language = "rust"
 "#;
         let manifest = parse(input);
         let output = to_formatted_string(&manifest);
@@ -388,6 +393,7 @@ name = "test"
         let input = r#"
 [cli]
 name = "test"
+language = "rust"
 
 [commands.hello]
 description = "Say hello"
@@ -403,6 +409,7 @@ description = "Say hello"
         let input = r#"
 [cli]
 name = "test"
+language = "rust"
 version = "0.1.0"
 
 [commands.hello]
@@ -437,6 +444,7 @@ type = "bool"
         let input = r#"
 [cli]
 name = "test"
+language = "rust"
 description = "A test CLI"
 
 [context.database]
@@ -466,6 +474,7 @@ type = "string"
         let input = r#"
 [cli]
 name = "test"
+language = "rust"
 
 [commands.parent]
 description = "Parent command"

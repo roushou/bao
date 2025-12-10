@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 baobao-codegen = { workspace = true }
 baobao-codegen-rust = { workspace = true }
+baobao-codegen-typescript = { workspace = true }
 baobao-core = { workspace = true }
 baobao-manifest = { workspace = true }
 clap = { workspace = true }

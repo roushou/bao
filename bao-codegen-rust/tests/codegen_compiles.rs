@@ -94,6 +94,7 @@ fn test_basic_cli_compiles() {
         r#"
         [cli]
         name = "myapp"
+        language = "rust"
         description = "A simple CLI app"
 
         [commands.hello]
@@ -108,6 +109,7 @@ fn test_cli_with_args_compiles() {
         r#"
         [cli]
         name = "myapp"
+        language = "rust"
 
         [commands.greet]
         description = "Greet someone"
@@ -129,6 +131,7 @@ fn test_cli_with_flags_compiles() {
         r#"
         [cli]
         name = "myapp"
+        language = "rust"
 
         [commands.build]
         description = "Build the project"
@@ -152,6 +155,7 @@ fn test_cli_with_all_arg_types_compiles() {
         r#"
         [cli]
         name = "myapp"
+        language = "rust"
 
         [commands.test]
         description = "Test all arg types"
@@ -180,6 +184,7 @@ fn test_cli_with_subcommands_compiles() {
         r#"
         [cli]
         name = "myapp"
+        language = "rust"
 
         [commands.db]
         description = "Database commands"
@@ -203,6 +208,7 @@ fn test_cli_with_nested_subcommands_compiles() {
         r#"
         [cli]
         name = "myapp"
+        language = "rust"
 
         [commands.config]
         description = "Configuration commands"
@@ -231,6 +237,7 @@ fn test_cli_with_multiple_commands_compiles() {
         r#"
         [cli]
         name = "myapp"
+        language = "rust"
         description = "Multi-command CLI"
 
         [commands.init]
@@ -261,6 +268,7 @@ fn test_cli_with_optional_args_compiles() {
         r#"
         [cli]
         name = "myapp"
+        language = "rust"
 
         [commands.copy]
         description = "Copy files"
@@ -283,6 +291,7 @@ fn test_cli_with_default_values_compiles() {
         r#"
         [cli]
         name = "myapp"
+        language = "rust"
 
         [commands.server]
         description = "Start a server"
@@ -294,7 +303,7 @@ fn test_cli_with_default_values_compiles() {
 
         [commands.server.flags.host]
         type = "string"
-        short = "h"
+        short = "H"
         default = "localhost"
         "#,
     );
@@ -306,6 +315,7 @@ fn test_cli_with_http_context_compiles() {
         r#"
         [cli]
         name = "myapp"
+        language = "rust"
 
         [context.http]
         timeout = 30
