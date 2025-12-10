@@ -1,0 +1,2 @@
+# Disable tagging for all crates by default
+tag = false

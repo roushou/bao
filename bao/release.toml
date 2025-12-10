@@ -1,0 +1,3 @@
+# Only tag the main bao crate
+tag = true
+tag-name = "v{{version}}"
