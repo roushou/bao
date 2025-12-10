@@ -138,26 +138,87 @@ pub(crate) fn is_rust_keyword(name: &str) -> bool {
 /// Find the span of a name in the TOML source
 /// Searches for patterns like `.name]`, `.name.`, or `.name =`
 pub(crate) fn find_name_span(src: &str, name: &str) -> Option<SourceSpan> {
-    // Search for common TOML patterns where the name appears
-    let patterns = [
-        format!(".{}]", name), // [commands.name] or [commands.parent.name]
-        format!(".{}.", name), // [commands.name.something]
-        format!(".{} ", name), // inline: name = { ... }
-        format!(".{}=", name), // inline without space: name={ ... }
+    // Search for common TOML patterns where the name appears as a key
+    // These patterns have a leading character we need to skip
+
+    // Patterns with a single leading character to skip
+    let patterns_skip_1 = [
+        format!(".{}]", name),  // [commands.name] or [commands.parent.name]
+        format!(".{}.", name),  // [commands.name.something]
+        format!(".{} ", name),  // table section: commands.name followed by space
+        format!(".{}=", name),  // table section without space: commands.name=
+        format!("{{{}=", name), // inline table start without space: {name=
+        format!(",{}=", name),  // inline table continuation without space: ,name=
     ];
 
-    for pattern in &patterns {
+    for pattern in &patterns_skip_1 {
         if let Some(pos) = src.find(pattern) {
-            // +1 to skip the leading dot
+            // +1 to skip the leading character (dot, brace, or comma)
             let start = pos + 1;
             let len = name.len();
             return Some(SourceSpan::from((start, len)));
         }
     }
 
-    // Fallback: just find the name anywhere (less precise)
-    if let Some(pos) = src.find(name) {
-        return Some(SourceSpan::from((pos, name.len())));
+    // Patterns with two leading characters to skip (character + space)
+    let patterns_skip_2 = [
+        format!("{{ {} ", name), // inline table start with spaces: { name =
+        format!("{{ {}=", name), // inline table start: { name=
+        format!(", {} ", name),  // inline table continuation with spaces: , name =
+        format!(", {}=", name),  // inline table continuation: , name=
+    ];
+
+    for pattern in &patterns_skip_2 {
+        if let Some(pos) = src.find(pattern) {
+            // +2 to skip the leading character and space
+            let start = pos + 2;
+            let len = name.len();
+            return Some(SourceSpan::from((start, len)));
+        }
+    }
+
+    // Fallback: find the name as a TOML key (followed by space or =, not inside quotes)
+    // This avoids matching the name inside string values like "typescript" containing "type"
+    if let Some(span) = find_name_as_key(src, name) {
+        return Some(span);
+    }
+
+    None
+}
+
+/// Find a name as a TOML key (not inside a quoted string)
+/// Returns the span if found as a key, None otherwise
+fn find_name_as_key(src: &str, name: &str) -> Option<SourceSpan> {
+    let mut search_start = 0;
+
+    while let Some(pos) = src[search_start..].find(name) {
+        let absolute_pos = search_start + pos;
+
+        // Check if this occurrence is followed by '=' or ' =' (indicating it's a key)
+        let after = &src[absolute_pos + name.len()..];
+        let is_key = after.starts_with('=')
+            || after.starts_with(" =")
+            || after.starts_with(']')
+            || after.starts_with('.')
+            || after.starts_with(' ');
+
+        if !is_key {
+            search_start = absolute_pos + 1;
+            continue;
+        }
+
+        // Check if this occurrence is inside a quoted string
+        // Count quotes before this position
+        let before = &src[..absolute_pos];
+        let double_quotes = before.chars().filter(|&c| c == '"').count();
+
+        // If odd number of double quotes, we're inside a string
+        if double_quotes % 2 == 1 {
+            search_start = absolute_pos + 1;
+            continue;
+        }
+
+        return Some(SourceSpan::from((absolute_pos, name.len())));
     }
 
     None
@@ -331,6 +392,36 @@ type = "string""#;
         let span = find_name_span(src, "name").unwrap();
         assert_eq!(span.offset(), 21); // Position of 'n' in 'name'
         assert_eq!(span.len(), 4); // Length of 'name'
+    }
+
+    #[test]
+    fn test_find_name_span_inline_table() {
+        // Test that we find 'type' in inline table, not inside "typescript"
+        let src = r#"language = "typescript"
+args = { type = { type = "string" } }"#;
+        let span = find_name_span(src, "type").unwrap();
+        // Should find 'type' at position 33 (args = { type = ...), not position 14 (inside "typescript")
+        assert_eq!(span.offset(), 33);
+        assert_eq!(span.len(), 4);
+    }
+
+    #[test]
+    fn test_find_name_span_not_in_string() {
+        // Ensure we don't match inside quoted strings
+        let src = r#"language = "typescript"
+description = "Type your name""#;
+        // 'type' appears inside "typescript" and "Type" - neither should match
+        let span = find_name_span(src, "type");
+        assert!(span.is_none());
+    }
+
+    #[test]
+    fn test_find_name_span_inline_with_spaces() {
+        // Test inline table with spaces after brace
+        let src = r#"flags = { verbose = { type = "bool" } }"#;
+        let span = find_name_span(src, "verbose").unwrap();
+        assert_eq!(span.offset(), 10); // Position of 'v' in 'verbose'
+        assert_eq!(span.len(), 7);
     }
 
     // ========================================================================
