@@ -126,12 +126,11 @@ fn print_database_info(db: &ContextField) {
     }
     println!();
 
-    if let Some(pool) = pool {
-        if pool.has_config() {
-            if let Some(max) = pool.max_connections {
-                println!("              └─ max connections: {}", max);
-            }
-        }
+    if let Some(pool) = pool
+        && pool.has_config()
+        && let Some(max) = pool.max_connections
+    {
+        println!("              └─ max connections: {}", max);
     }
 
     // SQLite-specific info
