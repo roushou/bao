@@ -1,5 +1,4 @@
 mod app_rs;
-mod bao_toml;
 mod cargo_toml;
 mod cli_rs;
 mod command_rs;
@@ -12,7 +11,7 @@ mod handlers_mod;
 mod main_rs;
 
 pub use app_rs::AppRs;
-pub use bao_toml::BaoToml;
+pub use baobao_codegen::BaoToml;
 pub use cargo_toml::CargoToml;
 pub use cli_rs::CliRs;
 pub use command_rs::CommandRs;

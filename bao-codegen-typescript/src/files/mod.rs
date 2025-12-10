@@ -1,6 +1,5 @@
 //! TypeScript file generators.
 
-mod bao_toml;
 mod cli_ts;
 mod command_ts;
 mod context_ts;
@@ -10,7 +9,7 @@ mod index_ts;
 mod package_json;
 mod tsconfig;
 
-pub use bao_toml::BaoToml;
+pub use baobao_codegen::BaoToml;
 pub use cli_ts::CliTs;
 pub use command_ts::CommandTs;
 pub use context_ts::ContextTs;

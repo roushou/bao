@@ -1,22 +1,27 @@
-//! bao.toml generator for TypeScript projects.
+//! Shared bao.toml generator.
 
 use std::path::{Path, PathBuf};
 
 use baobao_core::{FileRules, GeneratedFile, Overwrite};
+use baobao_manifest::Language;
 
 /// The bao.toml configuration file.
 pub struct BaoToml {
     pub name: String,
     pub version: String,
     pub description: String,
+    pub language: Language,
+    pub overwrite: Overwrite,
 }
 
 impl BaoToml {
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, language: Language) -> Self {
         Self {
             name: name.into(),
             version: "0.1.0".to_string(),
             description: "A CLI application".to_string(),
+            language,
+            overwrite: Overwrite::IfMissing,
         }
     }
 
@@ -29,6 +34,11 @@ impl BaoToml {
         self.description = description;
         self
     }
+
+    pub fn with_overwrite(mut self, overwrite: Overwrite) -> Self {
+        self.overwrite = overwrite;
+        self
+    }
 }
 
 impl GeneratedFile for BaoToml {
@@ -38,7 +48,7 @@ impl GeneratedFile for BaoToml {
 
     fn rules(&self) -> FileRules {
         FileRules {
-            overwrite: Overwrite::IfMissing,
+            overwrite: self.overwrite,
             header: None,
         }
     }
@@ -49,13 +59,23 @@ impl GeneratedFile for BaoToml {
 name = "{}"
 version = "{}"
 description = "{}"
-language = "typescript"
+language = "{}"
 
 # Uncomment to add shared resources accessible in all handlers:
 # [context.database]
 # type = "sqlite"
 # env = "DATABASE_URL"
 # create_if_missing = true
+# journal_mode = "wal"
+# synchronous = "normal"
+# busy_timeout = 5000
+# foreign_keys = true
+# max_connections = 5
+#
+# [context.http]
+# type = "http"
+#
+# Supported types: sqlite, postgres, mysql, http
 
 [commands.hello]
 description = "Say hello"
@@ -72,7 +92,7 @@ type = "bool"
 short = "u"
 description = "Print in uppercase"
 "#,
-            self.name, self.version, self.description
+            self.name, self.version, self.description, self.language
         )
     }
 }

@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::LanguageCodegen;
+use baobao_codegen::{BaoToml, LanguageCodegen};
 use baobao_codegen_rust::{
     Generator as RustGenerator,
-    files::{BaoToml as RustBaoToml, CargoToml, GitIgnore as RustGitIgnore, MainRs},
+    files::{CargoToml, GitIgnore as RustGitIgnore, MainRs},
 };
 use baobao_codegen_typescript::{
     Generator as TypeScriptGenerator,
-    files::{BaoToml as TsBaoToml, GitIgnore as TsGitIgnore, IndexTs, PackageJson, TsConfig},
+    files::{GitIgnore as TsGitIgnore, IndexTs, PackageJson, TsConfig},
 };
 use baobao_core::{File, GeneratedFile};
 use baobao_manifest::{Language, Manifest};
@@ -57,7 +57,7 @@ impl InitCommand {
 
     fn create_rust_project(name: &str, output_dir: &Path) -> Result<()> {
         // Create bao.toml
-        RustBaoToml::new(name).write(output_dir)?;
+        BaoToml::new(name, Language::Rust).write(output_dir)?;
 
         // Create Cargo.toml
         CargoToml::new(name)
@@ -126,7 +126,7 @@ pub fn run(_ctx: &Context, args: HelloArgs) -> eyre::Result<()> {
 
     fn create_typescript_project(name: &str, output_dir: &Path) -> Result<()> {
         // Create bao.toml
-        TsBaoToml::new(name).write(output_dir)?;
+        BaoToml::new(name, Language::TypeScript).write(output_dir)?;
 
         // Create package.json
         PackageJson::new(name).write(output_dir)?;

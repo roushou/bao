@@ -10,7 +10,7 @@ use baobao_core::{
     ContextFieldType, DatabaseType, GeneratedFile, to_camel_case, to_kebab_case, to_pascal_case,
     toml_value_to_string,
 };
-use baobao_manifest::{ArgType, Command, Manifest};
+use baobao_manifest::{ArgType, Command, Language, Manifest};
 use eyre::Result;
 
 use crate::files::{
@@ -145,7 +145,7 @@ impl<'a> Generator<'a> {
         GitIgnore.write(output_dir)?;
 
         // Generate bao.toml
-        BaoToml::new(&self.schema.cli.name)
+        BaoToml::new(&self.schema.cli.name, Language::TypeScript)
             .with_version(self.schema.cli.version.clone())
             .write(output_dir)?;
 
