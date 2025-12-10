@@ -3,6 +3,7 @@ name = "baobao-manifest"
 version.workspace = true
 edition.workspace = true
 description = "TOML manifest parsing and validation for Bao CLI generator"
+readme = "README.md"
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true

@@ -45,7 +45,7 @@ flags = ["loud"]
 Generate your CLI:
 
 ```bash
-bao generate
+bao init --language rust
 ```
 
 This creates a complete Rust project with:

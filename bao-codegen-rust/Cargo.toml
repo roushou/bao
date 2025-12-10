@@ -3,6 +3,7 @@ name = "baobao-codegen-rust"
 version.workspace = true
 edition.workspace = true
 description = "Rust code generator for Bao CLI generator"
+readme = "README.md"
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true

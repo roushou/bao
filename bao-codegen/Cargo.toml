@@ -3,6 +3,7 @@ name = "baobao-codegen"
 version.workspace = true
 edition.workspace = true
 description = "Shared code generation utilities for Bao CLI generator"
+readme = "README.md"
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true

@@ -3,6 +3,7 @@ name = "baobao"
 version.workspace = true
 edition.workspace = true
 description = "Generate type-safe CLI applications from a simple TOML schema"
+readme = "README.md"
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true

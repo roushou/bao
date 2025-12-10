@@ -3,6 +3,7 @@ name = "baobao-core"
 version.workspace = true
 edition.workspace = true
 description = "Core utilities for Bao CLI generator"
+readme = "README.md"
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
