@@ -107,17 +107,42 @@ impl<'a> Generator<'a> {
             .render(),
         });
 
-        // Individual command files
+        // Individual command files (recursively collect all commands)
         for (name, command) in &self.schema.commands {
-            let content = self.generate_command_file(name, command);
-            let file_name = to_kebab_case(name);
-            files.push(PreviewFile {
-                path: format!("src/commands/{}.ts", file_name),
-                content: CommandTs::new(name, content).render(),
-            });
+            self.collect_command_previews(&mut files, name, command, vec![name.clone()]);
         }
 
         files
+    }
+
+    /// Recursively collect command file previews.
+    fn collect_command_previews(
+        &self,
+        files: &mut Vec<PreviewFile>,
+        name: &str,
+        command: &Command,
+        path_segments: Vec<String>,
+    ) {
+        let content = self.generate_command_file(name, command, &path_segments);
+        let file_path = path_segments
+            .iter()
+            .map(|s| to_kebab_case(s))
+            .collect::<Vec<_>>()
+            .join("/");
+
+        files.push(PreviewFile {
+            path: format!("src/commands/{}.ts", file_path),
+            content: CommandTs::nested(path_segments.clone(), content).render(),
+        });
+
+        // Recursively collect subcommand previews
+        if command.has_subcommands() {
+            for (sub_name, sub_command) in &command.commands {
+                let mut sub_path = path_segments.clone();
+                sub_path.push(sub_name.clone());
+                self.collect_command_previews(files, sub_name, sub_command, sub_path);
+            }
+        }
     }
 
     /// Generate all files into the specified output directory.
@@ -172,10 +197,9 @@ impl<'a> Generator<'a> {
         // Ensure commands directory exists
         std::fs::create_dir_all(output_dir.join("src").join("commands"))?;
 
-        // Generate individual command files
+        // Generate individual command files (recursively for nested commands)
         for (name, command) in &self.schema.commands {
-            let content = self.generate_command_file(name, command);
-            CommandTs::new(name, content).write(output_dir)?;
+            self.generate_command_files_recursive(output_dir, name, command, vec![name.clone()])?;
         }
 
         // Generate handlers
@@ -237,8 +261,55 @@ impl<'a> Generator<'a> {
             .collect()
     }
 
-    fn generate_command_file(&self, name: &str, command: &Command) -> String {
-        let pascal_name = to_pascal_case(name);
+    /// Recursively generate command files for a command and all its subcommands.
+    fn generate_command_files_recursive(
+        &self,
+        output_dir: &Path,
+        name: &str,
+        command: &Command,
+        path_segments: Vec<String>,
+    ) -> Result<()> {
+        // Generate this command's file
+        let content = self.generate_command_file(name, command, &path_segments);
+
+        // Ensure parent directory exists for nested commands
+        if path_segments.len() > 1 {
+            let mut dir_path = output_dir.join("src").join("commands");
+            for segment in &path_segments[..path_segments.len() - 1] {
+                dir_path = dir_path.join(to_kebab_case(segment));
+            }
+            std::fs::create_dir_all(&dir_path)?;
+        }
+
+        CommandTs::nested(path_segments.clone(), content).write(output_dir)?;
+
+        // Recursively generate subcommand files
+        if command.has_subcommands() {
+            for (sub_name, sub_command) in &command.commands {
+                let mut sub_path = path_segments.clone();
+                sub_path.push(sub_name.clone());
+                self.generate_command_files_recursive(output_dir, sub_name, sub_command, sub_path)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn generate_command_file(
+        &self,
+        name: &str,
+        command: &Command,
+        path_segments: &[String],
+    ) -> String {
+        if command.has_subcommands() {
+            self.generate_parent_command_file(name, command)
+        } else {
+            self.generate_leaf_command_file(name, command, path_segments)
+        }
+    }
+
+    /// Generate a parent command file that only routes to subcommands.
+    fn generate_parent_command_file(&self, name: &str, command: &Command) -> String {
         let camel_name = to_camel_case(name);
         let kebab_name = to_kebab_case(name);
 
@@ -246,11 +317,76 @@ impl<'a> Generator<'a> {
 
         // Imports
         code.push_str("import { command } from \"boune\";\n");
+
+        // Import subcommands from the subdirectory
+        for subcommand_name in command.commands.keys() {
+            let sub_camel = to_camel_case(subcommand_name);
+            let sub_kebab = to_kebab_case(subcommand_name);
+            code.push_str(&format!(
+                "import {{ {}Command }} from \"./{}/{}.ts\";\n",
+                sub_camel, kebab_name, sub_kebab
+            ));
+        }
+        code.push('\n');
+
+        // Command definition with subcommands
         code.push_str(&format!(
-            "import {{ run }} from \"../handlers/{}.ts\";\n",
-            kebab_name
+            "export const {}Command = command(\"{}\")\n",
+            camel_name, name
         ));
-        code.push_str("import type { Context } from \"../context.ts\";\n\n");
+        code.push_str(&format!("  .description(\"{}\")\n", command.description));
+
+        // Add subcommands
+        for subcommand_name in command.commands.keys() {
+            let sub_camel = to_camel_case(subcommand_name);
+            code.push_str(&format!("  .subcommand({}Command)\n", sub_camel));
+        }
+
+        // Remove trailing newline from last .subcommand() line
+        if code.ends_with('\n') {
+            code.pop();
+        }
+        code.push_str(";\n");
+
+        code
+    }
+
+    /// Generate a leaf command file that has an action handler.
+    fn generate_leaf_command_file(
+        &self,
+        name: &str,
+        command: &Command,
+        path_segments: &[String],
+    ) -> String {
+        let pascal_name = to_pascal_case(name);
+        let camel_name = to_camel_case(name);
+
+        // Build the handler path (kebab-case, joined by /)
+        let handler_path = path_segments
+            .iter()
+            .map(|s| to_kebab_case(s))
+            .collect::<Vec<_>>()
+            .join("/");
+
+        // Calculate relative path to handlers from this command's location
+        // For a command at commands/data/builders/leaderboard.ts,
+        // handlers are at handlers/data/builders/leaderboard.ts
+        // So we need "../../../handlers/data/builders/leaderboard.ts"
+        let depth = path_segments.len();
+        let up_path = "../".repeat(depth);
+
+        let mut code = String::new();
+
+        // Imports
+        code.push_str("import { command } from \"boune\";\n");
+        code.push_str(&format!(
+            "import {{ run }} from \"{}handlers/{}.ts\";\n",
+            up_path, handler_path
+        ));
+        code.push_str(&format!(
+            "import type {{ Context }} from \"{}context.ts\";\n\n",
+            up_path
+        ));
 
         // Args interface
         code.push_str(&self.generate_args_interface(&pascal_name, command));

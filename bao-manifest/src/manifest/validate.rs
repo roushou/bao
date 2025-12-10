@@ -136,91 +136,61 @@ pub(crate) fn is_rust_keyword(name: &str) -> bool {
 }
 
 /// Find the span of a name in the TOML source
-/// Searches for patterns like `.name]`, `.name.`, or `.name =`
+/// Searches for patterns like `.name]`, `.name.`, `{ name =`, or `name = "value"`
 pub(crate) fn find_name_span(src: &str, name: &str) -> Option<SourceSpan> {
-    // Search for common TOML patterns where the name appears as a key
-    // These patterns have a leading character we need to skip
+    // Search for common TOML patterns where the name appears as an identifier
+    // (command name, arg name, flag name)
 
-    // Patterns with a single leading character to skip
+    // Pattern 1: Table header patterns with leading dot
+    // e.g., [commands.name] or [commands.parent.name]
     let patterns_skip_1 = [
-        format!(".{}]", name),  // [commands.name] or [commands.parent.name]
-        format!(".{}.", name),  // [commands.name.something]
-        format!(".{} ", name),  // table section: commands.name followed by space
-        format!(".{}=", name),  // table section without space: commands.name=
-        format!("{{{}=", name), // inline table start without space: {name=
-        format!(",{}=", name),  // inline table continuation without space: ,name=
+        format!(".{}]", name), // [commands.name]
+        format!(".{}.", name), // [commands.name.something]
     ];
 
     for pattern in &patterns_skip_1 {
         if let Some(pos) = src.find(pattern) {
-            // +1 to skip the leading character (dot, brace, or comma)
+            // +1 to skip the leading dot
             let start = pos + 1;
-            let len = name.len();
-            return Some(SourceSpan::from((start, len)));
+            return Some(SourceSpan::from((start, name.len())));
         }
     }
 
-    // Patterns with two leading characters to skip (character + space)
-    let patterns_skip_2 = [
-        format!("{{ {} ", name), // inline table start with spaces: { name =
-        format!("{{ {}=", name), // inline table start: { name=
-        format!(", {} ", name),  // inline table continuation with spaces: , name =
-        format!(", {}=", name),  // inline table continuation: , name=
+    // Pattern 2: Inline table patterns
+    // e.g., { name = or , name =
+    let inline_patterns = [
+        (format!("{{ {} ", name), 2usize), // { name  (brace + space)
+        (format!("{{ {}=", name), 2usize), // { name= (brace + space)
+        (format!("{{{}=", name), 1usize),  // {name=  (just brace)
+        (format!(", {} ", name), 2usize),  // , name  (comma + space)
+        (format!(", {}=", name), 2usize),  // , name= (comma + space)
+        (format!(",{}=", name), 1usize),   // ,name=  (just comma)
     ];
 
-    for pattern in &patterns_skip_2 {
+    for (pattern, skip) in &inline_patterns {
         if let Some(pos) = src.find(pattern) {
-            // +2 to skip the leading character and space
-            let start = pos + 2;
-            let len = name.len();
-            return Some(SourceSpan::from((start, len)));
+            let start = pos + skip;
+            return Some(SourceSpan::from((start, name.len())));
         }
     }
 
-    // Fallback: find the name as a TOML key (followed by space or =, not inside quotes)
-    // This avoids matching the name inside string values like "typescript" containing "type"
-    if let Some(span) = find_name_as_key(src, name) {
-        return Some(span);
+    // Pattern 3: Array format with name = "value"
+    // e.g., [[commands.hello.args]] followed by name = "target"
+    let name_pattern = format!("name = \"{}\"", name);
+    if let Some(pos) = src.find(&name_pattern) {
+        // The name starts after 'name = "' (8 characters)
+        let start = pos + 8;
+        return Some(SourceSpan::from((start, name.len())));
     }
 
-    None
-}
-
-/// Find a name as a TOML key (not inside a quoted string)
-/// Returns the span if found as a key, None otherwise
-fn find_name_as_key(src: &str, name: &str) -> Option<SourceSpan> {
-    let mut search_start = 0;
-
-    while let Some(pos) = src[search_start..].find(name) {
-        let absolute_pos = search_start + pos;
-
-        // Check if this occurrence is followed by '=' or ' =' (indicating it's a key)
-        let after = &src[absolute_pos + name.len()..];
-        let is_key = after.starts_with('=')
-            || after.starts_with(" =")
-            || after.starts_with(']')
-            || after.starts_with('.')
-            || after.starts_with(' ');
-
-        if !is_key {
-            search_start = absolute_pos + 1;
-            continue;
-        }
-
-        // Check if this occurrence is inside a quoted string
-        // Count quotes before this position
-        let before = &src[..absolute_pos];
-        let double_quotes = before.chars().filter(|&c| c == '"').count();
-
-        // If odd number of double quotes, we're inside a string
-        if double_quotes % 2 == 1 {
-            search_start = absolute_pos + 1;
-            continue;
-        }
-
-        return Some(SourceSpan::from((absolute_pos, name.len())));
+    // Also try with single quotes
+    let name_pattern_single = format!("name = '{}'", name);
+    if let Some(pos) = src.find(&name_pattern_single) {
+        let start = pos + 8;
+        return Some(SourceSpan::from((start, name.len())));
     }
 
+    // No fallback - better to have no span than point to wrong location
     None
 }
 
@@ -422,6 +392,19 @@ description = "Type your name""#;
         let span = find_name_span(src, "verbose").unwrap();
         assert_eq!(span.offset(), 10); // Position of 'v' in 'verbose'
         assert_eq!(span.len(), 7);
+    }
+
+    #[test]
+    fn test_find_name_span_array_format() {
+        // Test array format where name is specified with name = "value"
+        let src = r#"[[commands.hello.flags]]
+name = "type"
+type = "string"
+description = "Filter by type""#;
+        let span = find_name_span(src, "type").unwrap();
+        // Should find 'type' inside name = "type", not at type = "string"
+        assert_eq!(span.offset(), 33); // Position of 't' in name = "type"
+        assert_eq!(span.len(), 4);
     }
 
     // ========================================================================
