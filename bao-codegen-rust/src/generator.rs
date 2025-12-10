@@ -80,7 +80,7 @@ impl<'a> Generator<'a> {
         files.push(PreviewFile {
             path: "Cargo.toml".to_string(),
             content: CargoToml::new(&self.schema.cli.name)
-                .with_version(&self.schema.cli.version)
+                .with_version(self.schema.cli.version.clone())
                 .with_dependencies(dependencies)
                 .render(),
         });
@@ -107,7 +107,7 @@ impl<'a> Generator<'a> {
             path: "src/generated/cli.rs".to_string(),
             content: CliRs::new(
                 &self.schema.cli.name,
-                &self.schema.cli.version,
+                self.schema.cli.version.clone(),
                 self.schema.cli.description.clone(),
                 commands,
                 is_async,
@@ -156,7 +156,7 @@ impl<'a> Generator<'a> {
         // Generate Cargo.toml with all dependencies
         let dependencies = self.collect_dependencies(is_async);
         CargoToml::new(&self.schema.cli.name)
-            .with_version(&self.schema.cli.version)
+            .with_version(self.schema.cli.version.clone())
             .with_dependencies(dependencies)
             .write(output_dir)?;
 
@@ -177,7 +177,7 @@ impl<'a> Generator<'a> {
 
         CliRs::new(
             &self.schema.cli.name,
-            &self.schema.cli.version,
+            self.schema.cli.version.clone(),
             self.schema.cli.description.clone(),
             commands,
             is_async,

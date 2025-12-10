@@ -1,3 +1,4 @@
+use baobao_core::Version;
 use serde::Deserialize;
 
 use super::Language;
@@ -8,9 +9,9 @@ pub struct CliConfig {
     /// Name of the CLI binary
     pub name: String,
 
-    /// Version string
+    /// Version
     #[serde(default = "default_version")]
-    pub version: String,
+    pub version: Version,
 
     /// CLI description for help text
     pub description: Option<String>,
@@ -22,6 +23,6 @@ pub struct CliConfig {
     pub language: Language,
 }
 
-fn default_version() -> String {
-    "0.1.0".to_string()
+fn default_version() -> Version {
+    Version::new(0, 1, 0)
 }

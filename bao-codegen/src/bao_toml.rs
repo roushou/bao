@@ -2,13 +2,13 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, GeneratedFile, Overwrite};
+use baobao_core::{FileRules, GeneratedFile, Overwrite, Version};
 use baobao_manifest::Language;
 
 /// The bao.toml configuration file.
 pub struct BaoToml {
     pub name: String,
-    pub version: String,
+    pub version: Version,
     pub description: String,
     pub language: Language,
     pub overwrite: Overwrite,
@@ -18,14 +18,14 @@ impl BaoToml {
     pub fn new(name: impl Into<String>, language: Language) -> Self {
         Self {
             name: name.into(),
-            version: "0.1.0".to_string(),
+            version: Version::new(0, 1, 0),
             description: "A CLI application".to_string(),
             language,
             overwrite: Overwrite::IfMissing,
         }
     }
 
-    pub fn with_version(mut self, version: String) -> Self {
+    pub fn with_version(mut self, version: Version) -> Self {
         self.version = version;
         self
     }

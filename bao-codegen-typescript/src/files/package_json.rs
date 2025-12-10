@@ -2,15 +2,14 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, GeneratedFile, Overwrite};
+use baobao_core::{FileRules, GeneratedFile, Overwrite, Version};
 
-const DEFAULT_VERSION: &str = "0.1.0";
 const DEFAULT_DESCRIPTION: &str = "A CLI application";
 
 /// The package.json configuration file.
 pub struct PackageJson {
     pub name: String,
-    pub version: String,
+    pub version: Version,
     pub description: String,
     pub dependencies: Vec<Dependency>,
     pub dev_dependencies: Vec<Dependency>,
@@ -20,7 +19,7 @@ impl PackageJson {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            version: DEFAULT_VERSION.to_string(),
+            version: Version::new(0, 1, 0),
             description: DEFAULT_DESCRIPTION.to_string(),
             dependencies: vec![Dependency::new("boune", "^0.2.0")],
             dev_dependencies: vec![
@@ -30,7 +29,7 @@ impl PackageJson {
         }
     }
 
-    pub fn with_version(mut self, version: String) -> Self {
+    pub fn with_version(mut self, version: Version) -> Self {
         self.version = version;
         self
     }

@@ -146,6 +146,7 @@ name = "baobao-core"
 version = "0.3.0"
 dependencies = [
  "eyre",
+ "serde",
  "tempfile",
  "toml",
 ]
@@ -154,6 +155,7 @@ dependencies = [
 name = "baobao-manifest"
 version = "0.3.0"
 dependencies = [
+ "baobao-core",
  "miette",
  "serde",
  "serde_json",

@@ -7,6 +7,7 @@ mod file;
 mod type_mapper;
 mod types;
 mod utils;
+mod version;
 
 // File operations
 pub use file::{File, FileRules, GeneratedFile, Overwrite, WriteResult};
@@ -17,3 +18,4 @@ pub use types::{ContextFieldType, DatabaseType};
 pub use utils::{
     to_camel_case, to_kebab_case, to_pascal_case, to_snake_case, toml_value_to_string,
 };
+pub use version::Version;

@@ -1,14 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, GeneratedFile, Overwrite};
+use baobao_core::{FileRules, GeneratedFile, Overwrite, Version};
 
-const DEFAULT_VERSION: &str = "0.1.0";
 const DEFAULT_EDITION: &str = "2024";
 
 /// The Cargo.toml project manifest
 pub struct CargoToml {
     pub name: String,
-    pub version: String,
+    pub version: Version,
     pub edition: String,
     pub dependencies: Vec<(String, String)>,
 }
@@ -17,14 +16,14 @@ impl CargoToml {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            version: DEFAULT_VERSION.to_string(),
+            version: Version::new(0, 1, 0),
             edition: DEFAULT_EDITION.to_string(),
             dependencies: Vec::new(),
         }
     }
 
-    pub fn with_version(mut self, version: impl Into<String>) -> Self {
-        self.version = version.into();
+    pub fn with_version(mut self, version: Version) -> Self {
+        self.version = version;
         self
     }
 

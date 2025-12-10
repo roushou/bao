@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use baobao_core::Version;
 use serde::Serialize;
 
 use crate::{
@@ -50,15 +51,15 @@ pub struct SerializableCliConfig {
     pub name: String,
     pub language: Language,
     #[serde(skip_serializing_if = "is_default_version")]
-    pub version: String,
+    pub version: Version,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
-fn is_default_version(v: &str) -> bool {
-    v == "0.1.0"
+fn is_default_version(v: &Version) -> bool {
+    *v == Version::new(0, 1, 0)
 }
 
 impl From<&CliConfig> for SerializableCliConfig {

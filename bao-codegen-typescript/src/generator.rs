@@ -100,7 +100,7 @@ impl<'a> Generator<'a> {
             path: "src/cli.ts".to_string(),
             content: CliTs::new(
                 &self.schema.cli.name,
-                &self.schema.cli.version,
+                self.schema.cli.version.clone(),
                 self.schema.cli.description.clone(),
                 commands,
             )
@@ -163,7 +163,7 @@ impl<'a> Generator<'a> {
 
         CliTs::new(
             &self.schema.cli.name,
-            &self.schema.cli.version,
+            self.schema.cli.version.clone(),
             self.schema.cli.description.clone(),
             commands,
         )

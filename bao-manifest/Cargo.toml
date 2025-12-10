@@ -10,6 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
+baobao-core = { workspace = true }
 miette = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
