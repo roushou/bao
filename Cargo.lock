@@ -93,7 +93,7 @@ dependencies = [
 
 [[package]]
 name = "baobao"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "baobao-codegen",
  "baobao-codegen-rust",
@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "baobao-codegen"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "baobao-core",
  "baobao-manifest",
@@ -120,7 +120,7 @@ dependencies = [
 
 [[package]]
 name = "baobao-codegen-rust"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "baobao-codegen",
  "baobao-core",
@@ -132,7 +132,7 @@ dependencies = [
 
 [[package]]
 name = "baobao-codegen-typescript"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "baobao-codegen",
  "baobao-core",
@@ -144,7 +144,7 @@ dependencies = [
 
 [[package]]
 name = "baobao-core"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "eyre",
  "serde",
@@ -154,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "baobao-manifest"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "baobao-core",
  "miette",
