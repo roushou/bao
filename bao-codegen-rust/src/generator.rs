@@ -1,9 +1,10 @@
 use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
-    CleanResult, CodeBuilder, CommandInfo, CommandTree, ContextFieldInfo, GenerateResult,
-    HandlerPaths, LanguageCodegen, PoolConfigInfo, PreviewFile, SqliteConfigInfo,
-    find_orphan_commands,
+    builder::CodeBuilder,
+    generation::{HandlerPaths, find_orphan_commands},
+    language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
+    schema::{CommandInfo, CommandTree, ContextFieldInfo, PoolConfigInfo, SqliteConfigInfo},
 };
 use baobao_core::{
     ContextFieldType, DatabaseType, GeneratedFile, to_pascal_case, to_snake_case,

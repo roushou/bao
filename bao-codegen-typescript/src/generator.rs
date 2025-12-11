@@ -3,8 +3,10 @@
 use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
-    CodeBuilder, CommandInfo, CommandTree, ContextFieldInfo, GenerateResult, HandlerPaths,
-    LanguageCodegen, PoolConfigInfo, PreviewFile, SqliteConfigInfo,
+    builder::CodeBuilder,
+    generation::HandlerPaths,
+    language::{GenerateResult, LanguageCodegen, PreviewFile},
+    schema::{CommandInfo, CommandTree, ContextFieldInfo, PoolConfigInfo, SqliteConfigInfo},
 };
 use baobao_core::{ContextFieldType, DatabaseType, GeneratedFile, to_camel_case, to_kebab_case};
 use baobao_manifest::{Command, Language, Manifest};

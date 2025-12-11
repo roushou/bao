@@ -43,7 +43,7 @@ mod type_mapper;
 
 pub mod files;
 
-pub use baobao_codegen::{GenerateResult, LanguageCodegen, PreviewFile};
+pub use baobao_codegen::language::{GenerateResult, LanguageCodegen, PreviewFile};
 pub use code_file::{CodeFile, RawCode};
 pub use generator::Generator;
 pub use naming::TS_NAMING;

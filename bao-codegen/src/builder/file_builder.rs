@@ -1,6 +1,7 @@
 //! Composable file builder
 
-use crate::{CodeBuilder, ImportCollector, Indent};
+use super::{CodeBuilder, Indent};
+use crate::generation::ImportCollector;
 
 /// Composable file builder that combines import collection with code generation.
 ///
@@ -10,7 +11,7 @@ use crate::{CodeBuilder, ImportCollector, Indent};
 /// # Example
 ///
 /// ```
-/// use baobao_codegen::{FileBuilder, Indent};
+/// use baobao_codegen::builder::{FileBuilder, Indent};
 ///
 /// let mut builder = FileBuilder::new(Indent::RUST);
 /// builder.imports.add("std::io", "Read");

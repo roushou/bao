@@ -9,7 +9,7 @@ mod index_ts;
 mod package_json;
 mod tsconfig;
 
-pub use baobao_codegen::BaoToml;
+pub use baobao_codegen::generation::BaoToml;
 pub use cli_ts::CliTs;
 pub use command_ts::CommandTs;
 pub use context_ts::ContextTs;

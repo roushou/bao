@@ -1,6 +1,6 @@
 //! Rust impl block builder.
 
-use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
+use baobao_codegen::builder::{CodeBuilder, CodeFragment, Renderable};
 
 use super::Fn;
 

@@ -3,7 +3,7 @@
 //! Provides a high-level API for generating Rust files with
 //! organized imports and body content.
 
-use baobao_codegen::{CodeBuilder, CodeFragment, Indent, Renderable};
+use baobao_codegen::builder::{CodeBuilder, CodeFragment, Indent, Renderable};
 
 /// A Rust use statement.
 #[derive(Debug, Clone)]

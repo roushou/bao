@@ -1,6 +1,6 @@
 //! Rust enum builder.
 
-use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
+use baobao_codegen::builder::{CodeBuilder, CodeFragment, Renderable};
 
 /// A variant in a Rust enum.
 #[derive(Debug, Clone)]

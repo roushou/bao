@@ -1,6 +1,6 @@
 //! TypeScript type alias and union builders.
 
-use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
+use baobao_codegen::builder::{CodeBuilder, CodeFragment, Renderable};
 
 /// A field in a TypeScript object type.
 #[derive(Debug, Clone)]

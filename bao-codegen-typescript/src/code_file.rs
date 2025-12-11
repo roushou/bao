@@ -3,7 +3,7 @@
 //! Provides a high-level API for generating TypeScript files with
 //! organized imports, body content, and exports sections.
 
-use baobao_codegen::{CodeBuilder, CodeFragment, Indent, Renderable};
+use baobao_codegen::builder::{CodeBuilder, CodeFragment, Indent, Renderable};
 
 use crate::ast::{Export, Import};
 

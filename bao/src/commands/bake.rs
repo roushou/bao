@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use baobao_codegen::{CommandTree, LanguageCodegen};
+use baobao_codegen::{language::LanguageCodegen, schema::CommandTree};
 use baobao_codegen_rust::Generator as RustGenerator;
 use baobao_codegen_typescript::Generator as TypeScriptGenerator;
 use baobao_manifest::{BaoToml, Command, Language, Manifest};

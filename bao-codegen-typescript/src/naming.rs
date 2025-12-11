@@ -1,6 +1,6 @@
 //! TypeScript-specific naming conventions.
 
-use baobao_codegen::NamingConvention;
+use baobao_codegen::language::NamingConvention;
 use baobao_core::{to_camel_case, to_kebab_case, to_pascal_case};
 
 fn escape_ts_reserved(name: &str) -> String {

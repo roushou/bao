@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::CommandInfo;
+use baobao_codegen::schema::CommandInfo;
 use baobao_core::{FileRules, GeneratedFile, Overwrite, Version, to_camel_case, to_kebab_case};
 
 use crate::{

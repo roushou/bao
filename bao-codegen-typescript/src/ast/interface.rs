@@ -1,6 +1,6 @@
 //! TypeScript interface builder.
 
-use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
+use baobao_codegen::builder::{CodeBuilder, CodeFragment, Renderable};
 
 /// A field in a TypeScript interface.
 #[derive(Debug, Clone)]

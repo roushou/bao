@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::{ContextFieldInfo, PoolConfigInfo, TypeMapper};
+use baobao_codegen::{
+    language::TypeMapper,
+    schema::{ContextFieldInfo, PoolConfigInfo},
+};
 use baobao_core::{ContextFieldType, DatabaseType, FileRules, GeneratedFile, Overwrite};
 
 use crate::{Field, Fn, Impl, RustFile, RustTypeMapper, Struct, Use};

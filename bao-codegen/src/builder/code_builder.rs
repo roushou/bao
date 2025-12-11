@@ -1,6 +1,6 @@
 //! Code builder utility for generating properly indented code.
 
-use crate::{CodeFragment, Indent, Renderable};
+use super::{CodeFragment, Indent, Renderable};
 
 /// Fluent API for building code with proper indentation.
 ///
@@ -10,7 +10,7 @@ use crate::{CodeFragment, Indent, Renderable};
 /// # Example (Consuming API)
 ///
 /// ```
-/// use baobao_codegen::CodeBuilder;
+/// use baobao_codegen::builder::CodeBuilder;
 ///
 /// let code = CodeBuilder::new(Default::default())
 ///     .line("fn main() {")
@@ -26,7 +26,7 @@ use crate::{CodeFragment, Indent, Renderable};
 /// # Example (Mutable API)
 ///
 /// ```
-/// use baobao_codegen::CodeBuilder;
+/// use baobao_codegen::builder::CodeBuilder;
 ///
 /// let mut builder = CodeBuilder::rust();
 /// builder
@@ -220,10 +220,10 @@ impl CodeBuilder {
     /// # Example
     ///
     /// ```
-    /// use baobao_codegen::CodeBuilder;
+    /// use baobao_codegen::builder::CodeBuilder;
     ///
     /// let code = CodeBuilder::rust()
-    ///     .block("impl Foo {", |b| {
+    ///     .block("impl Foo {", |b: CodeBuilder| {
     ///         b.line("fn bar(&self) {}")
     ///     })
     ///     .build();
@@ -241,10 +241,10 @@ impl CodeBuilder {
     /// # Example
     ///
     /// ```
-    /// use baobao_codegen::CodeBuilder;
+    /// use baobao_codegen::builder::CodeBuilder;
     ///
     /// let code = CodeBuilder::rust()
-    ///     .block_with_close("fn main() {", "}", |b| {
+    ///     .block_with_close("fn main() {", "}", |b: CodeBuilder| {
     ///         b.line("println!(\"Hello\");")
     ///     })
     ///     .build();

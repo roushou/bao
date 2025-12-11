@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::CommandInfo;
+use baobao_codegen::schema::CommandInfo;
 use baobao_core::{FileRules, GeneratedFile, Overwrite, Version, to_pascal_case, to_snake_case};
 
 use crate::{Arm, Enum, Field, Fn, Impl, Match, Param, RustFile, Struct, Use, Variant};

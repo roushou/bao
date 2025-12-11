@@ -1,13 +1,13 @@
 //! Rust-specific rendering utilities for code generation.
 
-use baobao_codegen::{FileBuilder, ImportCollector};
+use baobao_codegen::{builder::FileBuilder, generation::ImportCollector};
 
 /// Render imports as Rust `use` statements.
 ///
 /// # Example
 ///
 /// ```
-/// use baobao_codegen::ImportCollector;
+/// use baobao_codegen::generation::ImportCollector;
 /// use baobao_codegen_rust::render_imports;
 ///
 /// let mut imports = ImportCollector::new();

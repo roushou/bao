@@ -1,6 +1,6 @@
 //! TypeScript type mapper implementation.
 
-use baobao_codegen::TypeMapper;
+use baobao_codegen::language::TypeMapper;
 use baobao_core::{ArgType, ContextFieldType, DatabaseType};
 
 /// TypeScript type mapper implementation.

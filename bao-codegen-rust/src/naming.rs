@@ -1,6 +1,6 @@
 //! Rust-specific naming conventions.
 
-use baobao_codegen::NamingConvention;
+use baobao_codegen::language::NamingConvention;
 use baobao_core::{to_pascal_case, to_snake_case};
 
 fn escape_rust_reserved(name: &str) -> String {

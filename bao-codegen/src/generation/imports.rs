@@ -11,7 +11,7 @@ use indexmap::IndexMap;
 /// # Example
 ///
 /// ```
-/// use baobao_codegen::ImportCollector;
+/// use baobao_codegen::generation::ImportCollector;
 ///
 /// let mut imports = ImportCollector::new();
 /// imports.add("std::collections", "HashMap");
@@ -20,7 +20,7 @@ use indexmap::IndexMap;
 ///
 /// // Render for Rust
 /// for (module, symbols) in imports.iter() {
-///     let symbols: Vec<_> = symbols.iter().map(|s| s.as_str()).collect();
+///     let symbols: Vec<&str> = symbols.iter().map(|s| s.as_str()).collect();
 ///     println!("use {}::{{{}}};", module, symbols.join(", "));
 /// }
 /// ```
@@ -124,7 +124,7 @@ impl DependencySpec {
 /// # Example
 ///
 /// ```
-/// use baobao_codegen::{DependencyCollector, DependencySpec};
+/// use baobao_codegen::generation::{DependencyCollector, DependencySpec};
 ///
 /// let mut deps = DependencyCollector::new();
 /// deps.add("serde", DependencySpec::new("1.0").with_features(["derive"]));

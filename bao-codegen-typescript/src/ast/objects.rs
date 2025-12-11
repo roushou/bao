@@ -1,6 +1,6 @@
 //! TypeScript/JavaScript object literal builder.
 
-use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
+use baobao_codegen::builder::{CodeBuilder, CodeFragment, Renderable};
 
 /// A property in a JavaScript object literal.
 #[derive(Debug, Clone)]

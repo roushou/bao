@@ -1,6 +1,6 @@
 //! TypeScript import builder.
 
-use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
+use baobao_codegen::builder::{CodeBuilder, CodeFragment, Renderable};
 
 /// A named import item that can be either a value or type import.
 #[derive(Debug, Clone)]

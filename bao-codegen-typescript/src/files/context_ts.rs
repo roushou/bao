@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::ContextFieldInfo;
+use baobao_codegen::schema::ContextFieldInfo;
 use baobao_core::{ContextFieldType, DatabaseType, FileRules, GeneratedFile, Overwrite};
 
 use crate::{

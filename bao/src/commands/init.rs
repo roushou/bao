@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::{BaoToml, LanguageCodegen};
+use baobao_codegen::{generation::BaoToml, language::LanguageCodegen};
 use baobao_codegen_rust::{
     Generator as RustGenerator,
     files::{CargoToml, GitIgnore as RustGitIgnore, MainRs},

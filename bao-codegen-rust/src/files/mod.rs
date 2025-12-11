@@ -11,7 +11,7 @@ mod handlers_mod;
 mod main_rs;
 
 pub use app_rs::AppRs;
-pub use baobao_codegen::BaoToml;
+pub use baobao_codegen::generation::BaoToml;
 pub use cargo_toml::CargoToml;
 pub use cli_rs::CliRs;
 pub use command_rs::CommandRs;
