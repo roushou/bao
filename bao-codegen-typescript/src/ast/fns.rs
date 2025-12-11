@@ -1,6 +1,6 @@
 //! TypeScript function builder.
 
-use baobao_codegen::CodeBuilder;
+use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
 
 /// A parameter in a TypeScript function.
 #[derive(Debug, Clone)]
@@ -129,6 +129,59 @@ impl Fn {
     /// Build the function as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::typescript()).build()
+    }
+
+    /// Format the function signature.
+    fn format_signature(&self) -> String {
+        let export = if self.exported { "export " } else { "" };
+        let async_kw = if self.is_async { "async " } else { "" };
+
+        let params_str = self
+            .params
+            .iter()
+            .map(|p| {
+                let optional = if p.optional { "?" } else { "" };
+                format!("{}{}: {}", p.name, optional, p.ty)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        match &self.return_type {
+            Some(ret) => format!(
+                "{}{}function {}({}): {} {{",
+                export, async_kw, self.name, params_str, ret
+            ),
+            None => format!(
+                "{}{}function {}({}) {{",
+                export, async_kw, self.name, params_str
+            ),
+        }
+    }
+}
+
+impl Renderable for Fn {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        let mut fragments = Vec::new();
+
+        // Doc comment
+        if let Some(doc) = &self.doc {
+            fragments.push(CodeFragment::JsDoc(doc.clone()));
+        }
+
+        // Function body
+        let body: Vec<CodeFragment> = self
+            .body
+            .iter()
+            .map(|line| CodeFragment::Line(line.clone()))
+            .collect();
+
+        fragments.push(CodeFragment::Block {
+            header: self.format_signature(),
+            body,
+            close: Some("}".to_string()),
+        });
+
+        fragments
     }
 }
 

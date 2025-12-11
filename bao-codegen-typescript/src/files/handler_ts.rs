@@ -2,10 +2,12 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::CodeBuilder;
 use baobao_core::{FileRules, GeneratedFile, Overwrite, to_kebab_case, to_pascal_case};
 
-use crate::ast::{Fn, Import, Param};
+use crate::{
+    ast::{Fn, Import, Param},
+    code_file::CodeFile,
+};
 
 /// A handler stub file for a command.
 pub struct HandlerTs {
@@ -43,22 +45,8 @@ impl HandlerTs {
             has_options,
         }
     }
-}
 
-impl GeneratedFile for HandlerTs {
-    fn path(&self, base: &Path) -> PathBuf {
-        let file_name = to_kebab_case(&self.command);
-        base.join(format!("{}.ts", file_name))
-    }
-
-    fn rules(&self) -> FileRules {
-        FileRules {
-            overwrite: Overwrite::IfMissing,
-            header: None,
-        }
-    }
-
-    fn render(&self) -> String {
+    fn build_import(&self) -> Import {
         let pascal = to_pascal_case(&self.command);
 
         // Build the command file path (kebab-case, joined by /)
@@ -73,9 +61,6 @@ impl GeneratedFile for HandlerTs {
         let depth = self.path_segments.len();
         let up_path = "../".repeat(depth);
 
-        let builder = CodeBuilder::typescript();
-
-        // Import the exported types from the command file
         let mut import = Import::new(format!("{}commands/{}.ts", up_path, command_path));
         if self.has_args {
             import = import.named_type(format!("{}Args", pascal));
@@ -83,10 +68,12 @@ impl GeneratedFile for HandlerTs {
         if self.has_options {
             import = import.named_type(format!("{}Options", pascal));
         }
-        let builder = import.render(builder);
+        import
+    }
 
-        // Handler function with imported types
-        let builder = builder.blank();
+    fn build_handler(&self) -> Fn {
+        let pascal = to_pascal_case(&self.command);
+
         let mut handler = Fn::new("run").async_();
 
         if self.has_args {
@@ -104,11 +91,30 @@ impl GeneratedFile for HandlerTs {
             (false, false) => "// no args or options",
         };
 
-        handler = handler
+        handler
             .returns("Promise<void>")
             .body_line(format!("// TODO: implement {} command", self.command))
-            .body_line(log_args);
+            .body_line(log_args)
+    }
+}
 
-        handler.render(builder).build()
+impl GeneratedFile for HandlerTs {
+    fn path(&self, base: &Path) -> PathBuf {
+        let file_name = to_kebab_case(&self.command);
+        base.join(format!("{}.ts", file_name))
+    }
+
+    fn rules(&self) -> FileRules {
+        FileRules {
+            overwrite: Overwrite::IfMissing,
+            header: None,
+        }
+    }
+
+    fn render(&self) -> String {
+        CodeFile::new()
+            .import(self.build_import())
+            .add(self.build_handler())
+            .render()
     }
 }

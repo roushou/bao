@@ -2,10 +2,12 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::CodeBuilder;
 use baobao_core::{FileRules, GeneratedFile, Overwrite};
 
-use crate::ast::Import;
+use crate::{
+    ast::Import,
+    code_file::{CodeFile, RawCode},
+};
 
 /// The index.ts entry point file.
 pub struct IndexTs;
@@ -23,11 +25,10 @@ impl GeneratedFile for IndexTs {
     }
 
     fn render(&self) -> String {
-        let builder = CodeBuilder::typescript().line("#!/usr/bin/env bun");
-
-        let builder = Import::new("./cli.ts").named("app").render(builder);
-        let builder = builder.blank().line("app.run();");
-
-        builder.build()
+        CodeFile::new()
+            .add(RawCode::new("#!/usr/bin/env bun"))
+            .import(Import::new("./cli.ts").named("app"))
+            .add(RawCode::new("app.run();"))
+            .render()
     }
 }

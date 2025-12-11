@@ -1,6 +1,6 @@
 //! TypeScript/JavaScript object literal builder.
 
-use baobao_codegen::CodeBuilder;
+use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
 
 /// A property in a JavaScript object literal.
 #[derive(Debug, Clone)]
@@ -224,6 +224,53 @@ impl JsObject {
     /// Build the object as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::typescript()).build()
+    }
+
+    /// Convert properties to code fragments.
+    fn properties_to_fragments(&self) -> Vec<CodeFragment> {
+        self.properties
+            .iter()
+            .map(|prop| match &prop.value {
+                PropertyValue::String(s) => CodeFragment::Line(format!("{}: \"{}\",", prop.key, s)),
+                PropertyValue::Raw(s) => CodeFragment::Line(format!("{}: {},", prop.key, s)),
+                PropertyValue::Object(obj) => {
+                    let mut body = obj.properties_to_fragments();
+                    // Remove trailing comma from nested object for cleaner output
+                    CodeFragment::Block {
+                        header: format!("{}: {{", prop.key),
+                        body,
+                        close: Some("},".to_string()),
+                    }
+                }
+                PropertyValue::ArrowFn(func) => {
+                    let async_kw = if func.is_async { "async " } else { "" };
+                    let body: Vec<CodeFragment> = func
+                        .body
+                        .iter()
+                        .map(|line| CodeFragment::Line(line.clone()))
+                        .collect();
+                    CodeFragment::Block {
+                        header: format!("{}: {}({}) => {{", prop.key, async_kw, func.params),
+                        body,
+                        close: Some("},".to_string()),
+                    }
+                }
+            })
+            .collect()
+    }
+}
+
+impl Renderable for JsObject {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        if self.properties.is_empty() {
+            return vec![CodeFragment::Raw("{}".to_string())];
+        }
+
+        vec![CodeFragment::Block {
+            header: "{".to_string(),
+            body: self.properties_to_fragments(),
+            close: Some("}".to_string()),
+        }]
     }
 }
 

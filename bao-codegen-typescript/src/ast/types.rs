@@ -1,6 +1,6 @@
 //! TypeScript type alias and union builders.
 
-use baobao_codegen::CodeBuilder;
+use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
 
 /// A field in a TypeScript object type.
 #[derive(Debug, Clone)]
@@ -115,6 +115,52 @@ impl ObjectType {
     pub fn build(&self) -> String {
         self.render(CodeBuilder::typescript()).build()
     }
+
+    /// Convert fields to code fragments.
+    fn fields_to_fragments(&self) -> Vec<CodeFragment> {
+        self.fields
+            .iter()
+            .flat_map(|field| {
+                let mut fragments = Vec::new();
+                if let Some(doc) = &field.doc {
+                    fragments.push(CodeFragment::JsDoc(doc.clone()));
+                }
+                let readonly = if field.readonly { "readonly " } else { "" };
+                let optional = if field.optional { "?" } else { "" };
+                fragments.push(CodeFragment::Line(format!(
+                    "{}{}{}: {};",
+                    readonly, field.name, optional, field.ty
+                )));
+                fragments
+            })
+            .collect()
+    }
+}
+
+impl Renderable for ObjectType {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        let export = if self.exported { "export " } else { "" };
+        let mut fragments = Vec::new();
+
+        if let Some(doc) = &self.doc {
+            fragments.push(CodeFragment::JsDoc(doc.clone()));
+        }
+
+        if self.fields.is_empty() {
+            fragments.push(CodeFragment::Line(format!(
+                "{}type {} = {{}};",
+                export, self.name
+            )));
+        } else {
+            fragments.push(CodeFragment::Block {
+                header: format!("{}type {} = {{", export, self.name),
+                body: self.fields_to_fragments(),
+                close: Some("};".to_string()),
+            });
+        }
+
+        fragments
+    }
 }
 
 /// Builder for TypeScript type aliases.
@@ -162,6 +208,24 @@ impl TypeAlias {
     /// Build the type alias as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::typescript()).build()
+    }
+}
+
+impl Renderable for TypeAlias {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        let export = if self.exported { "export " } else { "" };
+        let mut fragments = Vec::new();
+
+        if let Some(doc) = &self.doc {
+            fragments.push(CodeFragment::JsDoc(doc.clone()));
+        }
+
+        fragments.push(CodeFragment::Line(format!(
+            "{}type {} = {};",
+            export, self.name, self.ty
+        )));
+
+        fragments
     }
 }
 
@@ -216,6 +280,25 @@ impl Union {
     /// Build the union type as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::typescript()).build()
+    }
+}
+
+impl Renderable for Union {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        let export = if self.exported { "export " } else { "" };
+        let mut fragments = Vec::new();
+
+        if let Some(doc) = &self.doc {
+            fragments.push(CodeFragment::JsDoc(doc.clone()));
+        }
+
+        let variants_str = self.variants.join(" | ");
+        fragments.push(CodeFragment::Line(format!(
+            "{}type {} = {};",
+            export, self.name, variants_str
+        )));
+
+        fragments
     }
 }
 

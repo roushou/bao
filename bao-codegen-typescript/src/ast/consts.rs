@@ -1,6 +1,6 @@
 //! TypeScript const declaration builder.
 
-use baobao_codegen::CodeBuilder;
+use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
 
 /// Builder for TypeScript const declarations.
 #[derive(Debug, Clone)]
@@ -63,6 +63,36 @@ impl Const {
     /// Build the const declaration as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::typescript()).build()
+    }
+}
+
+impl Renderable for Const {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        let export = if self.exported { "export " } else { "" };
+        let type_annotation = match &self.ty {
+            Some(ty) => format!(": {}", ty),
+            None => String::new(),
+        };
+
+        // Handle multiline values
+        if self.value.contains('\n') {
+            let mut fragments = Vec::new();
+            let mut lines = self.value.lines();
+            let first = lines.next().unwrap_or("");
+            fragments.push(CodeFragment::Line(format!(
+                "{}const {}{} = {}",
+                export, self.name, type_annotation, first
+            )));
+            for line in lines {
+                fragments.push(CodeFragment::Line(line.to_string()));
+            }
+            fragments
+        } else {
+            vec![CodeFragment::Line(format!(
+                "{}const {}{} = {};",
+                export, self.name, type_annotation, self.value
+            ))]
+        }
     }
 }
 

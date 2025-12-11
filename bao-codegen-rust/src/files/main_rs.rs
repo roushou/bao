@@ -1,9 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::CodeBuilder;
 use baobao_core::{FileRules, GeneratedFile, Overwrite};
 
-use crate::Fn;
+use crate::{Fn, RawCode, RustFile};
 
 /// The main.rs entry point file (user-editable)
 pub struct MainRs {
@@ -48,13 +47,14 @@ impl GeneratedFile for MainRs {
     }
 
     fn render(&self) -> String {
-        let builder = CodeBuilder::rust()
-            .line("mod app;")
-            .line("mod context;")
-            .line("mod generated;")
-            .line("mod handlers;")
-            .blank();
-
-        self.build_main_fn().render(builder).build()
+        RustFile::new()
+            .add(RawCode::lines([
+                "mod app;",
+                "mod context;",
+                "mod generated;",
+                "mod handlers;",
+            ]))
+            .add(self.build_main_fn())
+            .render()
     }
 }

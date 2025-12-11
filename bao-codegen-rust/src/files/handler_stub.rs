@@ -1,9 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::FileBuilder;
 use baobao_core::{FileRules, GeneratedFile, Overwrite, to_pascal_case, to_snake_case};
 
-use crate::{Fn, Param, RustFileBuilder};
+use crate::{Fn, Param, RustFile, Use};
 
 /// A handler stub file for a command
 pub struct HandlerStub {
@@ -53,10 +52,10 @@ impl GeneratedFile for HandlerStub {
     }
 
     fn render(&self) -> String {
-        FileBuilder::rust()
-            .add_import("crate::context", "Context")
-            .add_module(&self.args_import)
-            .with_code(|c| self.build_run_fn().render(c))
-            .render_rust()
+        RustFile::new()
+            .use_stmt(Use::new("crate::context").symbol("Context"))
+            .use_stmt(Use::new(&self.args_import))
+            .add(self.build_run_fn())
+            .render()
     }
 }

@@ -310,20 +310,20 @@ impl<'a> Generator<'a> {
 
     /// Generate a parent command file that only routes to subcommands.
     fn generate_parent_command_file(&self, name: &str, command: &Command) -> String {
+        use crate::code_file::{CodeFile, RawCode};
+
         let camel_name = to_camel_case(name);
         let kebab_name = to_kebab_case(name);
 
-        let mut builder = CodeBuilder::typescript();
-
-        // Imports
-        builder = Import::new("boune").named("defineCommand").render(builder);
-
+        // Build imports
+        let mut imports = vec![Import::new("boune").named("defineCommand")];
         for subcommand_name in command.commands.keys() {
             let sub_camel = to_camel_case(subcommand_name);
             let sub_kebab = to_kebab_case(subcommand_name);
-            builder = Import::new(format!("./{}/{}.ts", kebab_name, sub_kebab))
-                .named(format!("{}Command", sub_camel))
-                .render(builder);
+            imports.push(
+                Import::new(format!("./{}/{}.ts", kebab_name, sub_kebab))
+                    .named(format!("{}Command", sub_camel)),
+            );
         }
 
         // Build subcommands object
@@ -341,14 +341,21 @@ impl<'a> Generator<'a> {
             .string("description", &command.description)
             .object("subcommands", subcommands);
 
-        builder = builder.blank().raw(&format!(
-            "export const {}Command = defineCommand(",
-            camel_name
-        ));
-        builder = schema.render(builder);
-        builder = builder.raw(");");
+        // Build the command definition string
+        let mut builder = CodeBuilder::typescript();
+        builder
+            .push_raw(&format!(
+                "export const {}Command = defineCommand(",
+                camel_name
+            ))
+            .emit(&schema)
+            .push_raw(");");
+        let command_def = builder.build();
 
-        builder.build()
+        CodeFile::new()
+            .imports(imports)
+            .add(RawCode::new(command_def))
+            .render()
     }
 
     /// Generate a leaf command file that has an action handler.
@@ -359,6 +366,8 @@ impl<'a> Generator<'a> {
         path_segments: &[String],
     ) -> String {
         use baobao_core::to_pascal_case;
+
+        use crate::code_file::{CodeFile, RawCode};
 
         let camel_name = to_camel_case(name);
         let pascal_name = to_pascal_case(name);
@@ -374,9 +383,7 @@ impl<'a> Generator<'a> {
         let depth = path_segments.len();
         let up_path = "../".repeat(depth);
 
-        let mut builder = CodeBuilder::typescript();
-
-        // Imports
+        // Build imports
         let mut boune_import = Import::new("boune").named("defineCommand");
         if !command.args.is_empty() {
             boune_import = boune_import.named("argument").named_type("InferArgs");
@@ -384,13 +391,16 @@ impl<'a> Generator<'a> {
         if !command.flags.is_empty() {
             boune_import = boune_import.named("option").named_type("InferOptions");
         }
-        builder = boune_import.render(builder);
 
-        builder = Import::new(format!("{}handlers/{}.ts", up_path, handler_path))
-            .named("run")
-            .render(builder);
+        let imports = vec![
+            boune_import,
+            Import::new(format!("{}handlers/{}.ts", up_path, handler_path)).named("run"),
+        ];
 
-        // Extract arguments schema as const
+        // Build body parts
+        let mut body_parts: Vec<String> = Vec::new();
+
+        // Arguments schema as const
         if !command.args.is_empty() {
             let arguments = command
                 .args
@@ -401,13 +411,15 @@ impl<'a> Generator<'a> {
                     obj.raw(&camel, self.build_argument_chain(boune_type, arg))
                 });
 
-            builder = builder.blank();
-            builder = builder.raw("const args = ");
-            builder = arguments.render(builder);
-            builder = builder.line(" as const;");
+            let mut builder = CodeBuilder::typescript();
+            builder
+                .push_raw("const args = ")
+                .emit(&arguments)
+                .push_line(" as const;");
+            body_parts.push(builder.build().trim_end().to_string());
         }
 
-        // Extract options schema as const
+        // Options schema as const
         if !command.flags.is_empty() {
             let options = command
                 .flags
@@ -418,41 +430,44 @@ impl<'a> Generator<'a> {
                     obj.raw(&camel, self.build_option_chain(boune_type, flag))
                 });
 
-            builder = builder.blank();
-            builder = builder.raw("const options = ");
-            builder = options.render(builder);
-            builder = builder.line(" as const;");
+            let mut builder = CodeBuilder::typescript();
+            builder
+                .push_raw("const options = ")
+                .emit(&options)
+                .push_line(" as const;");
+            body_parts.push(builder.build().trim_end().to_string());
         }
 
         // Command definition
-        builder = builder.blank();
-        builder = self.render_command_definition(builder, &camel_name, name, command);
+        let command_def = self.build_command_definition(&camel_name, name, command);
+        body_parts.push(command_def);
 
         // Export inferred types
-        builder = builder.blank();
+        let mut type_exports = Vec::new();
         if !command.args.is_empty() {
-            builder = builder.line(&format!(
+            type_exports.push(format!(
                 "export type {}Args = InferArgs<typeof args>;",
                 pascal_name
             ));
         }
         if !command.flags.is_empty() {
-            builder = builder.line(&format!(
+            type_exports.push(format!(
                 "export type {}Options = InferOptions<typeof options>;",
                 pascal_name
             ));
         }
+        if !type_exports.is_empty() {
+            body_parts.push(type_exports.join("\n"));
+        }
 
-        builder.build()
+        let mut file = CodeFile::new().imports(imports);
+        for part in body_parts {
+            file = file.add(RawCode::new(part));
+        }
+        file.render()
     }
 
-    fn render_command_definition(
-        &self,
-        builder: CodeBuilder,
-        camel_name: &str,
-        name: &str,
-        command: &Command,
-    ) -> CodeBuilder {
+    fn build_command_definition(&self, camel_name: &str, name: &str, command: &Command) -> String {
         // Build action handler body
         let action = self.build_action_handler(command);
 
@@ -464,12 +479,15 @@ impl<'a> Generator<'a> {
             .raw_if(!command.flags.is_empty(), "options", "options")
             .arrow_fn("action", action);
 
-        let builder = builder.raw(&format!(
-            "export const {}Command = defineCommand(",
-            camel_name
-        ));
-        let builder = schema.render(builder);
-        builder.line(");")
+        let mut builder = CodeBuilder::typescript();
+        builder
+            .push_raw(&format!(
+                "export const {}Command = defineCommand(",
+                camel_name
+            ))
+            .emit(&schema)
+            .push_line(");");
+        builder.build().trim_end().to_string()
     }
 
     fn build_argument_chain(&self, boune_type: &str, arg: &baobao_manifest::Arg) -> String {

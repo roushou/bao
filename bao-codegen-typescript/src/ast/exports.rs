@@ -1,6 +1,6 @@
 //! TypeScript export builder.
 
-use baobao_codegen::CodeBuilder;
+use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
 
 /// Builder for TypeScript export statements.
 #[derive(Debug, Clone)]
@@ -85,6 +85,42 @@ impl Export {
     /// Build the export as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::typescript()).build()
+    }
+
+    /// Format the export statement as a string.
+    fn format_export(&self) -> Option<String> {
+        let type_kw = if self.type_only { "type " } else { "" };
+
+        match (&self.from, &self.default, self.named.is_empty()) {
+            // Re-export all: export * from "module"
+            (Some(from), None, true) => Some(format!("export * from \"{}\";", from)),
+            // Re-export named: export { a, b } from "module"
+            (Some(from), None, false) => Some(format!(
+                "export {}{{ {} }} from \"{}\";",
+                type_kw,
+                self.named.join(", "),
+                from
+            )),
+            // Export default: export default foo
+            (None, Some(def), true) => Some(format!("export default {};", def)),
+            // Export named: export { a, b }
+            (None, None, false) => Some(format!(
+                "export {}{{ {} }};",
+                type_kw,
+                self.named.join(", ")
+            )),
+            // Invalid combinations
+            _ => None,
+        }
+    }
+}
+
+impl Renderable for Export {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        match self.format_export() {
+            Some(s) => vec![CodeFragment::Line(s)],
+            None => vec![],
+        }
     }
 }
 

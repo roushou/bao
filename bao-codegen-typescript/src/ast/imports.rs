@@ -1,6 +1,6 @@
 //! TypeScript import builder.
 
-use baobao_codegen::CodeBuilder;
+use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
 
 /// A named import item that can be either a value or type import.
 #[derive(Debug, Clone)]
@@ -104,6 +104,39 @@ impl Import {
     /// Build the import as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::typescript()).build()
+    }
+
+    /// Format the import statement as a string.
+    fn format_import(&self) -> String {
+        let type_kw = if self.type_only { "type " } else { "" };
+        let named_str = self.format_named_imports();
+
+        match (&self.default, self.named.is_empty()) {
+            (Some(def), true) => {
+                format!("import {}{} from \"{}\";", type_kw, def, self.from)
+            }
+            (Some(def), false) => {
+                format!(
+                    "import {}{}, {{ {} }} from \"{}\";",
+                    type_kw, def, named_str, self.from
+                )
+            }
+            (None, false) => {
+                format!(
+                    "import {}{{ {} }} from \"{}\";",
+                    type_kw, named_str, self.from
+                )
+            }
+            (None, true) => {
+                format!("import \"{}\";", self.from)
+            }
+        }
+    }
+}
+
+impl Renderable for Import {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        vec![CodeFragment::Line(self.format_import())]
     }
 }
 

@@ -1,6 +1,6 @@
 //! Rust enum builder.
 
-use baobao_codegen::CodeBuilder;
+use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
 
 /// A variant in a Rust enum.
 #[derive(Debug, Clone)]
@@ -129,6 +129,65 @@ impl Enum {
     /// Build the enum as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::rust()).build()
+    }
+
+    /// Convert variants to code fragments.
+    fn variants_to_fragments(&self) -> Vec<CodeFragment> {
+        self.variants
+            .iter()
+            .flat_map(|variant| {
+                let mut fragments = Vec::new();
+
+                if let Some(doc) = &variant.doc {
+                    fragments.push(CodeFragment::RustDoc(doc.clone()));
+                }
+
+                let variant_str = match &variant.data {
+                    Some(data) => format!("{}({}),", variant.name, data),
+                    None => format!("{},", variant.name),
+                };
+                fragments.push(CodeFragment::Line(variant_str));
+
+                fragments
+            })
+            .collect()
+    }
+}
+
+impl Renderable for Enum {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        let vis = if self.is_public { "pub " } else { "" };
+        let mut fragments = Vec::new();
+
+        if let Some(doc) = &self.doc {
+            fragments.push(CodeFragment::RustDoc(doc.clone()));
+        }
+
+        if !self.derives.is_empty() {
+            fragments.push(CodeFragment::Line(format!(
+                "#[derive({})]",
+                self.derives.join(", ")
+            )));
+        }
+
+        for attr in &self.attrs {
+            fragments.push(CodeFragment::Line(format!("#[{}]", attr)));
+        }
+
+        if self.variants.is_empty() {
+            fragments.push(CodeFragment::Line(format!(
+                "{}enum {} {{}}",
+                vis, self.name
+            )));
+        } else {
+            fragments.push(CodeFragment::Block {
+                header: format!("{}enum {} {{", vis, self.name),
+                body: self.variants_to_fragments(),
+                close: Some("}".to_string()),
+            });
+        }
+
+        fragments
     }
 }
 

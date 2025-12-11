@@ -1,6 +1,6 @@
 //! Rust struct builder.
 
-use baobao_codegen::CodeBuilder;
+use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
 
 /// A field in a Rust struct.
 #[derive(Debug, Clone)]
@@ -140,6 +140,69 @@ impl Struct {
     /// Build the struct as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::rust()).build()
+    }
+
+    /// Convert fields to code fragments.
+    fn fields_to_fragments(&self) -> Vec<CodeFragment> {
+        self.fields
+            .iter()
+            .flat_map(|field| {
+                let mut fragments = Vec::new();
+                let vis = if field.is_public { "pub " } else { "" };
+
+                if let Some(doc) = &field.doc {
+                    fragments.push(CodeFragment::RustDoc(doc.clone()));
+                }
+
+                for attr in &field.attrs {
+                    fragments.push(CodeFragment::Line(format!("#[{}]", attr)));
+                }
+
+                fragments.push(CodeFragment::Line(format!(
+                    "{}{}: {},",
+                    vis, field.name, field.ty
+                )));
+
+                fragments
+            })
+            .collect()
+    }
+}
+
+impl Renderable for Struct {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        let vis = if self.is_public { "pub " } else { "" };
+        let mut fragments = Vec::new();
+
+        if let Some(doc) = &self.doc {
+            fragments.push(CodeFragment::RustDoc(doc.clone()));
+        }
+
+        if !self.derives.is_empty() {
+            fragments.push(CodeFragment::Line(format!(
+                "#[derive({})]",
+                self.derives.join(", ")
+            )));
+        }
+
+        for attr in &self.attrs {
+            fragments.push(CodeFragment::Line(format!("#[{}]", attr)));
+        }
+
+        if self.fields.is_empty() {
+            fragments.push(CodeFragment::Line(format!(
+                "{}struct {} {{}}",
+                vis, self.name
+            )));
+        } else {
+            fragments.push(CodeFragment::Block {
+                header: format!("{}struct {} {{", vis, self.name),
+                body: self.fields_to_fragments(),
+                close: Some("}".to_string()),
+            });
+        }
+
+        fragments
     }
 }
 

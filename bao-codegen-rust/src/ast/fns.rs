@@ -1,6 +1,6 @@
 //! Rust function builder.
 
-use baobao_codegen::CodeBuilder;
+use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
 
 /// A parameter in a Rust function.
 #[derive(Debug, Clone)]
@@ -91,6 +91,43 @@ impl Match {
     /// Build the match expression as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::rust()).build()
+    }
+
+    /// Convert arms to code fragments.
+    fn arms_to_fragments(&self) -> Vec<CodeFragment> {
+        self.arms
+            .iter()
+            .flat_map(|arm| {
+                if arm.body.is_empty() {
+                    vec![CodeFragment::Line(format!("{} => {{}},", arm.pattern))]
+                } else if arm.body.len() == 1 {
+                    vec![CodeFragment::Line(format!(
+                        "{} => {},",
+                        arm.pattern, arm.body[0]
+                    ))]
+                } else {
+                    vec![CodeFragment::Block {
+                        header: format!("{} => {{", arm.pattern),
+                        body: arm
+                            .body
+                            .iter()
+                            .map(|line| CodeFragment::Line(line.clone()))
+                            .collect(),
+                        close: Some("}".to_string()),
+                    }]
+                }
+            })
+            .collect()
+    }
+}
+
+impl Renderable for Match {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        vec![CodeFragment::Block {
+            header: format!("match {} {{", self.expr),
+            body: self.arms_to_fragments(),
+            close: Some("}".to_string()),
+        }]
     }
 }
 
@@ -220,6 +257,61 @@ impl Fn {
     /// Build the function as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::rust()).build()
+    }
+
+    /// Format the function signature.
+    fn format_signature(&self) -> String {
+        let vis = if self.is_public { "pub " } else { "" };
+        let async_kw = if self.is_async { "async " } else { "" };
+
+        let params_str = self
+            .params
+            .iter()
+            .map(|p| {
+                if p.ty.is_empty() {
+                    p.name.clone()
+                } else {
+                    format!("{}: {}", p.name, p.ty)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        match &self.return_type {
+            Some(ret) => format!(
+                "{}{}fn {}({}) -> {} {{",
+                vis, async_kw, self.name, params_str, ret
+            ),
+            None => format!("{}{}fn {}({}) {{", vis, async_kw, self.name, params_str),
+        }
+    }
+}
+
+impl Renderable for Fn {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        let mut fragments = Vec::new();
+
+        if let Some(doc) = &self.doc {
+            fragments.push(CodeFragment::RustDoc(doc.clone()));
+        }
+
+        for attr in &self.attrs {
+            fragments.push(CodeFragment::Line(format!("#[{}]", attr)));
+        }
+
+        let body: Vec<CodeFragment> = self
+            .body
+            .iter()
+            .map(|line| CodeFragment::Line(line.clone()))
+            .collect();
+
+        fragments.push(CodeFragment::Block {
+            header: self.format_signature(),
+            body,
+            close: Some("}".to_string()),
+        });
+
+        fragments
     }
 }
 

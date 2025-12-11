@@ -11,6 +11,7 @@ mod handlers;
 mod imports;
 mod indent;
 mod naming;
+mod renderable;
 mod traits;
 mod types;
 
@@ -26,6 +27,7 @@ pub use handlers::{HandlerPaths, OrphanHandler, find_orphan_commands};
 pub use imports::{DependencyCollector, DependencySpec, ImportCollector};
 pub use indent::Indent;
 pub use naming::NamingConvention;
+pub use renderable::{CodeFragment, Renderable};
 pub use traits::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile, TypeMapper};
 // Re-export types
 pub use types::{CommandInfo, ContextFieldInfo, PoolConfigInfo, SqliteConfigInfo};

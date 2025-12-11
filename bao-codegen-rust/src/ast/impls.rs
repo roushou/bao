@@ -1,6 +1,6 @@
 //! Rust impl block builder.
 
-use baobao_codegen::CodeBuilder;
+use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
 
 use super::Fn;
 
@@ -56,6 +56,40 @@ impl Impl {
     /// Build the impl block as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::rust()).build()
+    }
+
+    /// Format the impl header.
+    fn format_header(&self) -> String {
+        match &self.trait_name {
+            Some(trait_name) => format!("impl {} for {} {{", trait_name, self.type_name),
+            None => format!("impl {} {{", self.type_name),
+        }
+    }
+
+    /// Convert methods to code fragments.
+    fn methods_to_fragments(&self) -> Vec<CodeFragment> {
+        self.methods
+            .iter()
+            .enumerate()
+            .flat_map(|(i, method)| {
+                let mut fragments = Vec::new();
+                if i > 0 {
+                    fragments.push(CodeFragment::Blank);
+                }
+                fragments.extend(method.to_fragments());
+                fragments
+            })
+            .collect()
+    }
+}
+
+impl Renderable for Impl {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        vec![CodeFragment::Block {
+            header: self.format_header(),
+            body: self.methods_to_fragments(),
+            close: Some("}".to_string()),
+        }]
     }
 }
 

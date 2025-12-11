@@ -1,6 +1,6 @@
 //! TypeScript interface builder.
 
-use baobao_codegen::CodeBuilder;
+use baobao_codegen::{CodeBuilder, CodeFragment, Renderable};
 
 /// A field in a TypeScript interface.
 #[derive(Debug, Clone)]
@@ -101,6 +101,40 @@ impl Interface {
     /// Build the interface as a string.
     pub fn build(&self) -> String {
         self.render(CodeBuilder::typescript()).build()
+    }
+
+    /// Convert fields to code fragments.
+    fn fields_to_fragments(&self) -> Vec<CodeFragment> {
+        self.fields
+            .iter()
+            .map(|field| {
+                let readonly = if field.readonly { "readonly " } else { "" };
+                let optional = if field.optional { "?" } else { "" };
+                CodeFragment::Line(format!(
+                    "{}{}{}: {};",
+                    readonly, field.name, optional, field.ty
+                ))
+            })
+            .collect()
+    }
+}
+
+impl Renderable for Interface {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        let export = if self.exported { "export " } else { "" };
+
+        if self.fields.is_empty() {
+            vec![CodeFragment::Line(format!(
+                "{}interface {} {{}}",
+                export, self.name
+            ))]
+        } else {
+            vec![CodeFragment::Block {
+                header: format!("{}interface {} {{", export, self.name),
+                body: self.fields_to_fragments(),
+                close: Some("}".to_string()),
+            }]
+        }
     }
 }
 

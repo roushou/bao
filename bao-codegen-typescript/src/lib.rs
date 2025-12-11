@@ -36,6 +36,7 @@
 //! - `package.json`, `tsconfig.json`, `bao.toml`, `.gitignore`
 
 mod ast;
+mod code_file;
 mod generator;
 mod naming;
 mod type_mapper;
@@ -43,6 +44,7 @@ mod type_mapper;
 pub mod files;
 
 pub use baobao_codegen::{GenerateResult, LanguageCodegen, PreviewFile};
+pub use code_file::{CodeFile, RawCode};
 pub use generator::Generator;
 pub use naming::TS_NAMING;
 pub use type_mapper::TypeScriptTypeMapper;
