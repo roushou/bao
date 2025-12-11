@@ -2,12 +2,19 @@
 
 use baobao_codegen::CodeBuilder;
 
+/// A named import item that can be either a value or type import.
+#[derive(Debug, Clone)]
+struct NamedImport {
+    name: String,
+    is_type: bool,
+}
+
 /// Builder for TypeScript import statements.
 #[derive(Debug, Clone)]
 pub struct Import {
     from: String,
     default: Option<String>,
-    named: Vec<String>,
+    named: Vec<NamedImport>,
     type_only: bool,
 }
 
@@ -29,7 +36,19 @@ impl Import {
 
     /// Import a named export.
     pub fn named(mut self, name: impl Into<String>) -> Self {
-        self.named.push(name.into());
+        self.named.push(NamedImport {
+            name: name.into(),
+            is_type: false,
+        });
+        self
+    }
+
+    /// Import a named type export (inline `type` keyword).
+    pub fn named_type(mut self, name: impl Into<String>) -> Self {
+        self.named.push(NamedImport {
+            name: name.into(),
+            is_type: true,
+        });
         self
     }
 
@@ -39,9 +58,24 @@ impl Import {
         self
     }
 
+    fn format_named_imports(&self) -> String {
+        self.named
+            .iter()
+            .map(|n| {
+                if n.is_type {
+                    format!("type {}", n.name)
+                } else {
+                    n.name.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     /// Render the import to a CodeBuilder.
     pub fn render(&self, builder: CodeBuilder) -> CodeBuilder {
         let type_kw = if self.type_only { "type " } else { "" };
+        let named_str = self.format_named_imports();
 
         let import_str = match (&self.default, self.named.is_empty()) {
             (Some(def), true) => {
@@ -50,18 +84,13 @@ impl Import {
             (Some(def), false) => {
                 format!(
                     "import {}{}, {{ {} }} from \"{}\";",
-                    type_kw,
-                    def,
-                    self.named.join(", "),
-                    self.from
+                    type_kw, def, named_str, self.from
                 )
             }
             (None, false) => {
                 format!(
                     "import {}{{ {} }} from \"{}\";",
-                    type_kw,
-                    self.named.join(", "),
-                    self.from
+                    type_kw, named_str, self.from
                 )
             }
             (None, true) => {

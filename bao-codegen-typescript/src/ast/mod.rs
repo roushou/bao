@@ -11,11 +11,15 @@ mod consts;
 mod exports;
 mod fns;
 mod imports;
+mod interface;
+mod objects;
 mod types;
 
-pub(crate) use chain::MethodChain;
+pub use chain::MethodChain;
 pub(crate) use consts::Const;
 pub(crate) use exports::Export;
 pub(crate) use fns::{Fn, Param};
 pub(crate) use imports::Import;
+pub(crate) use interface::Interface;
+pub(crate) use objects::{ArrowFn, JsObject};
 pub(crate) use types::{Field, ObjectType, TypeAlias, Union};

@@ -3,18 +3,18 @@
 use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
-    CommandInfo, CommandTree, ContextFieldInfo, GenerateResult, HandlerPaths, LanguageCodegen,
-    PoolConfigInfo, PreviewFile, SqliteConfigInfo,
+    CodeBuilder, CommandInfo, CommandTree, ContextFieldInfo, GenerateResult, HandlerPaths,
+    LanguageCodegen, PoolConfigInfo, PreviewFile, SqliteConfigInfo,
 };
-use baobao_core::{
-    ContextFieldType, DatabaseType, GeneratedFile, to_camel_case, to_kebab_case, to_pascal_case,
-    toml_value_to_string,
-};
-use baobao_manifest::{ArgType, Command, Language, Manifest};
+use baobao_core::{ContextFieldType, DatabaseType, GeneratedFile, to_camel_case, to_kebab_case};
+use baobao_manifest::{Command, Language, Manifest};
 use eyre::Result;
 
-use crate::files::{
-    BaoToml, CliTs, CommandTs, ContextTs, GitIgnore, HandlerTs, IndexTs, PackageJson, TsConfig,
+use crate::{
+    ast::{ArrowFn, Import, JsObject},
+    files::{
+        BaoToml, CliTs, CommandTs, ContextTs, GitIgnore, HandlerTs, IndexTs, PackageJson, TsConfig,
+    },
 };
 
 /// TypeScript code generator that produces boune-based CLI code for Bun.
@@ -313,42 +313,42 @@ impl<'a> Generator<'a> {
         let camel_name = to_camel_case(name);
         let kebab_name = to_kebab_case(name);
 
-        let mut code = String::new();
+        let mut builder = CodeBuilder::typescript();
 
         // Imports
-        code.push_str("import { command } from \"boune\";\n");
+        builder = Import::new("boune").named("defineCommand").render(builder);
 
-        // Import subcommands from the subdirectory
         for subcommand_name in command.commands.keys() {
             let sub_camel = to_camel_case(subcommand_name);
             let sub_kebab = to_kebab_case(subcommand_name);
-            code.push_str(&format!(
-                "import {{ {}Command }} from \"./{}/{}.ts\";\n",
-                sub_camel, kebab_name, sub_kebab
-            ));
+            builder = Import::new(format!("./{}/{}.ts", kebab_name, sub_kebab))
+                .named(format!("{}Command", sub_camel))
+                .render(builder);
         }
-        code.push('\n');
 
-        // Command definition with subcommands
-        code.push_str(&format!(
-            "export const {}Command = command(\"{}\")\n",
-            camel_name, name
+        // Build subcommands object
+        let subcommands = command
+            .commands
+            .keys()
+            .fold(JsObject::new(), |obj, sub_name| {
+                let sub_camel = to_camel_case(sub_name);
+                obj.raw(&sub_camel, format!("{}Command", sub_camel))
+            });
+
+        // Build command schema
+        let schema = JsObject::new()
+            .string("name", name)
+            .string("description", &command.description)
+            .object("subcommands", subcommands);
+
+        builder = builder.blank().raw(&format!(
+            "export const {}Command = defineCommand(",
+            camel_name
         ));
-        code.push_str(&format!("  .description(\"{}\")\n", command.description));
+        builder = schema.render(builder);
+        builder = builder.raw(");");
 
-        // Add subcommands
-        for subcommand_name in command.commands.keys() {
-            let sub_camel = to_camel_case(subcommand_name);
-            code.push_str(&format!("  .subcommand({}Command)\n", sub_camel));
-        }
-
-        // Remove trailing newline from last .subcommand() line
-        if code.ends_with('\n') {
-            code.pop();
-        }
-        code.push_str(";\n");
-
-        code
+        builder.build()
     }
 
     /// Generate a leaf command file that has an action handler.
@@ -358,8 +358,10 @@ impl<'a> Generator<'a> {
         command: &Command,
         path_segments: &[String],
     ) -> String {
-        let pascal_name = to_pascal_case(name);
+        use baobao_core::to_pascal_case;
+
         let camel_name = to_camel_case(name);
+        let pascal_name = to_pascal_case(name);
 
         // Build the handler path (kebab-case, joined by /)
         let handler_path = path_segments
@@ -368,176 +370,185 @@ impl<'a> Generator<'a> {
             .collect::<Vec<_>>()
             .join("/");
 
-        // Calculate relative path to handlers from this command's location
-        // For a command at commands/data/builders/leaderboard.ts,
-        // handlers are at handlers/data/builders/leaderboard.ts
-        // So we need "../../../handlers/data/builders/leaderboard.ts"
+        // Calculate relative path from command location
         let depth = path_segments.len();
         let up_path = "../".repeat(depth);
 
-        let mut code = String::new();
+        let mut builder = CodeBuilder::typescript();
 
         // Imports
-        code.push_str("import { command } from \"boune\";\n");
-        code.push_str(&format!(
-            "import {{ run }} from \"{}handlers/{}.ts\";\n",
-            up_path, handler_path
-        ));
-        code.push_str(&format!(
-            "import type {{ Context }} from \"{}context.ts\";\n\n",
-            up_path
-        ));
+        let mut boune_import = Import::new("boune").named("defineCommand");
+        if !command.args.is_empty() {
+            boune_import = boune_import.named("argument").named_type("InferArgs");
+        }
+        if !command.flags.is_empty() {
+            boune_import = boune_import.named("option").named_type("InferOptions");
+        }
+        builder = boune_import.render(builder);
 
-        // Args interface
-        code.push_str(&self.generate_args_interface(&pascal_name, command));
-        code.push('\n');
+        builder = Import::new(format!("{}handlers/{}.ts", up_path, handler_path))
+            .named("run")
+            .render(builder);
+
+        // Extract arguments schema as const
+        if !command.args.is_empty() {
+            let arguments = command
+                .args
+                .iter()
+                .fold(JsObject::new(), |obj, (arg_name, arg)| {
+                    let camel = to_camel_case(arg_name);
+                    let boune_type = self.map_boune_type(&arg.arg_type);
+                    obj.raw(&camel, self.build_argument_chain(boune_type, arg))
+                });
+
+            builder = builder.blank();
+            builder = builder.raw("const args = ");
+            builder = arguments.render(builder);
+            builder = builder.line(" as const;");
+        }
+
+        // Extract options schema as const
+        if !command.flags.is_empty() {
+            let options = command
+                .flags
+                .iter()
+                .fold(JsObject::new(), |obj, (flag_name, flag)| {
+                    let camel = to_camel_case(flag_name);
+                    let boune_type = self.map_boune_type(&flag.flag_type);
+                    obj.raw(&camel, self.build_option_chain(boune_type, flag))
+                });
+
+            builder = builder.blank();
+            builder = builder.raw("const options = ");
+            builder = options.render(builder);
+            builder = builder.line(" as const;");
+        }
 
         // Command definition
-        code.push_str(&self.generate_command_definition(&pascal_name, &camel_name, name, command));
+        builder = builder.blank();
+        builder = self.render_command_definition(builder, &camel_name, name, command);
 
-        code
-    }
-
-    fn generate_args_interface(&self, pascal_name: &str, command: &Command) -> String {
-        let mut code = format!("export interface {}Args {{\n", pascal_name);
-
-        // Positional args
-        for (arg_name, arg) in &command.args {
-            let ts_type = self.map_arg_type(&arg.arg_type);
-            let camel_name = to_camel_case(arg_name);
-            if arg.required && arg.default.is_none() {
-                code.push_str(&format!("  {}: {};\n", camel_name, ts_type));
-            } else {
-                code.push_str(&format!("  {}?: {};\n", camel_name, ts_type));
-            }
+        // Export inferred types
+        builder = builder.blank();
+        if !command.args.is_empty() {
+            builder = builder.line(&format!(
+                "export type {}Args = InferArgs<typeof args>;",
+                pascal_name
+            ));
         }
-
-        // Flags
-        for (flag_name, flag) in &command.flags {
-            let ts_type = self.map_arg_type(&flag.flag_type);
-            let camel_name = to_camel_case(flag_name);
-            // Bool flags always have a value (default false), and flags with defaults are required
-            if flag.flag_type == ArgType::Bool || flag.default.is_some() {
-                code.push_str(&format!("  {}: {};\n", camel_name, ts_type));
-            } else {
-                code.push_str(&format!("  {}?: {};\n", camel_name, ts_type));
-            }
-        }
-
-        code.push_str("}\n");
-        code
-    }
-
-    fn generate_command_definition(
-        &self,
-        pascal_name: &str,
-        camel_name: &str,
-        name: &str,
-        command: &Command,
-    ) -> String {
-        let mut code = format!(
-            "export const {}Command = command(\"{}\")\n",
-            camel_name, name
-        );
-        code.push_str(&format!("  .description(\"{}\")\n", command.description));
-
-        // Positional args
-        for (arg_name, arg) in &command.args {
-            let bracket = if arg.required && arg.default.is_none() {
-                format!("<{}>", arg_name)
-            } else {
-                format!("[{}]", arg_name)
-            };
-            let desc = arg.description.as_deref().unwrap_or("");
-
-            if arg.arg_type != ArgType::String {
-                code.push_str(&format!(
-                    "  .argument(\"{}\", \"{}\", {{ type: \"{}\" }})\n",
-                    bracket,
-                    desc,
-                    self.map_boune_type(&arg.arg_type)
-                ));
-            } else {
-                code.push_str(&format!("  .argument(\"{}\", \"{}\")\n", bracket, desc));
-            }
-        }
-
-        // Flags
-        for (flag_name, flag) in &command.flags {
-            let short_part = flag
-                .short_char()
-                .map(|c| format!("-{}, ", c))
-                .unwrap_or_default();
-            let desc = flag.description.as_deref().unwrap_or("");
-
-            if flag.flag_type == ArgType::Bool {
-                code.push_str(&format!(
-                    "  .option(\"{}--{}\", \"{}\")\n",
-                    short_part, flag_name, desc
-                ));
-            } else {
-                let default_part = flag.default.as_ref().map_or(String::new(), |d| {
-                    format!(", default: {}", toml_value_to_string(d))
-                });
-                code.push_str(&format!(
-                    "  .option(\"{}--{} <{}>\", \"{}\", {{ type: \"{}\"{} }})\n",
-                    short_part,
-                    flag_name,
-                    flag_name,
-                    desc,
-                    self.map_boune_type(&flag.flag_type),
-                    default_part
-                ));
-            }
-        }
-
-        // Action handler
-        code.push_str("  .action(async ({ args, options }) => {\n");
-        code.push_str(&format!("    const typedArgs: {}Args = {{\n", pascal_name));
-
-        // Map args
-        for arg_name in command.args.keys() {
-            let camel = to_camel_case(arg_name);
-            code.push_str(&format!(
-                "      {}: args.{} as {}Args[\"{}\"],\n",
-                camel, arg_name, pascal_name, camel
+        if !command.flags.is_empty() {
+            builder = builder.line(&format!(
+                "export type {}Options = InferOptions<typeof options>;",
+                pascal_name
             ));
         }
 
-        // Map flags
-        for (flag_name, flag) in &command.flags {
-            let camel = to_camel_case(flag_name);
-            if flag.flag_type == ArgType::Bool {
-                code.push_str(&format!(
-                    "      {}: (options.{} as boolean) ?? false,\n",
-                    camel, flag_name
-                ));
-            } else {
-                code.push_str(&format!(
-                    "      {}: options.{} as {}Args[\"{}\"],\n",
-                    camel, flag_name, pascal_name, camel
-                ));
-            }
-        }
-
-        code.push_str("    };\n");
-        code.push_str("    await run({} as Context, typedArgs);\n");
-        code.push_str("  });\n");
-
-        code
+        builder.build()
     }
 
-    fn map_arg_type(&self, arg_type: &ArgType) -> &'static str {
-        match arg_type {
-            ArgType::String => "string",
-            ArgType::Int => "number",
-            ArgType::Float => "number",
-            ArgType::Bool => "boolean",
-            ArgType::Path => "string",
+    fn render_command_definition(
+        &self,
+        builder: CodeBuilder,
+        camel_name: &str,
+        name: &str,
+        command: &Command,
+    ) -> CodeBuilder {
+        // Build action handler body
+        let action = self.build_action_handler(command);
+
+        // Build command schema - reference extracted consts
+        let schema = JsObject::new()
+            .string("name", name)
+            .string("description", &command.description)
+            .raw_if(!command.args.is_empty(), "arguments", "args")
+            .raw_if(!command.flags.is_empty(), "options", "options")
+            .arrow_fn("action", action);
+
+        let builder = builder.raw(&format!(
+            "export const {}Command = defineCommand(",
+            camel_name
+        ));
+        let builder = schema.render(builder);
+        builder.line(");")
+    }
+
+    fn build_argument_chain(&self, boune_type: &str, arg: &baobao_manifest::Arg) -> String {
+        use crate::ast::MethodChain;
+
+        let mut chain = MethodChain::new(format!("argument.{}", boune_type));
+
+        if arg.required && arg.default.is_none() {
+            chain = chain.call_empty("required");
+        }
+
+        if let Some(default) = &arg.default {
+            chain = chain.call("default", Self::toml_to_ts_literal(default));
+        }
+
+        if let Some(desc) = &arg.description {
+            chain = chain.call("describe", format!("\"{}\"", desc));
+        }
+
+        chain.build_inline()
+    }
+
+    fn build_option_chain(&self, boune_type: &str, flag: &baobao_manifest::Flag) -> String {
+        use crate::ast::MethodChain;
+
+        let mut chain = MethodChain::new(format!("option.{}", boune_type));
+
+        if let Some(short) = flag.short_char() {
+            chain = chain.call("short", format!("\"{}\"", short));
+        }
+
+        if let Some(default) = &flag.default {
+            chain = chain.call("default", Self::toml_to_ts_literal(default));
+        }
+
+        if let Some(desc) = &flag.description {
+            chain = chain.call("describe", format!("\"{}\"", desc));
+        }
+
+        chain.build_inline()
+    }
+
+    /// Convert a TOML value to a TypeScript literal string.
+    /// Strings are quoted, numbers and booleans are raw.
+    fn toml_to_ts_literal(value: &toml::Value) -> String {
+        match value {
+            toml::Value::String(s) => format!("\"{}\"", s),
+            toml::Value::Integer(i) => i.to_string(),
+            toml::Value::Float(f) => f.to_string(),
+            toml::Value::Boolean(b) => b.to_string(),
+            _ => String::new(),
         }
     }
 
-    fn map_boune_type(&self, arg_type: &ArgType) -> &'static str {
+    fn build_action_handler(&self, command: &Command) -> ArrowFn {
+        let has_args = !command.args.is_empty();
+        let has_options = !command.flags.is_empty();
+
+        // Build destructuring pattern based on what's available
+        let params = match (has_args, has_options) {
+            (true, true) => "{ args, options }",
+            (true, false) => "{ args }",
+            (false, true) => "{ options }",
+            (false, false) => "{}",
+        };
+
+        // Build run() call based on what's available
+        let run_call = match (has_args, has_options) {
+            (true, true) => "await run(args, options);",
+            (true, false) => "await run(args);",
+            (false, true) => "await run(options);",
+            (false, false) => "await run();",
+        };
+
+        ArrowFn::new(params).async_().body_line(run_call)
+    }
+
+    fn map_boune_type(&self, arg_type: &baobao_manifest::ArgType) -> &'static str {
+        use baobao_manifest::ArgType;
         match arg_type {
             ArgType::String => "string",
             ArgType::Int => "number",
@@ -568,7 +579,8 @@ impl<'a> Generator<'a> {
 
         // Generate stub handlers for missing commands
         for (name, command) in &self.schema.commands {
-            let created = self.generate_handler_stubs(handlers_dir, name, command, "")?;
+            let created =
+                self.generate_handler_stubs(handlers_dir, name, command, vec![name.clone()])?;
             created_handlers.extend(created);
         }
 
@@ -588,18 +600,18 @@ impl<'a> Generator<'a> {
         handlers_dir: &Path,
         name: &str,
         command: &Command,
-        prefix: &str,
+        path_segments: Vec<String>,
     ) -> Result<Vec<String>> {
         use baobao_core::WriteResult;
 
         let mut created = Vec::new();
 
         let kebab_name = to_kebab_case(name);
-        let display_path = if prefix.is_empty() {
-            kebab_name.clone()
-        } else {
-            format!("{}/{}", prefix, kebab_name)
-        };
+        let display_path = path_segments
+            .iter()
+            .map(|s| to_kebab_case(s))
+            .collect::<Vec<_>>()
+            .join("/");
 
         if command.has_subcommands() {
             // Create directory for subcommands
@@ -608,19 +620,17 @@ impl<'a> Generator<'a> {
 
             // Recursively generate stubs for subcommands
             for (sub_name, sub_command) in &command.commands {
-                let new_prefix = if prefix.is_empty() {
-                    kebab_name.clone()
-                } else {
-                    format!("{}/{}", prefix, kebab_name)
-                };
+                let mut sub_path = path_segments.clone();
+                sub_path.push(sub_name.clone());
                 let sub_created =
-                    self.generate_handler_stubs(&subdir, sub_name, sub_command, &new_prefix)?;
+                    self.generate_handler_stubs(&subdir, sub_name, sub_command, sub_path)?;
                 created.extend(sub_created);
             }
         } else {
             // Leaf command - generate stub if file doesn't exist
-            let pascal_name = to_pascal_case(name);
-            let stub = HandlerTs::new(name, format!("{}Args", pascal_name));
+            let has_args = !command.args.is_empty();
+            let has_options = !command.flags.is_empty();
+            let stub = HandlerTs::nested(name, path_segments, has_args, has_options);
             let result = stub.write(handlers_dir)?;
 
             if matches!(result, WriteResult::Written) {

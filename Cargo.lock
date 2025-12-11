@@ -139,6 +139,7 @@ dependencies = [
  "baobao-manifest",
  "eyre",
  "tempfile",
+ "toml",
 ]
 
 [[package]]
