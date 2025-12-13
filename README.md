@@ -25,7 +25,14 @@ cargo install baobao
 
 ## Quick Start
 
-Create a `bao.toml` file:
+Initialize a new project:
+
+```bash
+bao init myapp
+# Select language interactively, or use: bao init myapp --language rust
+```
+
+This creates a complete project with a `bao.toml` manifest:
 
 ```toml
 [cli]
@@ -35,23 +42,34 @@ version = "0.1.0"
 [commands.hello]
 description = "Say hello"
 args = ["name"]
-
-[commands.greet]
-description = "Greet someone"
-args = ["name"]
-flags = ["loud"]
+flags = ["uppercase"]
 ```
 
-Generate your CLI:
+Edit `bao.toml` to add commands, then regenerate:
 
 ```bash
-bao init --language rust
+bao bake
 ```
 
-This creates a complete Rust project with:
-- Type-safe argument parsing using clap
-- Handler stubs for each command
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `bao init [name]` | Initialize a new CLI project |
+| `bao bake` | Generate code from bao.toml |
+| `bao add command <name>` | Add a new command |
+| `bao remove command <name>` | Remove a command |
+| `bao list` | List commands and context |
+| `bao check` | Validate bao.toml |
+| `bao clean` | Remove orphaned generated files |
+| `bao run` | Run the CLI (shortcut for `cargo run --`) |
+
+## Features
+
+- Type-safe argument parsing (clap for Rust, boune for TypeScript)
+- Handler stubs generated for each command
 - Context for shared state (database pools, HTTP clients, etc.)
+- Multiple language targets from a single manifest
 
 ## License
 

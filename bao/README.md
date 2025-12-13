@@ -1,8 +1,21 @@
 # baobao
 
-CLI tool for generating type-safe CLI applications from a simple TOML schema.
+Bao is a **very** opinionated tool to generate CLI applications in multiple programming languages from a single configuration file.
 
-This is the main binary crate for [Bao](https://github.com/roushou/bao). For full documentation, see the [main repository](https://github.com/roushou/bao).
+## Crates
+
+> [!Note]
+> Crates are published as `baobao*` on crates.io instead of `bao*` to avoid confusion with an already existing and unrelated `bao` crate.
+
+| Crate | Description |
+|-------|-------------|
+| [baobao](https://crates.io/crates/baobao) | CLI tool for generating CLI applications from TOML |
+| [baobao-core](https://crates.io/crates/baobao-core) | Core utilities for Bao CLI generator |
+| [baobao-manifest](https://crates.io/crates/baobao-manifest) | TOML manifest parsing and validation |
+| [baobao-codegen](https://crates.io/crates/baobao-codegen) | Shared code generation utilities |
+| [baobao-codegen-rust](https://crates.io/crates/baobao-codegen-rust) | Rust code generator |
+| [baobao-codegen-typescript](https://crates.io/crates/baobao-codegen-typescript) | TypeScript code generator |
+
 
 ## Installation
 
@@ -10,31 +23,16 @@ This is the main binary crate for [Bao](https://github.com/roushou/bao). For ful
 cargo install baobao
 ```
 
-## Usage
-
-```bash
-# Initialize a new bao.toml in the current directory
-bao init --language rust
-
-# Generate CLI code from bao.toml
-bao bake
-
-# Preview what would be generated without writing files
-bao bake --dry-run
-
-# Clean generated files
-bao clean
-
-# Format the bao.toml file
-bao fmt
-
-# Show project info
-bao info
-```
-
 ## Quick Start
 
-Create a `bao.toml` file:
+Initialize a new project:
+
+```bash
+bao init myapp
+# Select language interactively, or use: bao init myapp --language rust
+```
+
+This creates a complete project with a `bao.toml` manifest:
 
 ```toml
 [cli]
@@ -44,24 +42,35 @@ version = "0.1.0"
 [commands.hello]
 description = "Say hello"
 args = ["name"]
-
-[commands.greet]
-description = "Greet someone"
-args = ["name"]
-flags = ["loud"]
+flags = ["uppercase"]
 ```
 
-Generate your CLI:
+Edit `bao.toml` to add commands, then regenerate:
 
 ```bash
 bao bake
 ```
 
-## Supported Languages
+## Commands
 
-- **Rust** - Generates CLI applications using [clap](https://crates.io/crates/clap)
-- **TypeScript** - Generates CLI applications for [Bun](https://bun.com/) using [boune](https://www.npmjs.com/package/boune)
+| Command | Description |
+|---------|-------------|
+| `bao init [name]` | Initialize a new CLI project |
+| `bao bake` | Generate code from bao.toml |
+| `bao add command <name>` | Add a new command |
+| `bao remove command <name>` | Remove a command |
+| `bao list` | List commands and context |
+| `bao check` | Validate bao.toml |
+| `bao clean` | Remove orphaned generated files |
+| `bao run` | Run the CLI (shortcut for `cargo run --`) |
+
+## Features
+
+- Type-safe argument parsing (clap for Rust, boune for TypeScript)
+- Handler stubs generated for each command
+- Context for shared state (database pools, HTTP clients, etc.)
+- Multiple language targets from a single manifest
 
 ## License
 
-This project is licensed under the [MIT](https://github.com/roushou/bao/blob/main/LICENSE) license.
+This project is licensed under the [MIT](../LICENSE) LICENSE
