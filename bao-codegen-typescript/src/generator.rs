@@ -13,7 +13,8 @@ use baobao_manifest::{Command, Language, Manifest};
 use eyre::Result;
 
 use crate::{
-    ast::{ArrowFn, Import, JsObject},
+    adapters::BouneAdapter,
+    ast::{Import, JsObject},
     files::{
         BaoToml, CliTs, CommandTs, ContextTs, GitIgnore, HandlerTs, IndexTs, PackageJson, TsConfig,
     },
@@ -22,6 +23,7 @@ use crate::{
 /// TypeScript code generator that produces boune-based CLI code for Bun.
 pub struct Generator<'a> {
     schema: &'a Manifest,
+    cli_adapter: BouneAdapter,
 }
 
 impl LanguageCodegen for Generator<'_> {
@@ -44,7 +46,10 @@ impl LanguageCodegen for Generator<'_> {
 
 impl<'a> Generator<'a> {
     pub fn new(schema: &'a Manifest) -> Self {
-        Self { schema }
+        Self {
+            schema,
+            cli_adapter: BouneAdapter::new(),
+        }
     }
 
     /// Preview generated files without writing to disk.
@@ -409,8 +414,7 @@ impl<'a> Generator<'a> {
                 .iter()
                 .fold(JsObject::new(), |obj, (arg_name, arg)| {
                     let camel = to_camel_case(arg_name);
-                    let boune_type = self.map_boune_type(&arg.arg_type);
-                    obj.raw(&camel, self.build_argument_chain(boune_type, arg))
+                    obj.raw(&camel, self.build_argument_chain(arg))
                 });
 
             let mut builder = CodeBuilder::typescript();
@@ -428,8 +432,7 @@ impl<'a> Generator<'a> {
                 .iter()
                 .fold(JsObject::new(), |obj, (flag_name, flag)| {
                     let camel = to_camel_case(flag_name);
-                    let boune_type = self.map_boune_type(&flag.flag_type);
-                    obj.raw(&camel, self.build_option_chain(boune_type, flag))
+                    obj.raw(&camel, self.build_option_chain(flag))
                 });
 
             let mut builder = CodeBuilder::typescript();
@@ -492,90 +495,28 @@ impl<'a> Generator<'a> {
         builder.build().trim_end().to_string()
     }
 
-    fn build_argument_chain(&self, boune_type: &str, arg: &baobao_manifest::Arg) -> String {
-        use crate::ast::MethodChain;
-
-        let mut chain = MethodChain::new(format!("argument.{}", boune_type));
-
-        if arg.required && arg.default.is_none() {
-            chain = chain.call_empty("required");
-        }
-
-        if let Some(default) = &arg.default {
-            chain = chain.call("default", Self::toml_to_ts_literal(default));
-        }
-
-        if let Some(desc) = &arg.description {
-            chain = chain.call("describe", format!("\"{}\"", desc));
-        }
-
-        chain.build_inline()
+    fn build_argument_chain(&self, arg: &baobao_manifest::Arg) -> String {
+        self.cli_adapter.build_argument_chain_manifest(
+            &arg.arg_type,
+            arg.required,
+            arg.default.is_some(),
+            arg.default.as_ref(),
+            arg.description.as_deref(),
+        )
     }
 
-    fn build_option_chain(&self, boune_type: &str, flag: &baobao_manifest::Flag) -> String {
-        use crate::ast::MethodChain;
-
-        let mut chain = MethodChain::new(format!("option.{}", boune_type));
-
-        if let Some(short) = flag.short_char() {
-            chain = chain.call("short", format!("\"{}\"", short));
-        }
-
-        if let Some(default) = &flag.default {
-            chain = chain.call("default", Self::toml_to_ts_literal(default));
-        }
-
-        if let Some(desc) = &flag.description {
-            chain = chain.call("describe", format!("\"{}\"", desc));
-        }
-
-        chain.build_inline()
+    fn build_option_chain(&self, flag: &baobao_manifest::Flag) -> String {
+        self.cli_adapter.build_option_chain_manifest(
+            &flag.flag_type,
+            flag.short_char(),
+            flag.default.as_ref(),
+            flag.description.as_deref(),
+        )
     }
 
-    /// Convert a TOML value to a TypeScript literal string.
-    /// Strings are quoted, numbers and booleans are raw.
-    fn toml_to_ts_literal(value: &toml::Value) -> String {
-        match value {
-            toml::Value::String(s) => format!("\"{}\"", s),
-            toml::Value::Integer(i) => i.to_string(),
-            toml::Value::Float(f) => f.to_string(),
-            toml::Value::Boolean(b) => b.to_string(),
-            _ => String::new(),
-        }
-    }
-
-    fn build_action_handler(&self, command: &Command) -> ArrowFn {
-        let has_args = !command.args.is_empty();
-        let has_options = !command.flags.is_empty();
-
-        // Build destructuring pattern based on what's available
-        let params = match (has_args, has_options) {
-            (true, true) => "{ args, options }",
-            (true, false) => "{ args }",
-            (false, true) => "{ options }",
-            (false, false) => "{}",
-        };
-
-        // Build run() call based on what's available
-        let run_call = match (has_args, has_options) {
-            (true, true) => "await run(args, options);",
-            (true, false) => "await run(args);",
-            (false, true) => "await run(options);",
-            (false, false) => "await run();",
-        };
-
-        ArrowFn::new(params).async_().body_line(run_call)
-    }
-
-    fn map_boune_type(&self, arg_type: &baobao_manifest::ArgType) -> &'static str {
-        use baobao_manifest::ArgType;
-        match arg_type {
-            ArgType::String => "string",
-            ArgType::Int => "number",
-            ArgType::Float => "number",
-            ArgType::Bool => "boolean",
-            ArgType::Path => "string",
-        }
+    fn build_action_handler(&self, command: &Command) -> crate::ast::ArrowFn {
+        self.cli_adapter
+            .build_action_handler(!command.args.is_empty(), !command.flags.is_empty())
     }
 
     /// Generate handlers directory with stub files for missing handlers.

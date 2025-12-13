@@ -1,6 +1,7 @@
 use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
+    adapters::{CliAdapter, DatabaseAdapter, ErrorAdapter, RuntimeAdapter},
     builder::CodeBuilder,
     generation::{HandlerPaths, find_orphan_commands},
     language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
@@ -14,7 +15,8 @@ use baobao_manifest::{ArgType, Command, Manifest};
 use eyre::Result;
 
 use crate::{
-    Arm, Enum, Field, Fn, Impl, Match, Param, RustFile, Struct, Use, Variant,
+    Arm, ClapAdapter, Enum, EyreAdapter, Field, Fn, Impl, Match, Param, RustFile, SqlxAdapter,
+    Struct, TokioAdapter, Use, Variant,
     files::{
         AppRs, CargoToml, CliRs, CommandRs, CommandsMod, ContextRs, GeneratedMod, HandlerStub,
         HandlersMod, MainRs,
@@ -392,27 +394,63 @@ impl<'a> Generator<'a> {
     }
 
     fn collect_dependencies(&self, has_async_context: bool) -> Vec<(String, String)> {
-        let mut dependencies: Vec<(String, String)> = vec![
-            ("eyre".to_string(), "0.6".to_string()),
-            (
-                "clap".to_string(),
-                r#"{ version = "4", features = ["derive"] }"#.to_string(),
-            ),
-        ];
+        // Use adapters to collect dependencies
+        let cli = ClapAdapter::new();
+        let error = EyreAdapter::new();
+        let runtime = TokioAdapter::new();
+        let database = SqlxAdapter::new();
 
-        let mut seen_dependencies: HashSet<&str> = HashSet::from(["eyre", "clap"]);
+        let mut dependencies: Vec<(String, String)> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
 
-        if has_async_context {
-            dependencies.push((
-                "tokio".to_string(),
-                r#"{ version = "1", features = ["rt-multi-thread", "macros"] }"#.to_string(),
-            ));
-            seen_dependencies.insert("tokio");
+        // Add error adapter dependencies
+        for dep in error.dependencies() {
+            if seen.insert(dep.name.clone()) {
+                dependencies.push((dep.name, dep.version));
+            }
         }
 
+        // Add CLI adapter dependencies
+        for dep in cli.dependencies() {
+            if seen.insert(dep.name.clone()) {
+                dependencies.push((dep.name, dep.version));
+            }
+        }
+
+        // Add async runtime dependencies if needed
+        if has_async_context {
+            for dep in runtime.dependencies() {
+                if seen.insert(dep.name.clone()) {
+                    dependencies.push((dep.name, dep.version));
+                }
+            }
+        }
+
+        // Add database dependencies based on context fields
+        use baobao_manifest::ContextField;
+
         for (_, field) in self.schema.context.fields() {
+            // Get database dependencies from the adapter based on field type
+            let db_type = match field {
+                ContextField::Postgres(_) => Some(DatabaseType::Postgres),
+                ContextField::Mysql(_) => Some(DatabaseType::Mysql),
+                ContextField::Sqlite(_) => Some(DatabaseType::Sqlite),
+                ContextField::Http(_) => None,
+            };
+
+            if let Some(db_type) = db_type {
+                for dep in database.dependencies(db_type) {
+                    if seen.insert(dep.name.clone()) {
+                        dependencies.push((dep.name, dep.version));
+                    }
+                }
+            }
+
+            // Also include any additional dependencies from the field itself
+            // (e.g., HTTP client reqwest)
             for (dep_name, dep_version) in field.dependencies() {
-                if seen_dependencies.insert(dep_name) {
+                if !seen.contains(dep_name) {
+                    seen.insert(dep_name.to_string());
                     dependencies.push((dep_name.to_string(), dep_version.to_string()));
                 }
             }

@@ -41,9 +41,11 @@ mod render;
 mod rust_file;
 mod type_mapper;
 
+pub mod adapters;
 pub mod ast;
 pub mod files;
 
+pub use adapters::{ClapAdapter, EyreAdapter, SqlxAdapter, TokioAdapter};
 pub use ast::{Arm, Enum, Field, Fn, Impl, Match, Param, Struct, Variant};
 pub use baobao_codegen::language::{GenerateResult, LanguageCodegen, PreviewFile};
 pub use generator::Generator;

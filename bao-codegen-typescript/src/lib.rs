@@ -35,14 +35,17 @@
 //! - `src/handlers/*.ts` - Handler stubs for implementation
 //! - `package.json`, `tsconfig.json`, `bao.toml`, `.gitignore`
 
-mod ast;
 mod code_file;
 mod generator;
 mod naming;
 mod type_mapper;
 
+pub mod adapters;
+pub mod ast;
 pub mod files;
 
+pub use adapters::{BouneAdapter, BunSqliteAdapter};
+pub use ast::{ArrowFn, Import, JsObject, MethodChain};
 pub use baobao_codegen::language::{GenerateResult, LanguageCodegen, PreviewFile};
 pub use code_file::{CodeFile, RawCode};
 pub use generator::Generator;
