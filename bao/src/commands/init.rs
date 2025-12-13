@@ -12,6 +12,7 @@ use baobao_codegen_typescript::{
 use baobao_core::{File, GeneratedFile};
 use baobao_manifest::{Language, Manifest};
 use clap::Args;
+use dialoguer::{Select, theme::ColorfulTheme};
 use eyre::{Context, Result};
 use miette::Report;
 
@@ -27,16 +28,36 @@ pub struct InitCommand {
 
     /// Target language for code generation
     #[arg(short, long)]
-    pub language: Language,
+    pub language: Option<Language>,
 }
 
 impl InitCommand {
     pub fn run(&self) -> Result<()> {
         let (project_name, output_dir) = Self::resolve_paths(&self.name, self.output.clone())?;
-        match self.language {
+        let language = match self.language {
+            Some(lang) => lang,
+            None => Self::prompt_language()?,
+        };
+
+        match language {
             Language::Rust => Self::create_rust_project(&project_name, &output_dir),
             Language::TypeScript => Self::create_typescript_project(&project_name, &output_dir),
         }
+    }
+
+    fn prompt_language() -> Result<Language> {
+        let languages = ["Rust", "TypeScript"];
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select a language")
+            .items(&languages)
+            .default(0)
+            .interact()
+            .wrap_err("Failed to get language selection")?;
+
+        Ok(match selection {
+            0 => Language::Rust,
+            _ => Language::TypeScript,
+        })
     }
 
     fn resolve_paths(name: &str, output: Option<PathBuf>) -> Result<(String, PathBuf)> {
