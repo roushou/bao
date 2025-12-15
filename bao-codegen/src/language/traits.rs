@@ -20,6 +20,26 @@ pub trait LanguageCodegen {
 
     /// Generate all files into the specified output directory
     fn generate(&self, output_dir: &Path) -> Result<GenerateResult>;
+
+    /// Clean orphaned generated files.
+    ///
+    /// Removes:
+    /// - Generated command files that are no longer in the manifest
+    /// - Unmodified handler stubs that are no longer in the manifest
+    ///
+    /// Handler files that have been modified by the user are not deleted.
+    ///
+    /// Default implementation returns an empty result (no cleaning).
+    fn clean(&self, _output_dir: &Path) -> Result<CleanResult> {
+        Ok(CleanResult::default())
+    }
+
+    /// Preview what would be cleaned without actually deleting files.
+    ///
+    /// Default implementation returns an empty result.
+    fn preview_clean(&self, _output_dir: &Path) -> Result<CleanResult> {
+        Ok(CleanResult::default())
+    }
 }
 
 /// Result of code generation

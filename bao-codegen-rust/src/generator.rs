@@ -43,6 +43,14 @@ impl LanguageCodegen for Generator<'_> {
     fn generate(&self, output_dir: &Path) -> Result<GenerateResult> {
         self.generate_files(output_dir)
     }
+
+    fn clean(&self, output_dir: &Path) -> Result<CleanResult> {
+        self.clean_files(output_dir)
+    }
+
+    fn preview_clean(&self, output_dir: &Path) -> Result<CleanResult> {
+        self.preview_clean_files(output_dir)
+    }
 }
 
 impl<'a> Generator<'a> {
@@ -161,14 +169,8 @@ impl<'a> Generator<'a> {
         Ok(result)
     }
 
-    /// Clean orphaned generated files
-    ///
-    /// Removes:
-    /// - Generated command files in `src/generated/commands/` that are no longer in the manifest
-    /// - Unmodified handler stubs in `src/handlers/` that are no longer in the manifest
-    ///
-    /// Handler files that have been modified by the user are not deleted.
-    pub fn clean(&self, output_dir: &Path) -> Result<CleanResult> {
+    /// Clean orphaned generated files.
+    fn clean_files(&self, output_dir: &Path) -> Result<CleanResult> {
         let mut result = CleanResult::default();
 
         // Collect expected command names (snake_case for file names)
@@ -228,8 +230,8 @@ impl<'a> Generator<'a> {
         Ok(result)
     }
 
-    /// Preview what would be cleaned without actually deleting files
-    pub fn preview_clean(&self, output_dir: &Path) -> Result<CleanResult> {
+    /// Preview what would be cleaned without actually deleting files.
+    fn preview_clean_files(&self, output_dir: &Path) -> Result<CleanResult> {
         let mut result = CleanResult::default();
 
         // Collect expected command names (snake_case for file names)

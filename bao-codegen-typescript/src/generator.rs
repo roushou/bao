@@ -4,8 +4,8 @@ use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
     builder::CodeBuilder,
-    generation::{FileEntry, FileRegistry, HandlerPaths},
-    language::{GenerateResult, LanguageCodegen, PreviewFile},
+    generation::{FileEntry, FileRegistry, HandlerPaths, find_orphan_commands},
+    language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
     schema::{CommandInfo, CommandTree, collect_context_fields},
 };
 use baobao_core::{GeneratedFile, to_camel_case, to_kebab_case};
@@ -41,6 +41,14 @@ impl LanguageCodegen for Generator<'_> {
 
     fn generate(&self, output_dir: &Path) -> Result<GenerateResult> {
         self.generate_files(output_dir)
+    }
+
+    fn clean(&self, output_dir: &Path) -> Result<CleanResult> {
+        self.clean_files(output_dir)
+    }
+
+    fn preview_clean(&self, output_dir: &Path) -> Result<CleanResult> {
+        self.preview_clean_files(output_dir)
     }
 }
 
@@ -469,5 +477,140 @@ impl<'a> Generator<'a> {
         }
 
         Ok(created)
+    }
+
+    /// Clean orphaned generated files.
+    ///
+    /// Note: The handler stub marker check currently uses a Rust-specific marker,
+    /// so TypeScript handlers may be incorrectly identified as "modified" and skipped.
+    /// This is a safe default that prevents accidental deletion of user code.
+    fn clean_files(&self, output_dir: &Path) -> Result<CleanResult> {
+        let mut result = CleanResult::default();
+
+        // Collect expected command names (kebab-case for file names)
+        let expected_commands: HashSet<String> = self
+            .schema
+            .commands
+            .keys()
+            .map(|name| to_kebab_case(name))
+            .collect();
+
+        // Collect expected handler paths (kebab-case)
+        let expected_handlers: HashSet<String> = CommandTree::new(self.schema)
+            .collect_paths()
+            .into_iter()
+            .map(|path| {
+                path.split('/')
+                    .map(to_kebab_case)
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .collect();
+
+        // Find and delete orphaned generated command files
+        let commands_dir = output_dir.join("src/commands");
+        let orphan_commands = find_orphan_commands(&commands_dir, "ts", &expected_commands)?;
+        for path in orphan_commands {
+            std::fs::remove_file(&path)?;
+            let relative = path.strip_prefix(output_dir).unwrap_or(&path);
+            result.deleted_commands.push(relative.display().to_string());
+        }
+
+        // Find and handle orphaned handler files
+        let handlers_dir = output_dir.join("src/handlers");
+        let handler_paths = HandlerPaths::new(&handlers_dir, "ts");
+        let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
+
+        for orphan in orphan_handlers {
+            if orphan.is_unmodified {
+                // Safe to delete - it's still just a stub
+                std::fs::remove_file(&orphan.full_path)?;
+                result
+                    .deleted_handlers
+                    .push(format!("src/handlers/{}.ts", orphan.relative_path));
+
+                // Try to clean up empty parent directories
+                if let Some(parent) = orphan.full_path.parent() {
+                    let _ = Self::remove_empty_dirs(parent, &handlers_dir);
+                }
+            } else {
+                // User has modified this file, skip it
+                result
+                    .skipped_handlers
+                    .push(format!("src/handlers/{}.ts", orphan.relative_path));
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Preview what would be cleaned without actually deleting files.
+    fn preview_clean_files(&self, output_dir: &Path) -> Result<CleanResult> {
+        let mut result = CleanResult::default();
+
+        // Collect expected command names (kebab-case for file names)
+        let expected_commands: HashSet<String> = self
+            .schema
+            .commands
+            .keys()
+            .map(|name| to_kebab_case(name))
+            .collect();
+
+        // Collect expected handler paths (kebab-case)
+        let expected_handlers: HashSet<String> = CommandTree::new(self.schema)
+            .collect_paths()
+            .into_iter()
+            .map(|path| {
+                path.split('/')
+                    .map(to_kebab_case)
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .collect();
+
+        // Find orphaned generated command files
+        let commands_dir = output_dir.join("src/commands");
+        let orphan_commands = find_orphan_commands(&commands_dir, "ts", &expected_commands)?;
+        for path in orphan_commands {
+            let relative = path.strip_prefix(output_dir).unwrap_or(&path);
+            result.deleted_commands.push(relative.display().to_string());
+        }
+
+        // Find orphaned handler files
+        let handlers_dir = output_dir.join("src/handlers");
+        let handler_paths = HandlerPaths::new(&handlers_dir, "ts");
+        let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
+
+        for orphan in orphan_handlers {
+            if orphan.is_unmodified {
+                result
+                    .deleted_handlers
+                    .push(format!("src/handlers/{}.ts", orphan.relative_path));
+            } else {
+                result
+                    .skipped_handlers
+                    .push(format!("src/handlers/{}.ts", orphan.relative_path));
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Remove empty directories up to but not including the base directory.
+    fn remove_empty_dirs(dir: &Path, base: &Path) -> Result<()> {
+        if dir == base || !dir.starts_with(base) {
+            return Ok(());
+        }
+
+        // Check if directory is empty
+        if std::fs::read_dir(dir)?.next().is_none() {
+            std::fs::remove_dir(dir)?;
+            // Try to remove parent too
+            if let Some(parent) = dir.parent() {
+                let _ = Self::remove_empty_dirs(parent, base);
+            }
+        }
+
+        Ok(())
     }
 }

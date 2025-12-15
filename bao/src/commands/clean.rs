@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use baobao_codegen::language::LanguageCodegen;
 use baobao_codegen_rust::Generator;
 use baobao_manifest::BaoToml;
 use clap::Args;
