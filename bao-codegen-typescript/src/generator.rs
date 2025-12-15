@@ -20,6 +20,9 @@ use crate::{
     },
 };
 
+/// Marker string indicating an unmodified TypeScript handler stub.
+const STUB_MARKER: &str = "// TODO: implement";
+
 /// TypeScript code generator that produces boune-based CLI code for Bun.
 pub struct Generator<'a> {
     schema: &'a Manifest,
@@ -423,7 +426,7 @@ impl<'a> Generator<'a> {
         }
 
         // Find orphan handlers using shared utility
-        let handler_paths = HandlerPaths::new(handlers_dir, "ts");
+        let handler_paths = HandlerPaths::new(handlers_dir, "ts", STUB_MARKER);
         let orphan_handlers = handler_paths.find_orphans(&expected_handlers)?;
 
         Ok(GenerateResult {
@@ -480,10 +483,6 @@ impl<'a> Generator<'a> {
     }
 
     /// Clean orphaned generated files.
-    ///
-    /// Note: The handler stub marker check currently uses a Rust-specific marker,
-    /// so TypeScript handlers may be incorrectly identified as "modified" and skipped.
-    /// This is a safe default that prevents accidental deletion of user code.
     fn clean_files(&self, output_dir: &Path) -> Result<CleanResult> {
         let mut result = CleanResult::default();
 
@@ -518,7 +517,7 @@ impl<'a> Generator<'a> {
 
         // Find and handle orphaned handler files
         let handlers_dir = output_dir.join("src/handlers");
-        let handler_paths = HandlerPaths::new(&handlers_dir, "ts");
+        let handler_paths = HandlerPaths::new(&handlers_dir, "ts", STUB_MARKER);
         let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
 
         for orphan in orphan_handlers {
@@ -578,7 +577,7 @@ impl<'a> Generator<'a> {
 
         // Find orphaned handler files
         let handlers_dir = output_dir.join("src/handlers");
-        let handler_paths = HandlerPaths::new(&handlers_dir, "ts");
+        let handler_paths = HandlerPaths::new(&handlers_dir, "ts", STUB_MARKER);
         let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
 
         for orphan in orphan_handlers {

@@ -22,6 +22,9 @@ use crate::{
     },
 };
 
+/// Marker string indicating an unmodified Rust handler stub.
+const STUB_MARKER: &str = "todo!(\"implement";
+
 /// Rust code generator that produces clap-based CLI code
 pub struct Generator<'a> {
     schema: &'a Manifest,
@@ -204,7 +207,7 @@ impl<'a> Generator<'a> {
 
         // Find and handle orphaned handler files
         let handlers_dir = output_dir.join("src/handlers");
-        let handler_paths = HandlerPaths::new(&handlers_dir, "rs");
+        let handler_paths = HandlerPaths::new(&handlers_dir, "rs", STUB_MARKER);
         let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
 
         for orphan in orphan_handlers {
@@ -264,7 +267,7 @@ impl<'a> Generator<'a> {
 
         // Find orphaned handler files
         let handlers_dir = output_dir.join("src/handlers");
-        let handler_paths = HandlerPaths::new(&handlers_dir, "rs");
+        let handler_paths = HandlerPaths::new(&handlers_dir, "rs", STUB_MARKER);
         let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
 
         for orphan in orphan_handlers {
@@ -486,7 +489,7 @@ impl<'a> Generator<'a> {
         }
 
         // Find orphan handlers using shared utility
-        let handler_paths = HandlerPaths::new(handlers_dir, "rs");
+        let handler_paths = HandlerPaths::new(handlers_dir, "rs", STUB_MARKER);
         let orphan_handlers = handler_paths.find_orphans(&expected_handlers)?;
 
         Ok(GenerateResult {

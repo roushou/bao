@@ -7,9 +7,6 @@ use std::{
 
 use eyre::Result;
 
-/// Marker indicating an unmodified handler stub
-const HANDLER_STUB_MARKER: &str = "todo!(\"implement";
-
 /// Manages handler file paths for a code generator.
 ///
 /// Provides utilities for:
@@ -22,14 +19,35 @@ pub struct HandlerPaths {
     base_dir: PathBuf,
     /// File extension without dot (e.g., "rs", "ts")
     extension: String,
+    /// Marker string that indicates an unmodified handler stub.
+    /// Files containing this marker are considered safe to delete.
+    stub_marker: String,
 }
 
 impl HandlerPaths {
     /// Create a new HandlerPaths instance.
-    pub fn new(base_dir: impl Into<PathBuf>, extension: impl Into<String>) -> Self {
+    ///
+    /// # Arguments
+    /// * `base_dir` - Base directory for handlers (e.g., "src/handlers")
+    /// * `extension` - File extension without dot (e.g., "rs", "ts")
+    /// * `stub_marker` - Marker string that indicates an unmodified handler stub
+    ///
+    /// # Example
+    /// ```ignore
+    /// // For Rust handlers
+    /// let paths = HandlerPaths::new("src/handlers", "rs", "todo!(\"implement");
+    /// // For TypeScript handlers
+    /// let paths = HandlerPaths::new("src/handlers", "ts", "// TODO: implement");
+    /// ```
+    pub fn new(
+        base_dir: impl Into<PathBuf>,
+        extension: impl Into<String>,
+        stub_marker: impl Into<String>,
+    ) -> Self {
         Self {
             base_dir: base_dir.into(),
             extension: extension.into(),
+            stub_marker: stub_marker.into(),
         }
     }
 
@@ -207,7 +225,7 @@ impl HandlerPaths {
                 };
 
                 if !expected.contains(&relative_path) {
-                    let is_unmodified = Self::is_handler_unmodified(&path);
+                    let is_unmodified = self.is_handler_unmodified(&path);
                     orphans.push(OrphanHandler {
                         relative_path,
                         full_path: path,
@@ -245,7 +263,7 @@ impl HandlerPaths {
             {
                 let stem = path.file_stem().unwrap().to_string_lossy();
                 let relative_path = format!("{}/{}", prefix, stem);
-                let is_unmodified = Self::is_handler_unmodified(&path);
+                let is_unmodified = self.is_handler_unmodified(&path);
                 orphans.push(OrphanHandler {
                     relative_path,
                     full_path: path,
@@ -258,9 +276,9 @@ impl HandlerPaths {
     }
 
     /// Check if a handler file is unmodified (still contains the stub marker).
-    fn is_handler_unmodified(path: &Path) -> bool {
+    fn is_handler_unmodified(&self, path: &Path) -> bool {
         std::fs::read_to_string(path)
-            .map(|content| content.contains(HANDLER_STUB_MARKER))
+            .map(|content| content.contains(&self.stub_marker))
             .unwrap_or(false)
     }
 }
@@ -326,9 +344,12 @@ pub fn find_orphan_commands(
 mod tests {
     use super::*;
 
+    const RUST_STUB_MARKER: &str = "todo!(\"implement";
+    const TS_STUB_MARKER: &str = "// TODO: implement";
+
     #[test]
     fn test_handler_path_simple() {
-        let paths = HandlerPaths::new("src/handlers", "rs");
+        let paths = HandlerPaths::new("src/handlers", "rs", RUST_STUB_MARKER);
         assert_eq!(
             paths.handler_path(&["hello"]),
             PathBuf::from("src/handlers/hello.rs")
@@ -337,7 +358,7 @@ mod tests {
 
     #[test]
     fn test_handler_path_nested() {
-        let paths = HandlerPaths::new("src/handlers", "rs");
+        let paths = HandlerPaths::new("src/handlers", "rs", RUST_STUB_MARKER);
         assert_eq!(
             paths.handler_path(&["db", "migrate"]),
             PathBuf::from("src/handlers/db/migrate.rs")
@@ -346,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_handler_path_deeply_nested() {
-        let paths = HandlerPaths::new("src/handlers", "rs");
+        let paths = HandlerPaths::new("src/handlers", "rs", RUST_STUB_MARKER);
         assert_eq!(
             paths.handler_path(&["config", "user", "set"]),
             PathBuf::from("src/handlers/config/user/set.rs")
@@ -355,7 +376,7 @@ mod tests {
 
     #[test]
     fn test_mod_path() {
-        let paths = HandlerPaths::new("src/handlers", "rs");
+        let paths = HandlerPaths::new("src/handlers", "rs", RUST_STUB_MARKER);
         assert_eq!(
             paths.mod_path(&["db"]),
             PathBuf::from("src/handlers/db/mod.rs")
@@ -364,7 +385,7 @@ mod tests {
 
     #[test]
     fn test_typescript_extension() {
-        let paths = HandlerPaths::new("src/handlers", "ts");
+        let paths = HandlerPaths::new("src/handlers", "ts", TS_STUB_MARKER);
         assert_eq!(
             paths.handler_path(&["hello"]),
             PathBuf::from("src/handlers/hello.ts")
