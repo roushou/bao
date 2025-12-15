@@ -3,9 +3,8 @@ use std::{collections::HashSet, path::Path};
 use baobao_codegen::{
     adapters::{CliAdapter, DatabaseAdapter, ErrorAdapter, RuntimeAdapter},
     builder::CodeBuilder,
-    generation::{HandlerPaths, find_orphan_commands},
+    generation::{FileEntry, FileRegistry, HandlerPaths, find_orphan_commands},
     language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
-    paths::rust as paths,
     schema::{CommandInfo, CommandTree, collect_context_fields},
 };
 use baobao_core::{
@@ -51,50 +50,49 @@ impl<'a> Generator<'a> {
         Self { schema }
     }
 
-    /// Preview generated files without writing to disk
-    fn preview_files(&self) -> Vec<PreviewFile> {
-        let mut files = Vec::new();
+    /// Build a file registry with all generated files.
+    ///
+    /// This centralizes file registration, making generation declarative.
+    /// Files are registered by category (Config, Infrastructure, Generated)
+    /// and the registry handles ordering and write rules.
+    fn build_registry(&self) -> FileRegistry {
+        let mut registry = FileRegistry::new();
 
         // Collect context field info
         let context_fields = collect_context_fields(&self.schema.context);
         // Async only if database context exists (HTTP is sync)
         let is_async = self.schema.context.has_async();
 
-        // context.rs
-        files.push(PreviewFile {
-            path: "src/context.rs".to_string(),
-            content: ContextRs::new(context_fields).render(),
-        });
-
-        // main.rs
-        files.push(PreviewFile {
-            path: "src/main.rs".to_string(),
-            content: MainRs::new(is_async).render(),
-        });
-
-        // app.rs
-        files.push(PreviewFile {
-            path: "src/app.rs".to_string(),
-            content: AppRs::new(is_async).render(),
-        });
-
-        // Cargo.toml
+        // Config files
         let dependencies = self.collect_dependencies(is_async);
-        files.push(PreviewFile {
-            path: "Cargo.toml".to_string(),
-            content: CargoToml::new(&self.schema.cli.name)
+        registry.register(FileEntry::config(
+            "Cargo.toml",
+            CargoToml::new(&self.schema.cli.name)
                 .with_version(self.schema.cli.version.clone())
                 .with_dependencies(dependencies)
                 .render(),
-        });
+        ));
 
-        // generated/mod.rs
-        files.push(PreviewFile {
-            path: "src/generated/mod.rs".to_string(),
-            content: GeneratedMod.render(),
-        });
+        // Infrastructure files
+        registry.register(FileEntry::infrastructure(
+            "src/main.rs",
+            MainRs::new(is_async).render(),
+        ));
+        registry.register(FileEntry::infrastructure(
+            "src/app.rs",
+            AppRs::new(is_async).render(),
+        ));
+        registry.register(FileEntry::infrastructure(
+            "src/context.rs",
+            ContextRs::new(context_fields).render(),
+        ));
 
-        // cli.rs
+        // Generated module files
+        registry.register(FileEntry::generated(
+            "src/generated/mod.rs",
+            GeneratedMod.render(),
+        ));
+
         let commands: Vec<CommandInfo> = self
             .schema
             .commands
@@ -106,9 +104,9 @@ impl<'a> Generator<'a> {
             })
             .collect();
 
-        files.push(PreviewFile {
-            path: "src/generated/cli.rs".to_string(),
-            content: CliRs::new(
+        registry.register(FileEntry::generated(
+            "src/generated/cli.rs",
+            CliRs::new(
                 &self.schema.cli.name,
                 self.schema.cli.version.clone(),
                 self.schema.cli.description.clone(),
@@ -116,87 +114,48 @@ impl<'a> Generator<'a> {
                 is_async,
             )
             .render(),
-        });
+        ));
 
-        // commands/mod.rs
-        files.push(PreviewFile {
-            path: "src/generated/commands/mod.rs".to_string(),
-            content: CommandsMod::new(self.schema.commands.keys().cloned().collect()).render(),
-        });
+        registry.register(FileEntry::generated(
+            "src/generated/commands/mod.rs",
+            CommandsMod::new(self.schema.commands.keys().cloned().collect()).render(),
+        ));
 
         // Individual command files
         for (name, command) in &self.schema.commands {
             let content = self.generate_command_file(name, command, is_async);
-            // Use snake_case for file names (handles dashed names like "my-command" -> "my_command")
             let file_name = to_snake_case(name);
-            files.push(PreviewFile {
-                path: format!("src/generated/commands/{}.rs", file_name),
-                content: CommandRs::new(name, content).render(),
-            });
+            registry.register(FileEntry::generated(
+                format!("src/generated/commands/{}.rs", file_name),
+                CommandRs::new(name, content).render(),
+            ));
         }
 
-        files
+        registry
+    }
+
+    /// Preview generated files without writing to disk
+    fn preview_files(&self) -> Vec<PreviewFile> {
+        self.build_registry()
+            .preview()
+            .into_iter()
+            .map(|entry| PreviewFile {
+                path: entry.path,
+                content: entry.content,
+            })
+            .collect()
     }
 
     /// Generate all files into the specified output directory
     fn generate_files(&self, output_dir: &Path) -> Result<GenerateResult> {
-        let handlers_dir = output_dir.join(paths::HANDLERS_DIR);
-
-        // Collect context field info
-        let context_fields = collect_context_fields(&self.schema.context);
-        // Async only if database context exists (HTTP is sync)
+        let handlers_dir = output_dir.join("src/handlers");
         let is_async = self.schema.context.has_async();
 
-        // Generate context.rs
-        ContextRs::new(context_fields).write(output_dir)?;
+        // Write all registered files using the registry
+        let registry = self.build_registry();
+        registry.write_all(output_dir)?;
 
-        // Generate main.rs
-        MainRs::new(is_async).write(output_dir)?;
-
-        // Generate app.rs
-        AppRs::new(is_async).write(output_dir)?;
-
-        // Generate Cargo.toml with all dependencies
-        let dependencies = self.collect_dependencies(is_async);
-        CargoToml::new(&self.schema.cli.name)
-            .with_version(self.schema.cli.version.clone())
-            .with_dependencies(dependencies)
-            .write(output_dir)?;
-
-        // Generate mod.rs for generated module
-        GeneratedMod.write(output_dir)?;
-
-        // Generate cli.rs with main Cli struct and dispatch
-        let commands: Vec<CommandInfo> = self
-            .schema
-            .commands
-            .iter()
-            .map(|(name, cmd)| CommandInfo {
-                name: name.clone(),
-                description: cmd.description.clone(),
-                has_subcommands: cmd.has_subcommands(),
-            })
-            .collect();
-
-        CliRs::new(
-            &self.schema.cli.name,
-            self.schema.cli.version.clone(),
-            self.schema.cli.description.clone(),
-            commands,
-            is_async,
-        )
-        .write(output_dir)?;
-
-        // Generate commands/mod.rs
-        CommandsMod::new(self.schema.commands.keys().cloned().collect()).write(output_dir)?;
-
-        // Generate individual command files
-        for (name, command) in &self.schema.commands {
-            let content = self.generate_command_file(name, command, is_async);
-            CommandRs::new(name, content).write(output_dir)?;
-        }
-
-        // Generate handlers
+        // Generate handlers (handled separately due to special logic)
         let result = self.generate_handlers(&handlers_dir, output_dir, is_async)?;
 
         Ok(result)
@@ -233,9 +192,8 @@ impl<'a> Generator<'a> {
             .collect();
 
         // Find and delete orphaned generated command files
-        let commands_dir = output_dir.join(paths::COMMANDS_DIR);
-        let orphan_commands =
-            find_orphan_commands(&commands_dir, paths::FILE_EXTENSION, &expected_commands)?;
+        let commands_dir = output_dir.join("src/generated/commands");
+        let orphan_commands = find_orphan_commands(&commands_dir, "rs", &expected_commands)?;
         for path in orphan_commands {
             std::fs::remove_file(&path)?;
             let relative = path.strip_prefix(output_dir).unwrap_or(&path);
@@ -243,8 +201,8 @@ impl<'a> Generator<'a> {
         }
 
         // Find and handle orphaned handler files
-        let handlers_dir = output_dir.join(paths::HANDLERS_DIR);
-        let handler_paths = HandlerPaths::new(&handlers_dir, paths::FILE_EXTENSION);
+        let handlers_dir = output_dir.join("src/handlers");
+        let handler_paths = HandlerPaths::new(&handlers_dir, "rs");
         let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
 
         for orphan in orphan_handlers {
@@ -295,17 +253,16 @@ impl<'a> Generator<'a> {
             .collect();
 
         // Find orphaned generated command files
-        let commands_dir = output_dir.join(paths::COMMANDS_DIR);
-        let orphan_commands =
-            find_orphan_commands(&commands_dir, paths::FILE_EXTENSION, &expected_commands)?;
+        let commands_dir = output_dir.join("src/generated/commands");
+        let orphan_commands = find_orphan_commands(&commands_dir, "rs", &expected_commands)?;
         for path in orphan_commands {
             let relative = path.strip_prefix(output_dir).unwrap_or(&path);
             result.deleted_commands.push(relative.display().to_string());
         }
 
         // Find orphaned handler files
-        let handlers_dir = output_dir.join(paths::HANDLERS_DIR);
-        let handler_paths = HandlerPaths::new(&handlers_dir, paths::FILE_EXTENSION);
+        let handlers_dir = output_dir.join("src/handlers");
+        let handler_paths = HandlerPaths::new(&handlers_dir, "rs");
         let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
 
         for orphan in orphan_handlers {

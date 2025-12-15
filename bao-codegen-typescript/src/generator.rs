@@ -4,9 +4,8 @@ use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
     builder::CodeBuilder,
-    generation::HandlerPaths,
+    generation::{FileEntry, FileRegistry, HandlerPaths},
     language::{GenerateResult, LanguageCodegen, PreviewFile},
-    paths::typescript as paths,
     schema::{CommandInfo, CommandTree, collect_context_fields},
 };
 use baobao_core::{GeneratedFile, to_camel_case, to_kebab_case};
@@ -53,46 +52,39 @@ impl<'a> Generator<'a> {
         }
     }
 
-    /// Preview generated files without writing to disk.
-    fn preview_files(&self) -> Vec<PreviewFile> {
-        let mut files = Vec::new();
+    /// Build a file registry with all generated files.
+    ///
+    /// This centralizes file registration, making generation declarative.
+    fn build_registry(&self) -> FileRegistry {
+        let mut registry = FileRegistry::new();
 
         // Collect context field info
         let context_fields = collect_context_fields(&self.schema.context);
 
-        // context.ts
-        files.push(PreviewFile {
-            path: "src/context.ts".to_string(),
-            content: ContextTs::new(context_fields).render(),
-        });
-
-        // index.ts
-        files.push(PreviewFile {
-            path: "src/index.ts".to_string(),
-            content: IndexTs.render(),
-        });
-
-        // package.json
-        files.push(PreviewFile {
-            path: "package.json".to_string(),
-            content: PackageJson::new(&self.schema.cli.name)
+        // Config files
+        registry.register(FileEntry::config(
+            "package.json",
+            PackageJson::new(&self.schema.cli.name)
                 .with_version(self.schema.cli.version.clone())
                 .render(),
-        });
+        ));
+        registry.register(FileEntry::config("tsconfig.json", TsConfig.render()));
+        registry.register(FileEntry::config(".gitignore", GitIgnore.render()));
+        registry.register(FileEntry::config(
+            "bao.toml",
+            BaoToml::new(&self.schema.cli.name, Language::TypeScript)
+                .with_version(self.schema.cli.version.clone())
+                .render(),
+        ));
 
-        // tsconfig.json
-        files.push(PreviewFile {
-            path: "tsconfig.json".to_string(),
-            content: TsConfig.render(),
-        });
+        // Infrastructure files
+        registry.register(FileEntry::infrastructure("src/index.ts", IndexTs.render()));
+        registry.register(FileEntry::infrastructure(
+            "src/context.ts",
+            ContextTs::new(context_fields).render(),
+        ));
 
-        // .gitignore
-        files.push(PreviewFile {
-            path: ".gitignore".to_string(),
-            content: GitIgnore.render(),
-        });
-
-        // cli.ts
+        // Generated files
         let commands: Vec<CommandInfo> = self
             .schema
             .commands
@@ -104,29 +96,29 @@ impl<'a> Generator<'a> {
             })
             .collect();
 
-        files.push(PreviewFile {
-            path: "src/cli.ts".to_string(),
-            content: CliTs::new(
+        registry.register(FileEntry::generated(
+            "src/cli.ts",
+            CliTs::new(
                 &self.schema.cli.name,
                 self.schema.cli.version.clone(),
                 self.schema.cli.description.clone(),
                 commands,
             )
             .render(),
-        });
+        ));
 
         // Individual command files (recursively collect all commands)
         for (name, command) in &self.schema.commands {
-            self.collect_command_previews(&mut files, name, command, vec![name.clone()]);
+            self.register_command_files(&mut registry, name, command, vec![name.clone()]);
         }
 
-        files
+        registry
     }
 
-    /// Recursively collect command file previews.
-    fn collect_command_previews(
+    /// Recursively register command files in the registry.
+    fn register_command_files(
         &self,
-        files: &mut Vec<PreviewFile>,
+        registry: &mut FileRegistry,
         name: &str,
         command: &Command,
         path_segments: Vec<String>,
@@ -138,116 +130,45 @@ impl<'a> Generator<'a> {
             .collect::<Vec<_>>()
             .join("/");
 
-        files.push(PreviewFile {
-            path: format!("src/commands/{}.ts", file_path),
-            content: CommandTs::nested(path_segments.clone(), content).render(),
-        });
+        registry.register(FileEntry::generated(
+            format!("src/commands/{}.ts", file_path),
+            CommandTs::nested(path_segments.clone(), content).render(),
+        ));
 
-        // Recursively collect subcommand previews
+        // Recursively register subcommand files
         if command.has_subcommands() {
             for (sub_name, sub_command) in &command.commands {
                 let mut sub_path = path_segments.clone();
                 sub_path.push(sub_name.clone());
-                self.collect_command_previews(files, sub_name, sub_command, sub_path);
+                self.register_command_files(registry, sub_name, sub_command, sub_path);
             }
         }
+    }
+
+    /// Preview generated files without writing to disk.
+    fn preview_files(&self) -> Vec<PreviewFile> {
+        self.build_registry()
+            .preview()
+            .into_iter()
+            .map(|entry| PreviewFile {
+                path: entry.path,
+                content: entry.content,
+            })
+            .collect()
     }
 
     /// Generate all files into the specified output directory.
     fn generate_files(&self, output_dir: &Path) -> Result<GenerateResult> {
-        let handlers_dir = output_dir.join(paths::HANDLERS_DIR);
+        let handlers_dir = output_dir.join("src/handlers");
 
-        // Collect context field info
-        let context_fields = collect_context_fields(&self.schema.context);
+        // Write all registered files using the registry
+        let registry = self.build_registry();
+        registry.write_all(output_dir)?;
 
-        // Generate context.ts
-        ContextTs::new(context_fields).write(output_dir)?;
-
-        // Generate index.ts
-        IndexTs.write(output_dir)?;
-
-        // Generate package.json
-        PackageJson::new(&self.schema.cli.name)
-            .with_version(self.schema.cli.version.clone())
-            .write(output_dir)?;
-
-        // Generate tsconfig.json
-        TsConfig.write(output_dir)?;
-
-        // Generate .gitignore
-        GitIgnore.write(output_dir)?;
-
-        // Generate bao.toml
-        BaoToml::new(&self.schema.cli.name, Language::TypeScript)
-            .with_version(self.schema.cli.version.clone())
-            .write(output_dir)?;
-
-        // Generate cli.ts with main CLI setup
-        let commands: Vec<CommandInfo> = self
-            .schema
-            .commands
-            .iter()
-            .map(|(name, cmd)| CommandInfo {
-                name: name.clone(),
-                description: cmd.description.clone(),
-                has_subcommands: cmd.has_subcommands(),
-            })
-            .collect();
-
-        CliTs::new(
-            &self.schema.cli.name,
-            self.schema.cli.version.clone(),
-            self.schema.cli.description.clone(),
-            commands,
-        )
-        .write(output_dir)?;
-
-        // Ensure commands directory exists
-        std::fs::create_dir_all(output_dir.join(paths::COMMANDS_DIR))?;
-
-        // Generate individual command files (recursively for nested commands)
-        for (name, command) in &self.schema.commands {
-            self.generate_command_files_recursive(output_dir, name, command, vec![name.clone()])?;
-        }
-
-        // Generate handlers
+        // Generate handlers (handled separately due to special logic)
         let result = self.generate_handlers(&handlers_dir, output_dir)?;
 
         Ok(result)
-    }
-
-    /// Recursively generate command files for a command and all its subcommands.
-    fn generate_command_files_recursive(
-        &self,
-        output_dir: &Path,
-        name: &str,
-        command: &Command,
-        path_segments: Vec<String>,
-    ) -> Result<()> {
-        // Generate this command's file
-        let content = self.generate_command_file(name, command, &path_segments);
-
-        // Ensure parent directory exists for nested commands
-        if path_segments.len() > 1 {
-            let mut dir_path = output_dir.join(paths::COMMANDS_DIR);
-            for segment in &path_segments[..path_segments.len() - 1] {
-                dir_path = dir_path.join(to_kebab_case(segment));
-            }
-            std::fs::create_dir_all(&dir_path)?;
-        }
-
-        CommandTs::nested(path_segments.clone(), content).write(output_dir)?;
-
-        // Recursively generate subcommand files
-        if command.has_subcommands() {
-            for (sub_name, sub_command) in &command.commands {
-                let mut sub_path = path_segments.clone();
-                sub_path.push(sub_name.clone());
-                self.generate_command_files_recursive(output_dir, sub_name, sub_command, sub_path)?;
-            }
-        }
-
-        Ok(())
     }
 
     fn generate_command_file(
@@ -494,7 +415,7 @@ impl<'a> Generator<'a> {
         }
 
         // Find orphan handlers using shared utility
-        let handler_paths = HandlerPaths::new(handlers_dir, paths::FILE_EXTENSION);
+        let handler_paths = HandlerPaths::new(handlers_dir, "ts");
         let orphan_handlers = handler_paths.find_orphans(&expected_handlers)?;
 
         Ok(GenerateResult {
