@@ -463,29 +463,52 @@ impl<'a> Generator<'a> {
         output_dir: &Path,
         is_async: bool,
     ) -> Result<GenerateResult> {
-        let mut created_handlers = Vec::new();
+        use baobao_core::{File, WriteResult};
 
-        // Collect all expected handler paths, converting to snake_case for Rust file names
-        let expected_handlers: std::collections::HashSet<String> = CommandTree::new(self.schema)
-            .collect_paths()
-            .into_iter()
-            .map(|path| {
-                // Convert each segment of the path to snake_case
-                path.split('/')
-                    .map(to_snake_case)
-                    .collect::<Vec<_>>()
-                    .join("/")
-            })
+        let mut created_handlers = Vec::new();
+        let tree = CommandTree::new(self.schema);
+
+        // Collect all expected handler paths (snake_case for Rust file names)
+        let expected_handlers: HashSet<String> = tree
+            .iter()
+            .map(|cmd| cmd.path_transformed("/", to_snake_case))
             .collect();
 
-        // Generate handlers/mod.rs (always regenerated)
+        // Generate top-level handlers/mod.rs (always regenerated)
         HandlersMod::new(self.schema.commands.keys().cloned().collect()).write(output_dir)?;
 
-        // Generate stub handlers for missing commands
-        for (name, command) in &self.schema.commands {
-            let created =
-                self.generate_handler_stubs(handlers_dir, output_dir, name, command, "", is_async)?;
-            created_handlers.extend(created);
+        // Create mod.rs files for all parent commands (command groups)
+        for cmd in tree.parents() {
+            let dir = cmd.handler_dir(handlers_dir, to_snake_case);
+            std::fs::create_dir_all(&dir)?;
+
+            // Collect subcommand names for mod.rs
+            let subcommand_names: Vec<String> = cmd.command.commands.keys().cloned().collect();
+            let handlers_mod = HandlersMod::new(subcommand_names);
+            File::new(dir.join("mod.rs"), handlers_mod.render()).write()?;
+        }
+
+        // Create stub files for all leaf commands (actual handlers)
+        for cmd in tree.leaves() {
+            let dir = cmd.handler_dir(handlers_dir, to_snake_case);
+            std::fs::create_dir_all(&dir)?;
+
+            let display_path = cmd.path_transformed("/", to_snake_case);
+            let pascal_name = to_pascal_case(cmd.name);
+
+            // Args types are in the top-level command module
+            let top_level_cmd = to_snake_case(cmd.path.first().unwrap_or(&cmd.name));
+            let args_import = format!(
+                "crate::generated::commands::{}::{}Args",
+                top_level_cmd, pascal_name
+            );
+
+            let stub = HandlerStub::new(cmd.name, &args_import, is_async);
+            let result = stub.write(&dir)?;
+
+            if matches!(result, WriteResult::Written) {
+                created_handlers.push(format!("{}.rs", display_path));
+            }
         }
 
         // Find orphan handlers using shared utility
@@ -496,86 +519,6 @@ impl<'a> Generator<'a> {
             created_handlers,
             orphan_handlers,
         })
-    }
-
-    /// Generate stub handler files for a command (recursively for subcommands)
-    fn generate_handler_stubs(
-        &self,
-        handlers_dir: &Path,
-        _output_dir: &Path,
-        name: &str,
-        command: &Command,
-        prefix: &str,
-        is_async: bool,
-    ) -> Result<Vec<String>> {
-        use baobao_core::{File, WriteResult};
-
-        let mut created = Vec::new();
-
-        // Path for display/tracking purposes (use snake_case to match actual file names)
-        let snake_name = to_snake_case(name);
-        let display_path = if prefix.is_empty() {
-            snake_name.clone()
-        } else {
-            format!("{}/{}", prefix, snake_name)
-        };
-
-        if command.has_subcommands() {
-            // Create mod.rs for the subcommand directory
-            // Use snake_case for directory names (handles dashed names)
-            let dir_name = to_snake_case(name);
-            let subdir = handlers_dir.join(&dir_name);
-            let handlers_mod = HandlersMod::new(command.commands.keys().cloned().collect());
-            File::new(subdir.join("mod.rs"), handlers_mod.render()).write()?;
-
-            // Recursively generate stubs for subcommands
-            for (sub_name, sub_command) in &command.commands {
-                // Use snake_case for prefix to match directory structure
-                let new_prefix = if prefix.is_empty() {
-                    snake_name.clone()
-                } else {
-                    format!("{}/{}", prefix, snake_name)
-                };
-                let sub_created = self.generate_handler_stubs(
-                    &subdir,
-                    _output_dir,
-                    sub_name,
-                    sub_command,
-                    &new_prefix,
-                    is_async,
-                )?;
-                created.extend(sub_created);
-            }
-        } else {
-            // Leaf command - generate stub if file doesn't exist
-            let pascal_name = to_pascal_case(name);
-            // Args types are always in the top-level command file, not nested modules
-            // So we only use the first segment of the path for the import
-            // Use snake_case for module paths (handles dashed names)
-            let args_import = if prefix.is_empty() {
-                format!(
-                    "crate::generated::commands::{}::{}Args",
-                    snake_name, pascal_name
-                )
-            } else {
-                // Get only the first segment (top-level command name)
-                // prefix is already snake_case from our recursive calls
-                let top_level_cmd = prefix.split('/').next().unwrap_or(prefix);
-                format!(
-                    "crate::generated::commands::{}::{}Args",
-                    top_level_cmd, pascal_name
-                )
-            };
-
-            let stub = HandlerStub::new(name, &args_import, is_async);
-            let result = stub.write(handlers_dir)?;
-
-            if matches!(result, WriteResult::Written) {
-                created.push(format!("{}.rs", display_path));
-            }
-        }
-
-        Ok(created)
     }
 
     fn generate_subcommand_struct(

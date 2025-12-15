@@ -401,28 +401,42 @@ impl<'a> Generator<'a> {
 
     /// Generate handlers directory with stub files for missing handlers.
     fn generate_handlers(&self, handlers_dir: &Path, _output_dir: &Path) -> Result<GenerateResult> {
-        let mut created_handlers = Vec::new();
+        use baobao_core::WriteResult;
 
-        // Collect all expected handler paths, using kebab-case for TypeScript file names
-        let expected_handlers: HashSet<String> = CommandTree::new(self.schema)
-            .collect_paths()
-            .into_iter()
-            .map(|path| {
-                path.split('/')
-                    .map(to_kebab_case)
-                    .collect::<Vec<_>>()
-                    .join("/")
-            })
+        let mut created_handlers = Vec::new();
+        let tree = CommandTree::new(self.schema);
+
+        // Collect all expected handler paths (kebab-case for TypeScript file names)
+        let expected_handlers: HashSet<String> = tree
+            .iter()
+            .map(|cmd| cmd.path_transformed("/", to_kebab_case))
             .collect();
 
         // Ensure handlers directory exists
         std::fs::create_dir_all(handlers_dir)?;
 
-        // Generate stub handlers for missing commands
-        for (name, command) in &self.schema.commands {
-            let created =
-                self.generate_handler_stubs(handlers_dir, name, command, vec![name.clone()])?;
-            created_handlers.extend(created);
+        // Create directories for all parent commands (command groups)
+        for cmd in tree.parents() {
+            let dir = cmd.handler_dir(handlers_dir, to_kebab_case);
+            std::fs::create_dir_all(&dir)?;
+        }
+
+        // Create stub files for all leaf commands (actual handlers)
+        for cmd in tree.leaves() {
+            let dir = cmd.handler_dir(handlers_dir, to_kebab_case);
+            std::fs::create_dir_all(&dir)?;
+
+            let display_path = cmd.path_transformed("/", to_kebab_case);
+            let path_segments = cmd.path.iter().map(|s| s.to_string()).collect();
+            let has_args = !cmd.command.args.is_empty();
+            let has_options = !cmd.command.flags.is_empty();
+
+            let stub = HandlerTs::nested(cmd.name, path_segments, has_args, has_options);
+            let result = stub.write(&dir)?;
+
+            if matches!(result, WriteResult::Written) {
+                created_handlers.push(format!("{}.ts", display_path));
+            }
         }
 
         // Find orphan handlers using shared utility
@@ -433,53 +447,6 @@ impl<'a> Generator<'a> {
             created_handlers,
             orphan_handlers,
         })
-    }
-
-    /// Generate stub handler files for a command (recursively for subcommands).
-    fn generate_handler_stubs(
-        &self,
-        handlers_dir: &Path,
-        name: &str,
-        command: &Command,
-        path_segments: Vec<String>,
-    ) -> Result<Vec<String>> {
-        use baobao_core::WriteResult;
-
-        let mut created = Vec::new();
-
-        let kebab_name = to_kebab_case(name);
-        let display_path = path_segments
-            .iter()
-            .map(|s| to_kebab_case(s))
-            .collect::<Vec<_>>()
-            .join("/");
-
-        if command.has_subcommands() {
-            // Create directory for subcommands
-            let subdir = handlers_dir.join(&kebab_name);
-            std::fs::create_dir_all(&subdir)?;
-
-            // Recursively generate stubs for subcommands
-            for (sub_name, sub_command) in &command.commands {
-                let mut sub_path = path_segments.clone();
-                sub_path.push(sub_name.clone());
-                let sub_created =
-                    self.generate_handler_stubs(&subdir, sub_name, sub_command, sub_path)?;
-                created.extend(sub_created);
-            }
-        } else {
-            // Leaf command - generate stub if file doesn't exist
-            let has_args = !command.args.is_empty();
-            let has_options = !command.flags.is_empty();
-            let stub = HandlerTs::nested(name, path_segments, has_args, has_options);
-            let result = stub.write(handlers_dir)?;
-
-            if matches!(result, WriteResult::Written) {
-                created.push(format!("{}.ts", display_path));
-            }
-        }
-
-        Ok(created)
     }
 
     /// Clean orphaned generated files.

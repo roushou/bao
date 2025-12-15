@@ -180,6 +180,26 @@ impl<'a> FlatCommand<'a> {
         self.path.join(sep)
     }
 
+    /// Get the full path with a name transformer applied to each segment.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use baobao_core::to_snake_case;
+    /// let cmd = FlatCommand { path: vec!["my-db", "run-migration"], .. };
+    /// assert_eq!(cmd.path_transformed("/", to_snake_case), "my_db/run_migration");
+    /// ```
+    pub fn path_transformed<F>(&self, sep: &str, transform: F) -> String
+    where
+        F: Fn(&str) -> String,
+    {
+        self.path
+            .iter()
+            .map(|s| transform(s))
+            .collect::<Vec<_>>()
+            .join(sep)
+    }
+
     /// Get the parent path (excluding this command's name).
     pub fn parent_path(&self) -> Vec<&'a str> {
         if self.path.len() > 1 {
@@ -187,5 +207,36 @@ impl<'a> FlatCommand<'a> {
         } else {
             Vec::new()
         }
+    }
+
+    /// Get the directory path for this command's handler file.
+    ///
+    /// For a leaf command at path ["db", "migrate"], returns the path to
+    /// the directory where the handler file should be created.
+    pub fn handler_dir(
+        &self,
+        base: &std::path::Path,
+        transform: impl Fn(&str) -> String,
+    ) -> std::path::PathBuf {
+        let mut dir = base.to_path_buf();
+        // For leaf commands, we want the parent directory
+        // For parent commands, we want the full directory path
+        let segments = if self.is_leaf {
+            &self.path[..self.path.len().saturating_sub(1)]
+        } else {
+            &self.path[..]
+        };
+        for segment in segments {
+            dir.push(transform(segment));
+        }
+        dir
+    }
+
+    /// Get the path segments as owned strings with a transform applied.
+    pub fn path_segments_transformed<F>(&self, transform: F) -> Vec<String>
+    where
+        F: Fn(&str) -> String,
+    {
+        self.path.iter().map(|s| transform(s)).collect()
     }
 }
