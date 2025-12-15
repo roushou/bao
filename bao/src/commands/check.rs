@@ -47,7 +47,7 @@ impl CheckCommand {
                 if ctx_count == 1 { "" } else { "s" }
             );
             for (name, field) in schema.context.fields() {
-                println!("    {} ({})", name, field.rust_type());
+                println!("    {} ({})", name, field.type_name());
             }
         }
 

@@ -31,10 +31,6 @@ impl DatabaseConfig for PostgresConfig {
         &self.0.pool
     }
 
-    fn rust_type(&self) -> &'static str {
-        "sqlx::PgPool"
-    }
-
     fn sqlx_feature(&self) -> &'static str {
         "postgres"
     }

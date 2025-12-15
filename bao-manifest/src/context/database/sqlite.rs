@@ -117,7 +117,7 @@ mod tests {
 
         let database = schema.context.database.as_ref().unwrap();
         assert!(matches!(database, ContextField::Sqlite(_)));
-        assert_eq!(database.rust_type(), "sqlx::SqlitePool");
+        assert_eq!(database.type_name(), "sqlite");
     }
 
     #[test]

@@ -10,4 +10,6 @@ mod commands;
 mod types;
 
 pub use commands::{CommandTree, FlatCommand};
-pub use types::{CommandInfo, ContextFieldInfo, PoolConfigInfo, SqliteConfigInfo};
+pub use types::{
+    CommandInfo, ContextFieldInfo, PoolConfigInfo, SqliteConfigInfo, collect_context_fields,
+};

@@ -1,6 +1,7 @@
 //! Types for code generation.
 
-use baobao_core::ContextFieldType;
+use baobao_core::{ContextFieldType, DatabaseType};
+use baobao_manifest::{Context, ContextField};
 
 /// Info about a command for code generation
 #[derive(Debug, Clone)]
@@ -64,4 +65,59 @@ impl SqliteConfigInfo {
             || self.busy_timeout.is_some()
             || self.foreign_keys.is_some()
     }
+}
+
+/// Collect context fields from the manifest into code generation info.
+///
+/// This is a shared utility to avoid duplicating the collection logic
+/// in each language generator.
+pub fn collect_context_fields(context: &Context) -> Vec<ContextFieldInfo> {
+    context
+        .fields()
+        .into_iter()
+        .map(|(name, field)| {
+            let env_var = field
+                .env()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| field.default_env().to_string());
+
+            let pool = field
+                .pool_config()
+                .map(|p| PoolConfigInfo {
+                    max_connections: p.max_connections,
+                    min_connections: p.min_connections,
+                    acquire_timeout: p.acquire_timeout,
+                    idle_timeout: p.idle_timeout,
+                    max_lifetime: p.max_lifetime,
+                })
+                .unwrap_or_default();
+
+            let sqlite = field.sqlite_config().map(|s| SqliteConfigInfo {
+                path: s.path.clone(),
+                create_if_missing: s.create_if_missing,
+                read_only: s.read_only,
+                journal_mode: s.journal_mode.as_ref().map(|m| m.as_str().to_string()),
+                synchronous: s.synchronous.as_ref().map(|m| m.as_str().to_string()),
+                busy_timeout: s.busy_timeout,
+                foreign_keys: s.foreign_keys,
+            });
+
+            // Convert schema ContextField to core ContextFieldType
+            let field_type = match &field {
+                ContextField::Postgres(_) => ContextFieldType::Database(DatabaseType::Postgres),
+                ContextField::Mysql(_) => ContextFieldType::Database(DatabaseType::Mysql),
+                ContextField::Sqlite(_) => ContextFieldType::Database(DatabaseType::Sqlite),
+                ContextField::Http(_) => ContextFieldType::Http,
+            };
+
+            ContextFieldInfo {
+                name: name.to_string(),
+                field_type,
+                env_var,
+                is_async: field.is_async(),
+                pool,
+                sqlite,
+            }
+        })
+        .collect()
 }

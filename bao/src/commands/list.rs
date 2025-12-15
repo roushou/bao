@@ -33,7 +33,7 @@ impl ListCommand {
         if !schema.context.is_empty() {
             println!("\nContext:");
             for (name, field) in schema.context.fields() {
-                println!("  {} ({})", name, field.rust_type());
+                println!("  {} ({})", name, field.type_name());
             }
         }
 

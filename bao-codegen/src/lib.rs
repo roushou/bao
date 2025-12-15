@@ -16,6 +16,7 @@ pub mod adapters;
 pub mod builder;
 pub mod generation;
 pub mod language;
+pub mod paths;
 pub mod schema;
 
 #[cfg(any(test, feature = "testing"))]

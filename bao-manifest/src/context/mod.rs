@@ -56,11 +56,15 @@ impl ContextField {
         }
     }
 
-    /// Get the Rust type for this context field
-    pub fn rust_type(&self) -> &'static str {
-        match self.as_database() {
-            Some(db) => db.rust_type(),
-            None => "reqwest::Client",
+    /// Get a human-readable type name for display purposes.
+    ///
+    /// Returns names like "postgres", "mysql", "sqlite", "http".
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            ContextField::Postgres(_) => "postgres",
+            ContextField::Mysql(_) => "mysql",
+            ContextField::Sqlite(_) => "sqlite",
+            ContextField::Http(_) => "http",
         }
     }
 

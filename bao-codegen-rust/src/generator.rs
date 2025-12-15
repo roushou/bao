@@ -5,11 +5,11 @@ use baobao_codegen::{
     builder::CodeBuilder,
     generation::{HandlerPaths, find_orphan_commands},
     language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
-    schema::{CommandInfo, CommandTree, ContextFieldInfo, PoolConfigInfo, SqliteConfigInfo},
+    paths::rust as paths,
+    schema::{CommandInfo, CommandTree, collect_context_fields},
 };
 use baobao_core::{
-    ContextFieldType, DatabaseType, GeneratedFile, to_pascal_case, to_snake_case,
-    toml_value_to_string,
+    DatabaseType, GeneratedFile, to_pascal_case, to_snake_case, toml_value_to_string,
 };
 use baobao_manifest::{ArgType, Command, Manifest};
 use eyre::Result;
@@ -56,7 +56,7 @@ impl<'a> Generator<'a> {
         let mut files = Vec::new();
 
         // Collect context field info
-        let context_fields = self.collect_context_fields();
+        let context_fields = collect_context_fields(&self.schema.context);
         // Async only if database context exists (HTTP is sync)
         let is_async = self.schema.context.has_async();
 
@@ -140,10 +140,10 @@ impl<'a> Generator<'a> {
 
     /// Generate all files into the specified output directory
     fn generate_files(&self, output_dir: &Path) -> Result<GenerateResult> {
-        let handlers_dir = output_dir.join("src").join("handlers");
+        let handlers_dir = output_dir.join(paths::HANDLERS_DIR);
 
         // Collect context field info
-        let context_fields = self.collect_context_fields();
+        let context_fields = collect_context_fields(&self.schema.context);
         // Async only if database context exists (HTTP is sync)
         let is_async = self.schema.context.has_async();
 
@@ -233,8 +233,9 @@ impl<'a> Generator<'a> {
             .collect();
 
         // Find and delete orphaned generated command files
-        let commands_dir = output_dir.join("src").join("generated").join("commands");
-        let orphan_commands = find_orphan_commands(&commands_dir, "rs", &expected_commands)?;
+        let commands_dir = output_dir.join(paths::COMMANDS_DIR);
+        let orphan_commands =
+            find_orphan_commands(&commands_dir, paths::FILE_EXTENSION, &expected_commands)?;
         for path in orphan_commands {
             std::fs::remove_file(&path)?;
             let relative = path.strip_prefix(output_dir).unwrap_or(&path);
@@ -242,8 +243,8 @@ impl<'a> Generator<'a> {
         }
 
         // Find and handle orphaned handler files
-        let handlers_dir = output_dir.join("src").join("handlers");
-        let handler_paths = HandlerPaths::new(&handlers_dir, "rs");
+        let handlers_dir = output_dir.join(paths::HANDLERS_DIR);
+        let handler_paths = HandlerPaths::new(&handlers_dir, paths::FILE_EXTENSION);
         let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
 
         for orphan in orphan_handlers {
@@ -294,16 +295,17 @@ impl<'a> Generator<'a> {
             .collect();
 
         // Find orphaned generated command files
-        let commands_dir = output_dir.join("src").join("generated").join("commands");
-        let orphan_commands = find_orphan_commands(&commands_dir, "rs", &expected_commands)?;
+        let commands_dir = output_dir.join(paths::COMMANDS_DIR);
+        let orphan_commands =
+            find_orphan_commands(&commands_dir, paths::FILE_EXTENSION, &expected_commands)?;
         for path in orphan_commands {
             let relative = path.strip_prefix(output_dir).unwrap_or(&path);
             result.deleted_commands.push(relative.display().to_string());
         }
 
         // Find orphaned handler files
-        let handlers_dir = output_dir.join("src").join("handlers");
-        let handler_paths = HandlerPaths::new(&handlers_dir, "rs");
+        let handlers_dir = output_dir.join(paths::HANDLERS_DIR);
+        let handler_paths = HandlerPaths::new(&handlers_dir, paths::FILE_EXTENSION);
         let orphan_handlers = handler_paths.find_orphans_with_status(&expected_handlers)?;
 
         for orphan in orphan_handlers {
@@ -337,60 +339,6 @@ impl<'a> Generator<'a> {
         }
 
         Ok(())
-    }
-
-    fn collect_context_fields(&self) -> Vec<ContextFieldInfo> {
-        use baobao_manifest::ContextField;
-
-        self.schema
-            .context
-            .fields()
-            .into_iter()
-            .map(|(name, field)| {
-                let env_var = field
-                    .env()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| field.default_env().to_string());
-
-                let pool = field
-                    .pool_config()
-                    .map(|p| PoolConfigInfo {
-                        max_connections: p.max_connections,
-                        min_connections: p.min_connections,
-                        acquire_timeout: p.acquire_timeout,
-                        idle_timeout: p.idle_timeout,
-                        max_lifetime: p.max_lifetime,
-                    })
-                    .unwrap_or_default();
-
-                let sqlite = field.sqlite_config().map(|s| SqliteConfigInfo {
-                    path: s.path.clone(),
-                    create_if_missing: s.create_if_missing,
-                    read_only: s.read_only,
-                    journal_mode: s.journal_mode.as_ref().map(|m| m.as_str().to_string()),
-                    synchronous: s.synchronous.as_ref().map(|m| m.as_str().to_string()),
-                    busy_timeout: s.busy_timeout,
-                    foreign_keys: s.foreign_keys,
-                });
-
-                // Convert schema ContextField to core ContextFieldType
-                let field_type = match &field {
-                    ContextField::Postgres(_) => ContextFieldType::Database(DatabaseType::Postgres),
-                    ContextField::Mysql(_) => ContextFieldType::Database(DatabaseType::Mysql),
-                    ContextField::Sqlite(_) => ContextFieldType::Database(DatabaseType::Sqlite),
-                    ContextField::Http(_) => ContextFieldType::Http,
-                };
-
-                ContextFieldInfo {
-                    name: name.to_string(),
-                    field_type,
-                    env_var,
-                    is_async: field.is_async(),
-                    pool,
-                    sqlite,
-                }
-            })
-            .collect()
     }
 
     fn collect_dependencies(&self, has_async_context: bool) -> Vec<(String, String)> {
@@ -488,7 +436,7 @@ impl<'a> Generator<'a> {
 
         // Generate positional args
         for (arg_name, arg) in &command.args {
-            let rust_type = arg.arg_type.rust_type();
+            let rust_type = Self::map_arg_type(&arg.arg_type);
             let field_type = if arg.required && arg.default.is_none() {
                 rust_type.to_string()
             } else {
@@ -515,7 +463,7 @@ impl<'a> Generator<'a> {
                 ));
             }
 
-            let rust_type = flag.flag_type.rust_type();
+            let rust_type = Self::map_arg_type(&flag.flag_type);
             let field_type = if flag.flag_type == ArgType::Bool {
                 "bool".to_string()
             } else if flag.default.is_some() {
@@ -533,6 +481,17 @@ impl<'a> Generator<'a> {
         }
 
         s.build()
+    }
+
+    /// Map manifest ArgType to Rust type string.
+    fn map_arg_type(arg_type: &ArgType) -> &'static str {
+        match arg_type {
+            ArgType::String => "String",
+            ArgType::Int => "i64",
+            ArgType::Float => "f64",
+            ArgType::Bool => "bool",
+            ArgType::Path => "std::path::PathBuf",
+        }
     }
 
     /// Generate handlers directory with mod.rs and stub files for missing handlers

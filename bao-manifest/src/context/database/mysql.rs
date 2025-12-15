@@ -31,10 +31,6 @@ impl DatabaseConfig for MySqlConfig {
         &self.0.pool
     }
 
-    fn rust_type(&self) -> &'static str {
-        "sqlx::MySqlPool"
-    }
-
     fn sqlx_feature(&self) -> &'static str {
         "mysql"
     }
@@ -65,7 +61,7 @@ mod tests {
         let database = schema.context.database.as_ref().unwrap();
         assert!(matches!(database, ContextField::Mysql(_)));
         assert_eq!(database.env(), Some("DATABASE_URL"));
-        assert_eq!(database.rust_type(), "sqlx::MySqlPool");
+        assert_eq!(database.type_name(), "mysql");
     }
 
     #[test]

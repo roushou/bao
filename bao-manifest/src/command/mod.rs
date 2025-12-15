@@ -102,17 +102,6 @@ impl ArgType {
             ArgType::Path => "path",
         }
     }
-
-    /// Get the Rust type for this arg type
-    pub fn rust_type(&self) -> &'static str {
-        match self {
-            ArgType::String => "String",
-            ArgType::Int => "i64",
-            ArgType::Float => "f64",
-            ArgType::Bool => "bool",
-            ArgType::Path => "std::path::PathBuf",
-        }
-    }
 }
 
 #[cfg(test)]

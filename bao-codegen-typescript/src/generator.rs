@@ -6,9 +6,10 @@ use baobao_codegen::{
     builder::CodeBuilder,
     generation::HandlerPaths,
     language::{GenerateResult, LanguageCodegen, PreviewFile},
-    schema::{CommandInfo, CommandTree, ContextFieldInfo, PoolConfigInfo, SqliteConfigInfo},
+    paths::typescript as paths,
+    schema::{CommandInfo, CommandTree, collect_context_fields},
 };
-use baobao_core::{ContextFieldType, DatabaseType, GeneratedFile, to_camel_case, to_kebab_case};
+use baobao_core::{GeneratedFile, to_camel_case, to_kebab_case};
 use baobao_manifest::{Command, Language, Manifest};
 use eyre::Result;
 
@@ -57,7 +58,7 @@ impl<'a> Generator<'a> {
         let mut files = Vec::new();
 
         // Collect context field info
-        let context_fields = self.collect_context_fields();
+        let context_fields = collect_context_fields(&self.schema.context);
 
         // context.ts
         files.push(PreviewFile {
@@ -154,10 +155,10 @@ impl<'a> Generator<'a> {
 
     /// Generate all files into the specified output directory.
     fn generate_files(&self, output_dir: &Path) -> Result<GenerateResult> {
-        let handlers_dir = output_dir.join("src").join("handlers");
+        let handlers_dir = output_dir.join(paths::HANDLERS_DIR);
 
         // Collect context field info
-        let context_fields = self.collect_context_fields();
+        let context_fields = collect_context_fields(&self.schema.context);
 
         // Generate context.ts
         ContextTs::new(context_fields).write(output_dir)?;
@@ -202,7 +203,7 @@ impl<'a> Generator<'a> {
         .write(output_dir)?;
 
         // Ensure commands directory exists
-        std::fs::create_dir_all(output_dir.join("src").join("commands"))?;
+        std::fs::create_dir_all(output_dir.join(paths::COMMANDS_DIR))?;
 
         // Generate individual command files (recursively for nested commands)
         for (name, command) in &self.schema.commands {
@@ -213,59 +214,6 @@ impl<'a> Generator<'a> {
         let result = self.generate_handlers(&handlers_dir, output_dir)?;
 
         Ok(result)
-    }
-
-    fn collect_context_fields(&self) -> Vec<ContextFieldInfo> {
-        use baobao_manifest::ContextField;
-
-        self.schema
-            .context
-            .fields()
-            .into_iter()
-            .map(|(name, field)| {
-                let env_var = field
-                    .env()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| field.default_env().to_string());
-
-                let pool = field
-                    .pool_config()
-                    .map(|p| PoolConfigInfo {
-                        max_connections: p.max_connections,
-                        min_connections: p.min_connections,
-                        acquire_timeout: p.acquire_timeout,
-                        idle_timeout: p.idle_timeout,
-                        max_lifetime: p.max_lifetime,
-                    })
-                    .unwrap_or_default();
-
-                let sqlite = field.sqlite_config().map(|s| SqliteConfigInfo {
-                    path: s.path.clone(),
-                    create_if_missing: s.create_if_missing,
-                    read_only: s.read_only,
-                    journal_mode: s.journal_mode.as_ref().map(|m| m.as_str().to_string()),
-                    synchronous: s.synchronous.as_ref().map(|m| m.as_str().to_string()),
-                    busy_timeout: s.busy_timeout,
-                    foreign_keys: s.foreign_keys,
-                });
-
-                let field_type = match &field {
-                    ContextField::Postgres(_) => ContextFieldType::Database(DatabaseType::Postgres),
-                    ContextField::Mysql(_) => ContextFieldType::Database(DatabaseType::Mysql),
-                    ContextField::Sqlite(_) => ContextFieldType::Database(DatabaseType::Sqlite),
-                    ContextField::Http(_) => ContextFieldType::Http,
-                };
-
-                ContextFieldInfo {
-                    name: name.to_string(),
-                    field_type,
-                    env_var,
-                    is_async: field.is_async(),
-                    pool,
-                    sqlite,
-                }
-            })
-            .collect()
     }
 
     /// Recursively generate command files for a command and all its subcommands.
@@ -281,7 +229,7 @@ impl<'a> Generator<'a> {
 
         // Ensure parent directory exists for nested commands
         if path_segments.len() > 1 {
-            let mut dir_path = output_dir.join("src").join("commands");
+            let mut dir_path = output_dir.join(paths::COMMANDS_DIR);
             for segment in &path_segments[..path_segments.len() - 1] {
                 dir_path = dir_path.join(to_kebab_case(segment));
             }
@@ -546,7 +494,7 @@ impl<'a> Generator<'a> {
         }
 
         // Find orphan handlers using shared utility
-        let handler_paths = HandlerPaths::new(handlers_dir, "ts");
+        let handler_paths = HandlerPaths::new(handlers_dir, paths::FILE_EXTENSION);
         let orphan_handlers = handler_paths.find_orphans(&expected_handlers)?;
 
         Ok(GenerateResult {

@@ -16,9 +16,6 @@ pub trait DatabaseConfig {
     /// Get the pool configuration.
     fn pool(&self) -> &PoolConfig;
 
-    /// Get the Rust type for this database pool.
-    fn rust_type(&self) -> &'static str;
-
     /// Get the sqlx feature name for Cargo.toml.
     fn sqlx_feature(&self) -> &'static str;
 
@@ -70,10 +67,6 @@ impl DatabaseConfig for sqlite::SqliteConfig {
 
     fn pool(&self) -> &PoolConfig {
         &self.pool
-    }
-
-    fn rust_type(&self) -> &'static str {
-        "sqlx::SqlitePool"
     }
 
     fn sqlx_feature(&self) -> &'static str {
