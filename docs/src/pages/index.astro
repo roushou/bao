@@ -1,0 +1,1500 @@
+---
+import "../styles/global.css";
+
+const codeText = `[cli]
+name = "deploy"
+version = "1.0.0"
+description = "Deploy applications to the cloud"
+
+[commands.up]
+description = "Deploy to an environment"
+args = ["environment"]
+flags = ["force", "dry-run", "verbose"]
+
+[commands.logs]
+description = "Stream logs from a deployment"
+args = ["service"]
+flags = ["follow", "tail"]
+
+[commands.rollback]
+description = "Rollback to previous version"
+flags = ["confirm"]`;
+
+const comboInput = `<span class="text-arcade-yellow">[cli]</span>
+name = <span class="text-arcade-lime">"deploy-cli"</span>
+version = <span class="text-arcade-lime">"1.0.0"</span>
+
+<span class="text-arcade-yellow">[commands.deploy]</span>
+description = <span class="text-arcade-lime">"Deploy to environment"</span>
+args = [<span class="text-arcade-lime">"environment"</span>]
+flags = [<span class="text-arcade-lime">"force"</span>, <span class="text-arcade-lime">"dry-run"</span>]
+
+<span class="text-arcade-yellow">[commands.status]</span>
+description = <span class="text-arcade-lime">"Check deployment status"</span>
+
+<span class="text-arcade-yellow">[context]</span>
+fields = [<span class="text-arcade-lime">"config"</span>, <span class="text-arcade-lime">"client"</span>]`;
+
+const comboRust = `<span class="text-arcade-pink">#[derive(Parser)]</span>
+<span class="text-arcade-pink">#[command(name = </span><span class="text-arcade-lime">"deploy-cli"</span><span class="text-arcade-pink">)]</span>
+<span class="text-arcade-cyan">pub struct</span> Cli &#123;
+    <span class="text-arcade-pink">#[command(subcommand)]</span>
+    <span class="text-arcade-cyan">pub</span> command: Commands,
+&#125;
+
+<span class="text-arcade-pink">#[derive(Subcommand)]</span>
+<span class="text-arcade-cyan">pub enum</span> Commands &#123;
+    <span class="text-gray-500">/// Deploy to environment</span>
+    Deploy &#123;
+        environment: String,
+        <span class="text-arcade-pink">#[arg(long)]</span>
+        force: <span class="text-arcade-cyan">bool</span>,
+        <span class="text-arcade-pink">#[arg(long)]</span>
+        dry_run: <span class="text-arcade-cyan">bool</span>,
+    &#125;,
+    <span class="text-gray-500">/// Check deployment status</span>
+    Status,
+&#125;`;
+
+const comboTs = `<span class="text-arcade-cyan">import</span> &#123; cli, command &#125; <span class="text-arcade-cyan">from</span> <span class="text-arcade-lime">"boune"</span>;
+
+<span class="text-arcade-cyan">const</span> deploy = <span class="text-arcade-yellow">command</span>(&#123;
+  name: <span class="text-arcade-lime">"deploy"</span>,
+  description: <span class="text-arcade-lime">"Deploy to environment"</span>,
+  args: &#123; environment: arg.<span class="text-arcade-yellow">string</span>() &#125;,
+  flags: &#123;
+    force: flag.<span class="text-arcade-yellow">boolean</span>(),
+    dryRun: flag.<span class="text-arcade-yellow">boolean</span>(),
+  &#125;,
+  <span class="text-arcade-cyan">async</span> <span class="text-arcade-yellow">handler</span>(&#123; args, flags, ctx &#125;) &#123;
+    <span class="text-gray-500">// Your implementation here</span>
+  &#125;,
+&#125;);
+
+<span class="text-arcade-cyan">const</span> status = <span class="text-arcade-yellow">command</span>(&#123;
+  name: <span class="text-arcade-lime">"status"</span>,
+  description: <span class="text-arcade-lime">"Check deployment status"</span>,
+&#125;);`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Primary Meta Tags -->
+    <title>Bao - Generate CLIs from TOML | Rust & TypeScript</title>
+    <meta name="title" content="Bao - Generate CLIs from TOML | Rust & TypeScript" />
+    <meta
+      name="description"
+      content="Define your CLI once in TOML, generate type-safe Rust (clap) or TypeScript (boune) code instantly. Zero boilerplate, full type safety, handler stubs preserved across regenerations."
+    />
+    <meta
+      name="keywords"
+      content="CLI generator, code generation, Rust, TypeScript, TOML, clap, boune, command line, developer tools, open source"
+    />
+    <meta name="author" content="Bao" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#ff00ff" />
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://baobao.sh" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://baobao.sh" />
+    <meta property="og:site_name" content="Bao CLI" />
+    <meta property="og:title" content="Bao - Generate CLIs from TOML | Rust & TypeScript" />
+    <meta
+      property="og:description"
+      content="Define your CLI once in TOML, generate type-safe Rust or TypeScript code instantly. Zero boilerplate, full type safety."
+    />
+    <meta property="og:image" content="https://baobao.sh/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Bao CLI - Generate CLIs from TOML" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://baobao.sh" />
+    <meta name="twitter:title" content="Bao - Generate CLIs from TOML | Rust & TypeScript" />
+    <meta
+      name="twitter:description"
+      content="Define your CLI once in TOML, generate type-safe Rust or TypeScript code instantly. Zero boilerplate, full type safety."
+    />
+    <meta name="twitter:image" content="https://baobao.sh/og.png" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon.svg" />
+
+    <!-- JSON-LD Structured Data -->
+    <script is:inline type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Bao",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS, Linux, Windows",
+        "description": "Generate CLI applications in Rust and TypeScript from a single TOML configuration file.",
+        "url": "https://baobao.sh",
+        "author": {
+          "@type": "Organization",
+          "name": "Bao",
+          "url": "https://github.com/roushou/bao"
+        },
+        "license": "https://opensource.org/licenses/MIT",
+        "programmingLanguage": ["Rust", "TypeScript"],
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
+  </head>
+
+  <body class="font-code antialiased">
+    <!-- CRT Overlay -->
+    <div class="scanlines"></div>
+
+    <!-- Background Canvas -->
+    <canvas id="starfield" class="fixed top-0 left-0 w-full h-full -z-10"
+    ></canvas>
+
+    <!-- Top Navigation / Scoreboard -->
+    <nav
+      class="fixed top-0 w-full z-50 bg-black/80 backdrop-blur-sm border-b-2 border-arcade-cyan p-3 md:p-4 flex justify-between items-center"
+    >
+      <div class="flex items-center gap-2 md:gap-4">
+        <!-- Bao Character Logo -->
+        <svg
+          class="w-8 h-8 md:w-11 md:h-11"
+          viewBox="0 0 48 48"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style="filter: drop-shadow(0 0 6px rgba(255,0,255,0.6))"
+        >
+          <!-- Bao body - puffy dome -->
+          <path d="M6 32 Q6 16 24 12 Q42 16 42 32 Q42 40 24 42 Q6 40 6 32Z" fill="#fafafa"/>
+          <!-- Top knot -->
+          <ellipse cx="24" cy="10" rx="6" ry="4" fill="#f0f0f0"/>
+          <ellipse cx="24" cy="8" rx="3" ry="2" fill="#e5e5e5"/>
+          <!-- Pleat lines -->
+          <path d="M24 14 L24 22" stroke="#e5e5e5" stroke-width="1" opacity="0.7"/>
+          <path d="M18 15 Q20 20 19 24" stroke="#e5e5e5" stroke-width="1" opacity="0.7"/>
+          <path d="M30 15 Q28 20 29 24" stroke="#e5e5e5" stroke-width="1" opacity="0.7"/>
+          <!-- Eyes - cute round -->
+          <circle cx="16" cy="28" r="4" fill="#1a1a2e"/>
+          <circle cx="32" cy="28" r="4" fill="#1a1a2e"/>
+          <!-- Eye highlights -->
+          <circle cx="17.5" cy="26.5" r="1.5" fill="#fff"/>
+          <circle cx="33.5" cy="26.5" r="1.5" fill="#fff"/>
+          <circle cx="15" cy="29" r="0.8" fill="#fff" opacity="0.5"/>
+          <circle cx="31" cy="29" r="0.8" fill="#fff" opacity="0.5"/>
+          <!-- Blush -->
+          <ellipse cx="9" cy="32" rx="3" ry="2" fill="#ff00ff" opacity="0.25"/>
+          <ellipse cx="39" cy="32" rx="3" ry="2" fill="#ff00ff" opacity="0.25"/>
+          <!-- Happy mouth -->
+          <path d="M20 34 Q24 38 28 34" stroke="#1a1a2e" stroke-width="2" stroke-linecap="round" fill="none"/>
+          <!-- Neon outline glow -->
+          <path d="M6 32 Q6 16 24 12 Q42 16 42 32 Q42 40 24 42 Q6 40 6 32Z" fill="none" stroke="#ff00ff" stroke-width="1" opacity="0.4"/>
+        </svg>
+        <span class="font-arcade text-arcade-cyan text-base md:text-xl tracking-tighter">BAO</span>
+      </div>
+      <div class="hidden lg:flex items-center gap-5 font-arcade text-xs">
+        <a href="#why" class="text-gray-300 hover:text-arcade-pink transition-colors group">
+          <span class="text-arcade-pink group-hover:text-arcade-pink">&gt;</span> WHY
+        </a>
+        <a href="#how-it-works" class="text-gray-300 hover:text-arcade-cyan transition-colors group">
+          <span class="text-arcade-cyan group-hover:text-arcade-cyan">&gt;</span> USAGE
+        </a>
+        <a href="#languages" class="text-gray-300 hover:text-arcade-lime transition-colors group">
+          <span class="text-arcade-lime group-hover:text-arcade-lime">&gt;</span> LANGS
+        </a>
+        <a href="#quick-start" class="text-gray-300 hover:text-arcade-yellow transition-colors group">
+          <span class="text-arcade-yellow group-hover:text-arcade-yellow">&gt;</span> START
+        </a>
+        <a href="#roadmap" class="text-gray-300 hover:text-arcade-purple transition-colors group">
+          <span class="text-arcade-purple group-hover:text-arcade-purple">&gt;</span> SOON
+        </a>
+      </div>
+      <div class="flex items-center gap-2 md:gap-4">
+        <a
+          href="https://github.com/roushou/bao"
+          target="_blank"
+          class="hidden sm:flex items-center gap-2 font-arcade text-xs text-gray-300 hover:border hover:border-arcade-cyan hover:text-arcade-cyan p-1 transition-all"
+        >
+          <span class="flex items-center justify-center size-6">
+            <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          </span>
+          <span class="hidden md:inline">Github</span>
+        </a>
+        <a
+          href="/doc"
+          class="neon-button bg-arcade-pink hover:bg-pink-600 text-white font-arcade text-[10px] md:text-xs px-3 md:px-4 py-2 border-b-4 border-pink-900 active:border-b-0"
+        >
+          DOCUMENTATION
+        </a>
+        <!-- Mobile menu button -->
+        <button
+          id="mobile-menu-btn"
+          class="lg:hidden flex items-center justify-center size-8 border border-arcade-cyan text-arcade-cyan"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div id="mobile-menu" class="fixed inset-0 z-40 bg-black/95 backdrop-blur-sm hidden lg:hidden">
+      <div class="flex flex-col items-center justify-center h-full gap-6 font-arcade text-sm">
+        <a href="#why" class="mobile-menu-link text-gray-300 hover:text-arcade-pink transition-colors">
+          <span class="text-arcade-pink">&gt;</span> WHY
+        </a>
+        <a href="#how-it-works" class="mobile-menu-link text-gray-300 hover:text-arcade-cyan transition-colors">
+          <span class="text-arcade-cyan">&gt;</span> USAGE
+        </a>
+        <a href="#languages" class="mobile-menu-link text-gray-300 hover:text-arcade-lime transition-colors">
+          <span class="text-arcade-lime">&gt;</span> LANGS
+        </a>
+        <a href="#quick-start" class="mobile-menu-link text-gray-300 hover:text-arcade-yellow transition-colors">
+          <span class="text-arcade-yellow">&gt;</span> START
+        </a>
+        <a href="#roadmap" class="mobile-menu-link text-gray-300 hover:text-arcade-purple transition-colors">
+          <span class="text-arcade-purple">&gt;</span> SOON
+        </a>
+        <a href="https://github.com/roushou/bao" target="_blank" class="mobile-menu-link text-gray-300 hover:text-arcade-cyan transition-colors mt-4">
+          <span class="text-arcade-cyan">&gt;</span> GITHUB
+        </a>
+        <button id="mobile-menu-close" class="mt-8 border-2 border-arcade-pink text-arcade-pink px-6 py-2 font-arcade text-xs">
+          CLOSE
+        </button>
+      </div>
+    </div>
+
+    <!-- Hero Section -->
+    <main class="container mx-auto px-4 pt-24 md:pt-32 pb-12 md:pb-20">
+      <div class="flex flex-col lg:flex-row items-center gap-8 lg:gap-12">
+        <!-- Left: Text Content -->
+        <div class="lg:w-1/2 space-y-6 md:space-y-8 z-10 text-center lg:text-left">
+          <div
+            class="inline-block bg-arcade-lime/20 border border-arcade-lime text-arcade-lime px-2 md:px-3 py-1 font-arcade text-[10px] md:text-xs mb-2 md:mb-4"
+          >
+            OPEN SOURCE CLI GENERATOR
+          </div>
+          <h1
+            class="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-arcade leading-tight text-white glitch-wrapper"
+            data-text="BUILD CLIs AT WARP SPEED"
+          >
+            BUILD CLIs AT <br />
+            <span
+              class="text-transparent bg-clip-text bg-gradient-to-r from-arcade-cyan to-arcade-pink"
+              >WARP SPEED</span
+            >
+          </h1>
+          <p
+            class="text-gray-300 text-base md:text-lg lg:text-xl max-w-lg leading-relaxed border-l-4 border-arcade-purple pl-4 mx-auto lg:mx-0"
+          >
+            Define your CLI in one <span class="text-arcade-yellow font-bold">bao.toml</span
+            > file.<br />Generate Rust and TypeScript CLIs.<br />Simple, instant and zero boilerplate.
+          </p>
+
+          <div class="flex flex-col sm:flex-row items-stretch gap-3 md:gap-4 pt-2 md:pt-4 justify-center lg:justify-start">
+            <button
+              id="hero-copy-install"
+              class="group relative flex items-center justify-center gap-2 md:gap-3 bg-black/80 border-2 border-arcade-cyan px-3 md:px-5 py-3 font-mono transition-all shadow-[0_0_20px_rgba(0,255,255,0.3)] hover:shadow-[0_0_30px_rgba(0,255,255,0.5),0_0_60px_rgba(0,255,255,0.2)] hover:scale-105"
+            >
+              <span class="absolute inset-0 bg-arcade-cyan/5 group-hover:bg-arcade-cyan/10 transition-colors"></span>
+              <span class="text-arcade-cyan text-xs md:text-base font-bold">$</span>
+              <span class="text-white text-xs md:text-base">cargo install baobao</span>
+              <svg class="ml-1 md:ml-2 w-4 h-4 text-arcade-cyan/70 group-hover:text-arcade-cyan transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke-width="2"/></svg>
+            </button>
+            <a
+              href="/docs"
+              class="neon-button flex items-center justify-center px-6 py-3 bg-transparent border-2 border-arcade-pink text-arcade-pink font-arcade text-xs hover:bg-arcade-pink hover:text-black transition-all shadow-[0_0_10px_rgba(255,0,255,0.2)] hover:shadow-[0_0_20px_rgba(255,0,255,0.4)]"
+            >
+              DOCS
+            </a>
+          </div>
+        </div>
+
+        <!-- Right: Code Terminal Demo -->
+        <div class="lg:w-1/2 w-full z-10">
+          <div
+            class="relative rounded-lg overflow-hidden border-2 border-arcade-cyan shadow-[0_0_20px_rgba(0,255,255,0.3),inset_0_0_20px_rgba(0,255,255,0.1)]"
+          >
+            <!-- Terminal Header -->
+            <div
+              class="bg-black p-2 md:p-3 flex items-center gap-2 md:gap-3 border-b-2 border-arcade-cyan/50"
+            >
+              <div class="flex gap-1.5 md:gap-2">
+                <div class="w-2 h-2 md:w-3 md:h-3 bg-arcade-pink shadow-[0_0_8px_rgba(255,0,255,0.8)]"></div>
+                <div class="w-2 h-2 md:w-3 md:h-3 bg-arcade-yellow shadow-[0_0_8px_rgba(255,215,0,0.8)]"></div>
+                <div class="w-2 h-2 md:w-3 md:h-3 bg-arcade-lime shadow-[0_0_8px_rgba(57,255,20,0.8)]"></div>
+              </div>
+              <div class="ml-1 md:ml-2 font-arcade text-[10px] md:text-sm text-arcade-cyan tracking-wider">
+                bao.toml
+              </div>
+            </div>
+            <!-- Code Area -->
+            <div class="p-3 md:p-6 bg-arcade-dark min-h-[200px] md:min-h-[300px] text-xs md:text-sm lg:text-base relative overflow-x-auto">
+              <pre class="whitespace-pre-wrap"><code id="typewriter" class="language-toml text-arcade-lime"></code><span id="cursor" class="animate-pulse bg-arcade-cyan text-black inline-block w-2 h-4 md:h-5 align-text-bottom"></span></pre>
+            </div>
+            <!-- Compilation Status -->
+            <div
+              class="bg-black p-2 md:p-3 border-t-2 border-arcade-cyan/50 font-mono text-[10px] md:text-xs flex justify-between items-center gap-2"
+            >
+              <span class="text-arcade-cyan font-arcade text-[8px] md:text-[10px] truncate">&gt; bao bake --language rust</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Why Bao Section -->
+    <section id="why" class="py-12 md:py-20 relative overflow-hidden">
+      <div class="container mx-auto px-4">
+        <h2
+          class="text-2xl md:text-3xl lg:text-4xl font-arcade text-center mb-4 text-arcade-cyan"
+        >
+          <span class="border-b-4 border-arcade-cyan pb-2">WHY BAO?</span>
+        </h2>
+        <p class="text-gray-400 text-center mb-8 md:mb-16 max-w-2xl mx-auto text-sm md:text-base">
+          CLI development made easy
+        </p>
+
+        <div class="grid md:grid-cols-2 gap-4 md:gap-8 max-w-5xl mx-auto">
+          <!-- Without Bao -->
+          <div class="border-2 border-arcade-pink rounded-lg overflow-hidden shadow-[0_0_20px_rgba(255,0,255,0.15)]">
+            <!-- Terminal header -->
+            <div class="bg-black px-3 md:px-4 py-2 md:py-3 border-b-2 border-arcade-pink/50 flex items-center justify-between">
+              <div class="flex w-full items-center justify-between gap-2 md:gap-3">
+                <div class="flex items-center gap-1.5 md:gap-2">
+                  <div class="size-2 md:size-3 bg-arcade-pink shadow-[0_0_8px_rgba(255,0,255,0.8)]"></div>
+                  <span class="font-arcade text-xs md:text-sm text-arcade-pink">
+                    WITHOUT BAO
+                  </span>
+                </div>
+                <span class="font-arcade text-[8px] md:text-[10px] text-arcade-pink border border-arcade-pink px-1.5 md:px-2 py-0.5">
+                  PAINFUL
+                </span>
+              </div>
+            </div>
+
+            <!-- Content -->
+            <div class="bg-arcade-dark p-4 md:p-6">
+              <ul class="space-y-2 md:space-y-3 text-gray-400 text-sm md:text-base">
+                <li class="flex items-start gap-2 md:gap-3 border-l-2 border-arcade-pink/30 pl-2 md:pl-3">
+                  <span class="text-arcade-pink font-arcade">✗</span>
+                  <span>Write argument parsing boilerplate for every command</span>
+                </li>
+                <li class="flex items-start gap-2 md:gap-3 border-l-2 border-arcade-pink/30 pl-2 md:pl-3">
+                  <span class="text-arcade-pink font-arcade">✗</span>
+                  <span>Manually sync CLI structure across Rust and TypeScript</span>
+                </li>
+                <li class="flex items-start gap-2 md:gap-3 border-l-2 border-arcade-pink/30 pl-2 md:pl-3">
+                  <span class="text-arcade-pink font-arcade">✗</span>
+                  <span>Rewrite handler scaffolding every time you add a command</span>
+                </li>
+                <li class="flex items-start gap-2 md:gap-3 border-l-2 border-arcade-pink/30 pl-2 md:pl-3">
+                  <span class="text-arcade-pink font-arcade">✗</span>
+                  <span>Pass shared state manually through every function</span>
+                </li>
+                <li class="flex items-start gap-2 md:gap-3 border-l-2 border-arcade-pink/30 pl-2 md:pl-3">
+                  <span class="text-arcade-pink font-arcade">✗</span>
+                  <span>Hope your args and flags stay consistent across refactors</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- With Bao -->
+          <div class="border-2 border-arcade-lime rounded-lg overflow-hidden shadow-[0_0_20px_rgba(57,255,20,0.15)]">
+            <!-- Terminal header -->
+            <div class="bg-black px-3 md:px-4 py-2 md:py-3 border-b-2 border-arcade-lime/50 flex items-center justify-between">
+              <div class="flex w-full items-center justify-between gap-2 md:gap-3">
+                <div class="flex items-center gap-1.5 md:gap-2">
+                  <div class="size-2 md:size-3 bg-arcade-lime shadow-[0_0_8px_rgba(57,255,20,0.8)]"></div>
+                  <span class="font-arcade text-xs md:text-sm text-arcade-lime">
+                    WITH BAO
+                  </span>
+                </div>
+                <span class="font-arcade text-[8px] md:text-[10px] text-black bg-arcade-lime px-1.5 md:px-2 py-0.5">
+                  SIMPLE
+                </span>
+              </div>
+            </div>
+
+            <!-- Content -->
+            <div class="bg-arcade-dark p-4 md:p-6">
+              <ul class="space-y-2 md:space-y-3 text-gray-400 text-sm md:text-base">
+                <li class="flex items-start gap-2 md:gap-3 border-l-2 border-arcade-lime/30 pl-2 md:pl-3">
+                  <span class="text-arcade-lime font-arcade">✓</span>
+                  <span>Define your CLI once in <code class="text-arcade-yellow">bao.toml</code></span>
+                </li>
+                <li class="flex items-start gap-2 md:gap-3 border-l-2 border-arcade-lime/30 pl-2 md:pl-3">
+                  <span class="text-arcade-lime font-arcade">✓</span>
+                  <span>Generate idiomatic Rust (clap) or TypeScript (boune) code</span>
+                </li>
+                <li class="flex items-start gap-2 md:gap-3 border-l-2 border-arcade-lime/30 pl-2 md:pl-3">
+                  <span class="text-arcade-lime font-arcade">✓</span>
+                  <span>Handler stubs auto-generated — just fill in your logic</span>
+                </li>
+                <li class="flex items-start gap-2 md:gap-3 border-l-2 border-arcade-lime/30 pl-2 md:pl-3">
+                  <span class="text-arcade-lime font-arcade">✓</span>
+                  <span>Typed context object for database pools, HTTP clients, etc.</span>
+                </li>
+                <li class="flex items-start gap-2 md:gap-3 border-l-2 border-arcade-lime/30 pl-2 md:pl-3">
+                  <span class="text-arcade-lime font-arcade">✓</span>
+                  <span>Re-run <code class="text-arcade-cyan">bao bake</code> anytime — your code is preserved</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="mt-8 md:mt-12 flex flex-wrap justify-center gap-3 md:gap-6 text-center font-arcade">
+          <div class="border-2 border-arcade-pink bg-black px-4 md:px-8 py-3 md:py-4 shadow-[0_0_15px_rgba(255,0,255,0.2)]">
+            <div class="text-arcade-pink text-xl md:text-2xl mb-1">1</div>
+            <div class="text-gray-500 text-[8px] md:text-[10px]">CONFIG FILE</div>
+          </div>
+          <div class="border-2 border-arcade-cyan bg-black px-4 md:px-8 py-3 md:py-4 shadow-[0_0_15px_rgba(0,255,255,0.2)]">
+            <div class="text-arcade-cyan text-xl md:text-2xl mb-1">2</div>
+            <div class="text-gray-500 text-[8px] md:text-[10px]">LANGUAGES</div>
+          </div>
+          <div class="border-2 border-arcade-lime bg-black px-4 md:px-8 py-3 md:py-4 shadow-[0_0_15px_rgba(57,255,20,0.2)]">
+            <div class="text-arcade-lime text-xl md:text-2xl mb-1">0</div>
+            <div class="text-gray-500 text-[8px] md:text-[10px]">BOILERPLATE</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it Works -->
+    <section id="how-it-works" class="py-12 md:py-20 relative">
+      <div class="container mx-auto px-4">
+        <h2
+          class="text-2xl md:text-3xl lg:text-4xl font-arcade text-center mb-4 text-arcade-pink"
+        >
+          <span class="border-b-4 border-arcade-pink pb-2">HOW IT WORKS</span>
+        </h2>
+        <p class="text-gray-400 text-center mb-8 md:mb-16 max-w-2xl mx-auto text-base md:text-xl">
+          Three simple steps
+        </p>
+
+        <div class="max-w-4xl mx-auto">
+          <!-- Terminal Window -->
+          <div class="border-2 border-arcade-pink rounded-lg overflow-hidden shadow-[0_0_25px_rgba(255,0,255,0.2)]">
+            <!-- Terminal header -->
+            <div class="bg-black px-4 py-3 border-b-2 border-arcade-pink/50 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="flex gap-2">
+                  <div class="size-3 bg-arcade-pink shadow-[0_0_8px_rgba(255,0,255,0.8)]"></div>
+                  <div class="size-3 bg-arcade-pink/50"></div>
+                  <div class="size-3 bg-arcade-pink/50"></div>
+                </div>
+              </div>
+              <span class="font-arcade text-sm text-arcade-lime">READY</span>
+            </div>
+
+            <!-- Content -->
+            <div class="bg-arcade-dark p-6 space-y-6">
+              <!-- Step 1 -->
+              <div class="flex gap-4">
+                <div class="flex flex-col items-center">
+                  <div class="size-12 border-2 border-arcade-pink bg-black flex items-center justify-center shadow-[0_0_15px_rgba(255,0,255,0.3)]">
+                    <span class="font-arcade text-arcade-pink text-lg">01</span>
+                  </div>
+                  <div class="w-0.5 flex-1 bg-arcade-pink/30 mt-2"></div>
+                </div>
+                <div class="flex-1 pb-4">
+                  <div class="flex items-center gap-3 mb-3">
+                    <span class="font-arcade text-arcade-pink">INITIALIZE</span>
+                    <span class="font-arcade text-[10px] text-black bg-arcade-pink px-2 py-0.5">REQUIRED</span>
+                  </div>
+                  <div class="border border-arcade-pink/30 bg-black p-4">
+                    <div class="flex items-center gap-2 mb-3">
+                      <span class="text-arcade-lime font-bold">▶</span>
+                      <code class="text-arcade-lime">bao init myapp --language rust</code>
+                    </div>
+                    <p class="text-gray-400 border-l-2 border-arcade-pink/30 pl-3">
+                      Creates project structure with <span class="text-arcade-yellow">bao.toml</span> manifest
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 2 -->
+              <div class="flex gap-4">
+                <div class="flex flex-col items-center">
+                  <div class="size-12 border-2 border-arcade-cyan bg-black flex items-center justify-center shadow-[0_0_15px_rgba(0,255,255,0.3)]">
+                    <span class="font-arcade text-arcade-cyan text-lg">02</span>
+                  </div>
+                  <div class="w-0.5 flex-1 bg-arcade-cyan/30 mt-2"></div>
+                </div>
+                <div class="flex-1 pb-4">
+                  <div class="flex items-center gap-3 mb-3">
+                    <span class="font-arcade text-arcade-cyan">ADD COMMANDS</span>
+                    <span class="font-arcade text-[10px] text-arcade-cyan border border-arcade-cyan px-2 py-0.5">OPTIONAL</span>
+                  </div>
+                  <div class="border border-arcade-cyan/30 bg-black p-4">
+                    <div class="flex items-center gap-2 mb-3">
+                      <span class="text-arcade-lime font-bold">▶</span>
+                      <code class="text-arcade-lime">bao add command deploy</code>
+                    </div>
+                    <p class="text-gray-400 border-l-2 border-arcade-cyan/30 pl-3">
+                      Interactively add commands, args, and flags to your manifest
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 3 -->
+              <div class="flex gap-4">
+                <div class="flex flex-col items-center">
+                  <div class="size-12 border-2 border-arcade-lime bg-black flex items-center justify-center shadow-[0_0_15px_rgba(57,255,20,0.3)]">
+                    <span class="font-arcade text-arcade-lime text-lg">03</span>
+                  </div>
+                </div>
+                <div class="flex-1">
+                  <div class="flex items-center gap-3 mb-3">
+                    <span class="font-arcade text-arcade-lime">GENERATE</span>
+                    <span class="font-arcade text-[10px] text-black bg-arcade-lime px-2 py-0.5">FINAL</span>
+                  </div>
+                  <div class="border border-arcade-lime/30 bg-black p-4">
+                    <div class="flex items-center gap-2 mb-3">
+                      <span class="text-arcade-lime font-bold">▶</span>
+                      <code class="text-arcade-lime">bao bake</code>
+                    </div>
+                    <p class="text-gray-400 border-l-2 border-arcade-lime/30 pl-3">
+                      Generate type-safe code with handler stubs. Run again anytime — <span class="text-arcade-lime">your code is preserved!</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Code Generation -->
+    <section id="code-generation" class="py-12 md:py-20 relative bg-black/50">
+      <div class="container mx-auto px-4">
+        <h2
+          class="text-2xl md:text-3xl lg:text-4xl font-arcade text-center mb-4 text-arcade-yellow"
+        >
+          <span class="border-b-4 border-arcade-yellow pb-2">CODE GENERATION</span>
+        </h2>
+        <p class="text-gray-400 text-center mb-8 md:mb-16 max-w-2xl mx-auto text-sm md:text-base">
+          One config, multiple outputs
+        </p>
+
+        <div class="grid lg:grid-cols-2 gap-6 max-w-6xl mx-auto">
+          <!-- Input: bao.toml -->
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <div class="font-arcade text-arcade-pink text-xs border border-arcade-pink px-2 py-1 shadow-[0_0_10px_rgba(255,0,255,0.3)]">
+                INPUT
+              </div>
+            </div>
+            <div class="border-2 border-arcade-pink rounded-lg overflow-hidden shadow-[0_0_15px_rgba(255,0,255,0.2)]">
+              <div class="bg-black px-4 py-2 border-b-2 border-arcade-pink/50 flex items-center gap-3">
+                <div class="flex gap-2">
+                  <div class="w-2 h-2 bg-arcade-pink shadow-[0_0_6px_rgba(255,0,255,0.8)]"></div>
+                  <div class="w-2 h-2 bg-arcade-pink/50"></div>
+                  <div class="w-2 h-2 bg-arcade-pink/50"></div>
+                </div>
+                <span class="font-arcade text-[10px] text-arcade-pink">bao.toml</span>
+              </div>
+              <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300" set:html={comboInput} /></pre>
+            </div>
+          </div>
+
+          <!-- Output: Generated Code -->
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <div class="font-arcade text-arcade-lime text-xs border border-arcade-lime px-2 py-1 shadow-[0_0_10px_rgba(57,255,20,0.3)]">
+                OUTPUT
+              </div>
+            </div>
+            <div class="border-2 border-arcade-lime rounded-lg overflow-hidden shadow-[0_0_15px_rgba(57,255,20,0.2)]">
+              <div class="bg-black px-4 py-2 border-b-2 border-arcade-lime/50 flex items-center justify-between">
+                <div class="flex gap-2">
+                  <div class="w-2 h-2 bg-arcade-lime shadow-[0_0_6px_rgba(57,255,20,0.8)]"></div>
+                  <div class="w-2 h-2 bg-arcade-lime/50"></div>
+                  <div class="w-2 h-2 bg-arcade-lime/50"></div>
+                </div>
+                <div class="flex gap-1">
+                  <button class="tab-rust font-arcade text-[10px] text-black bg-arcade-cyan px-3 py-1">RUST</button>
+                  <button class="tab-ts font-arcade text-[10px] text-gray-500 hover:text-arcade-cyan px-3 py-1 border border-gray-700 hover:border-arcade-cyan transition-colors">TS</button>
+                </div>
+              </div>
+              <pre id="code-rust" class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300" set:html={comboRust} /></pre>
+              <pre id="code-ts" class="p-4 text-sm overflow-x-auto bg-arcade-dark hidden"><code class="text-gray-300" set:html={comboTs} /></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Supported Languages -->
+    <section id="languages" class="py-12 md:py-20 relative overflow-hidden">
+      <div class="container mx-auto px-4">
+        <h2
+          class="text-2xl md:text-3xl lg:text-4xl font-arcade text-center mb-4 text-arcade-purple"
+        >
+          <span class="border-b-4 border-arcade-purple pb-2">SUPPORTED LANGUAGES</span>
+        </h2>
+        <p class="text-gray-400 text-center mb-8 md:mb-16 max-w-2xl mx-auto text-sm md:text-base">
+          Choose your target language
+        </p>
+
+        <div class="grid md:grid-cols-2 gap-4 md:gap-8 max-w-5xl mx-auto">
+          <!-- Rust -->
+          <div class="group">
+            <div class="border-2 border-arcade-pink rounded-lg overflow-hidden shadow-[0_0_20px_rgba(255,0,255,0.2)] hover:shadow-[0_0_30px_rgba(255,0,255,0.4)] transition-all">
+              <!-- Terminal header -->
+              <div class="bg-black px-4 py-3 border-b-2 border-arcade-pink/50 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <div class="flex gap-2">
+                    <div class="size-3 bg-arcade-pink shadow-[0_0_8px_rgba(255,0,255,0.8)]"></div>
+                    <div class="size-3 bg-arcade-pink/50"></div>
+                    <div class="size-3 bg-arcade-pink/50"></div>
+                  </div>
+                  <span class="font-arcade text-[10px] text-arcade-pink">RUST</span>
+                </div>
+                <span class="font-arcade text-[8px] text-arcade-lime">READY</span>
+              </div>
+
+              <!-- Content -->
+              <div class="bg-arcade-dark p-6">
+                <!-- Logo and title -->
+                <div class="flex items-center gap-4 mb-6">
+                  <div class="w-16 h-16 border-2 border-arcade-pink bg-black flex items-center justify-center shadow-[0_0_15px_rgba(255,0,255,0.3)]">
+                    <span class="font-arcade text-arcade-pink text-2xl">Rs</span>
+                  </div>
+                  <div>
+                    <h3 class="font-arcade text-white text-xl mb-1">RUST</h3>
+                    <p class="text-arcade-pink text-xs font-arcade">+ CLAP</p>
+                  </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="space-y-3 mb-6">
+                  <div>
+                    <div class="flex justify-between font-arcade text-[10px] mb-1">
+                      <span class="text-gray-500">TYPE SAFETY</span>
+                      <span class="text-arcade-pink">████████████ MAX</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between font-arcade text-[10px] mb-1">
+                      <span class="text-gray-500">PERFORMANCE</span>
+                      <span class="text-arcade-pink">████████████ MAX</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between font-arcade text-[10px] mb-1">
+                      <span class="text-gray-500">BINARY SIZE</span>
+                      <span class="text-arcade-pink">██████████░░ LOW</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Features -->
+                <div class="border-t border-arcade-pink/30 pt-4">
+                  <ul class="space-y-2 text-gray-400">
+                    <li class="flex items-center gap-2">
+                      <span class="text-arcade-lime font-arcade">▸</span>
+                      Derive macros for zero boilerplate
+                    </li>
+                    <li class="flex items-center gap-2">
+                      <span class="text-arcade-lime font-arcade">▸</span>
+                      Shell completions via clap_complete
+                    </li>
+                    <li class="flex items-center gap-2">
+                      <span class="text-arcade-lime font-arcade">▸</span>
+                      Async handlers with tokio support
+                    </li>
+                    <li class="flex items-center gap-2">
+                      <span class="text-arcade-lime font-arcade">▸</span>
+                      Compile to single static binary
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TypeScript -->
+          <div class="group">
+            <div class="border-2 border-arcade-cyan rounded-lg overflow-hidden shadow-[0_0_20px_rgba(0,255,255,0.2)] hover:shadow-[0_0_30px_rgba(0,255,255,0.4)] transition-all">
+              <!-- Terminal header -->
+              <div class="bg-black px-4 py-3 border-b-2 border-arcade-cyan/50 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <div class="flex gap-2">
+                    <div class="size-3 bg-arcade-cyan shadow-[0_0_8px_rgba(0,255,255,0.8)]"></div>
+                    <div class="size-3 bg-arcade-cyan/50"></div>
+                    <div class="size-3 bg-arcade-cyan/50"></div>
+                  </div>
+                  <span class="font-arcade text-[10px] text-arcade-cyan">TYPESCRIPT</span>
+                </div>
+                <span class="font-arcade text-[8px] text-arcade-lime">READY</span>
+              </div>
+
+              <!-- Content -->
+              <div class="bg-arcade-dark p-6">
+                <!-- Logo and title -->
+                <div class="flex items-center gap-4 mb-6">
+                  <div class="w-16 h-16 border-2 border-arcade-cyan bg-black flex items-center justify-center shadow-[0_0_15px_rgba(0,255,255,0.3)]">
+                    <span class="font-arcade text-arcade-cyan text-2xl">TS</span>
+                  </div>
+                  <div>
+                    <h3 class="font-arcade text-white text-xl mb-1">TYPESCRIPT</h3>
+                    <p class="text-arcade-cyan text-xs font-arcade">+ BOUNE</p>
+                  </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="space-y-3 mb-6">
+                  <div>
+                    <div class="flex justify-between font-arcade text-[10px] mb-1">
+                      <span class="text-gray-500">TYPE SAFETY</span>
+                      <span class="text-arcade-cyan">████████████ MAX</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between font-arcade text-[10px] mb-1">
+                      <span class="text-gray-500">DX SPEED</span>
+                      <span class="text-arcade-cyan">████████████ MAX</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between font-arcade text-[10px] mb-1">
+                      <span class="text-gray-500">ECOSYSTEM</span>
+                      <span class="text-arcade-cyan">███████████░ HUGE</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Features -->
+                <div class="border-t border-arcade-cyan/30 pt-4">
+                  <ul class="space-y-2 text-gray-400">
+                    <li class="flex items-center gap-2">
+                      <span class="text-arcade-lime font-arcade">▸</span>
+                      Full type inference
+                    </li>
+                    <li class="flex items-center gap-2">
+                      <span class="text-arcade-lime font-arcade">▸</span>
+                      Interactive prompts and spinners
+                    </li>
+                    <li class="flex items-center gap-2">
+                      <span class="text-arcade-lime font-arcade">▸</span>
+                      Compile to binary with Bun
+                    </li>
+                    <li class="flex items-center gap-2">
+                      <span class="text-arcade-lime font-arcade">▸</span>
+                      Cross-platform compatibility
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick Start -->
+    <section id="quick-start" class="py-12 md:py-20 relative bg-black/50">
+      <div class="container mx-auto px-4">
+        <h2
+          class="text-2xl md:text-3xl lg:text-4xl font-arcade text-center mb-4 text-arcade-lime"
+        >
+          <span class="border-b-4 border-arcade-lime pb-2">QUICK START</span>
+        </h2>
+        <p class="text-gray-400 text-center mb-8 md:mb-16 max-w-2xl mx-auto text-sm md:text-base">
+          Zero to CLI in 60 seconds
+        </p>
+
+        <div class="max-w-3xl mx-auto">
+          <!-- Terminal window -->
+          <div class="border-2 border-arcade-lime rounded-xl overflow-hidden shadow-[0_0_25px_rgba(57,255,20,0.3)]">
+            <!-- Terminal header -->
+            <div class="bg-black px-4 py-3 flex items-center gap-3 border-b-2 border-arcade-lime/50">
+              <div class="flex gap-2">
+                <div class="size-3 bg-arcade-pink shadow-[0_0_8px_rgba(255,0,255,0.8)]"></div>
+                <div class="size-3 bg-arcade-yellow shadow-[0_0_8px_rgba(255,215,0,0.8)]"></div>
+                <div class="size-3 bg-arcade-lime shadow-[0_0_8px_rgba(57,255,20,0.8)]"></div>
+              </div>
+              <span class="font-arcade text-[10px] text-arcade-lime tracking-wider">quick-start</span>
+            </div>
+
+            <!-- Terminal content -->
+            <div class="p-6 font-mono text-sm space-y-5 bg-arcade-dark">
+              <!-- Step 1 -->
+              <div>
+                <p class="text-arcade-cyan mb-2 font-arcade text-[10px]">STEP 01: INSTALL</p>
+                <div class="flex items-center gap-2 bg-black px-4 py-3 border-l-2 border-arcade-pink group hover:border-arcade-lime transition-colors">
+                  <span class="text-arcade-cyan font-bold">▶</span>
+                  <code class="text-arcade-lime flex-1">cargo install baobao</code>
+                  <button class="copy-btn text-gray-600 hover:text-arcade-pink transition-colors" data-copy="cargo install baobao">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Step 2 -->
+              <div>
+                <p class="text-arcade-cyan mb-2 font-arcade text-[10px]">STEP 02: INIT</p>
+                <div class="flex items-center gap-2 bg-black px-4 py-3 border-l-2 border-arcade-pink group hover:border-arcade-lime transition-colors">
+                  <span class="text-arcade-cyan font-bold">▶</span>
+                  <code class="text-arcade-lime flex-1">bao init mycli --language rust</code>
+                  <button class="copy-btn text-gray-600 hover:text-arcade-pink transition-colors" data-copy="bao init mycli --language rust">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Step 3 -->
+              <div>
+                <p class="text-arcade-cyan mb-2 font-arcade text-[10px]">STEP 03: ADD COMMAND</p>
+                <div class="flex items-center gap-2 bg-black px-4 py-3 border-l-2 border-arcade-pink group hover:border-arcade-lime transition-colors">
+                  <span class="text-arcade-cyan font-bold">▶</span>
+                  <code class="text-arcade-lime flex-1">bao add command greet</code>
+                  <button class="copy-btn text-gray-600 hover:text-arcade-pink transition-colors" data-copy="bao add command greet">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Step 4 -->
+              <div>
+                <p class="text-arcade-cyan mb-2 font-arcade text-[10px]">STEP 04: BAKE</p>
+                <div class="flex items-center gap-2 bg-black px-4 py-3 border-l-2 border-arcade-pink group hover:border-arcade-lime transition-colors">
+                  <span class="text-arcade-cyan font-bold">▶</span>
+                  <code class="text-arcade-lime flex-1">bao bake</code>
+                  <button class="copy-btn text-gray-600 hover:text-arcade-pink transition-colors" data-copy="bao bake">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Step 5 -->
+              <div>
+                <p class="text-arcade-cyan mb-2 font-arcade text-[10px]">STEP 05: RUN</p>
+                <div class="flex items-center gap-2 bg-black px-4 py-3 border-l-2 border-arcade-pink group hover:border-arcade-lime transition-colors">
+                  <span class="text-arcade-cyan font-bold">▶</span>
+                  <code class="text-arcade-lime flex-1">bao run -- greet --help</code>
+                  <button class="copy-btn text-gray-600 hover:text-arcade-pink transition-colors" data-copy="bao run -- greet --help">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Output -->
+              <div class="border-t-2 border-arcade-cyan/30 pt-4 mt-4">
+                <p class="text-arcade-cyan mb-2 font-arcade text-[10px]">OUTPUT</p>
+                <div class="text-gray-400 bg-black p-4 border-l-2 border-arcade-cyan">
+                  <p class="text-white">mycli greet</p>
+                  <p class="text-gray-500">Description of the greet command</p>
+                  <p class="mt-2 text-gray-400">Usage: mycli greet [OPTIONS]</p>
+                  <p class="mt-2 text-gray-400">Options:</p>
+                  <p class="text-arcade-lime">  -h, --help  Print help</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Success message -->
+          <div class="mt-8 text-center">
+            <div class="inline-flex items-center gap-3 bg-arcade-yellow/10 border border-arcade-yellow/30 px-6 py-3 rounded-lg">
+              <span class="text-arcade-yellow text-2xl">✓</span>
+              <span class="font-arcade text-arcade-yellow text-sm">CLI GENERATED SUCCESSFULLY</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Latest Updates -->
+    <section id="updates" class="py-12 md:py-20 relative">
+      <div class="container mx-auto px-4">
+        <h2
+          class="text-2xl md:text-3xl lg:text-4xl font-arcade text-center mb-4 text-arcade-cyan"
+        >
+          <span class="border-b-4 border-arcade-cyan pb-2">LATEST UPDATES</span>
+        </h2>
+        <p class="text-gray-400 text-center mb-8 md:mb-16 max-w-2xl mx-auto text-sm md:text-base">
+          Recent releases and improvements
+        </p>
+
+        <div class="max-w-3xl mx-auto">
+          <!-- Terminal Window -->
+          <div class="border-2 border-arcade-cyan rounded-lg overflow-hidden shadow-[0_0_25px_rgba(0,255,255,0.2)]">
+            <!-- Terminal header -->
+            <div class="bg-black px-4 py-3 border-b-2 border-arcade-cyan/50 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="flex gap-2">
+                  <div class="size-3 bg-arcade-cyan shadow-[0_0_8px_rgba(0,255,255,0.8)]"></div>
+                  <div class="size-3 bg-arcade-cyan/50"></div>
+                  <div class="size-3 bg-arcade-cyan/50"></div>
+                </div>
+                <span class="font-arcade text-xs text-arcade-cyan">CHANGELOG</span>
+              </div>
+              <a
+                href="https://github.com/roushou/bao/releases"
+                target="_blank"
+                class="font-arcade text-[10px] text-arcade-lime hover:underline"
+              >
+                VIEW ALL →
+              </a>
+            </div>
+
+            <!-- Releases -->
+            <div class="bg-arcade-dark p-6 space-y-6">
+              <!-- v0.4.2 -->
+              <div class="group">
+                <div class="flex items-center gap-4 mb-3">
+                  <span class="font-arcade text-arcade-lime text-base">v0.4.2</span>
+                  <div class="flex-1 h-px bg-arcade-cyan/20"></div>
+                  <span class="font-arcade text-xs text-gray-500">Dec 15, 2024</span>
+                </div>
+                <ul class="space-y-2 text-gray-400 text-base pl-2">
+                  <li class="flex items-center gap-2">
+                    <span class="text-arcade-lime">+</span>
+                    <span>Added <code class="text-arcade-cyan">bao rename</code> command</span>
+                  </li>
+                  <li class="flex items-center gap-2">
+                    <span class="text-arcade-lime">+</span>
+                    <span>Added <code class="text-arcade-cyan">bao info</code> command</span>
+                  </li>
+                  <li class="flex items-center gap-2">
+                    <span class="text-arcade-pink">~</span>
+                    <span>Improved handler preservation during regeneration</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- v0.4.1 -->
+              <div class="group">
+                <div class="flex items-center gap-4 mb-3">
+                  <span class="font-arcade text-arcade-lime text-base">v0.4.1</span>
+                  <div class="flex-1 h-px bg-arcade-cyan/20"></div>
+                  <span class="font-arcade text-xs text-gray-500">Dec 10, 2024</span>
+                </div>
+                <ul class="space-y-2 text-gray-400 text-base pl-2">
+                  <li class="flex items-center gap-2">
+                    <span class="text-arcade-lime">+</span>
+                    <span>TypeScript generator improvements</span>
+                  </li>
+                  <li class="flex items-center gap-2">
+                    <span class="text-arcade-pink">~</span>
+                    <span>Better error messages for invalid configurations</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- v0.4.0 -->
+              <div class="group">
+                <div class="flex items-center gap-4 mb-3">
+                  <span class="font-arcade text-arcade-lime text-base">v0.4.0</span>
+                  <div class="flex-1 h-px bg-arcade-cyan/20"></div>
+                  <span class="font-arcade text-xs text-gray-500">Dec 1, 2024</span>
+                </div>
+                <ul class="space-y-2 text-gray-400 text-base pl-2">
+                  <li class="flex items-center gap-2">
+                    <span class="text-arcade-lime">+</span>
+                    <span>Context support (database pools, HTTP clients)</span>
+                  </li>
+                  <li class="flex items-center gap-2">
+                    <span class="text-arcade-lime">+</span>
+                    <span>Added <code class="text-arcade-cyan">bao fmt</code> command</span>
+                  </li>
+                  <li class="flex items-center gap-2">
+                    <span class="text-arcade-lime">+</span>
+                    <span>Shell completions generation</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Legend -->
+          <div class="mt-4 flex justify-center gap-6 font-arcade text-xs text-gray-500">
+            <span><span class="text-arcade-lime">+</span> Added</span>
+            <span><span class="text-arcade-pink">~</span> Changed</span>
+            <span><span class="text-arcade-yellow">!</span> Fixed</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Roadmap -->
+    <section id="roadmap" class="py-12 md:py-20 relative">
+      <div class="container mx-auto px-4">
+        <h2
+          class="text-2xl md:text-3xl lg:text-4xl font-arcade text-center mb-4 text-arcade-yellow"
+        >
+          <span class="border-b-4 border-arcade-yellow pb-2">ROADMAP</span>
+        </h2>
+        <p class="text-gray-400 text-center mb-8 md:mb-16 max-w-2xl mx-auto text-sm md:text-base">
+          What's coming next
+        </p>
+
+        <div class="max-w-4xl mx-auto">
+          <!-- Terminal Window -->
+          <div class="border-2 border-arcade-yellow rounded-lg overflow-hidden shadow-[0_0_25px_rgba(255,215,0,0.2)]">
+            <!-- Terminal header -->
+            <div class="bg-black px-4 py-3 border-b-2 border-arcade-yellow/50 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="flex gap-2">
+                  <div class="size-3 bg-arcade-yellow shadow-[0_0_8px_rgba(255,215,0,0.8)]"></div>
+                  <div class="size-3 bg-arcade-yellow/50"></div>
+                  <div class="size-3 bg-arcade-yellow/50"></div>
+                </div>
+                <span class="font-arcade text-[10px] text-arcade-yellow">roadmap.md</span>
+              </div>
+              <span class="font-arcade text-[8px] text-arcade-lime animate-pulse">LIVE</span>
+            </div>
+
+            <!-- Content -->
+            <div class="bg-arcade-dark p-6 space-y-6">
+              <!-- Available Now -->
+              <div>
+                <div class="flex items-center gap-3 mb-4">
+                  <span class="font-arcade text-arcade-lime text-sm">// AVAILABLE NOW</span>
+                  <span class="font-arcade text-[10px] text-black bg-arcade-lime px-2 py-0.5">STABLE</span>
+                </div>
+                <div class="grid sm:grid-cols-2 gap-4">
+                  <div class="border border-arcade-lime/50 bg-black p-4 flex items-center gap-4 shadow-[0_0_10px_rgba(57,255,20,0.1)]">
+                    <div class="size-12 border border-arcade-pink flex items-center justify-center">
+                      <span class="font-arcade text-arcade-pink">Rs</span>
+                    </div>
+                    <div>
+                      <p class="text-white font-arcade text-sm">RUST</p>
+                      <p class="text-arcade-pink text-xs font-arcade">+ CLAP</p>
+                    </div>
+                    <span class="ml-auto text-arcade-lime font-arcade text-[10px]">████ 100%</span>
+                  </div>
+                  <div class="border border-arcade-cyan/50 bg-black p-4 flex items-center gap-4 shadow-[0_0_10px_rgba(0,255,255,0.1)]">
+                    <div class="size-12 border border-arcade-cyan flex items-center justify-center">
+                      <span class="font-arcade text-arcade-cyan">TS</span>
+                    </div>
+                    <div>
+                      <p class="text-white font-arcade text-sm">TYPESCRIPT</p>
+                      <p class="text-arcade-cyan text-xs font-arcade">+ BOUNE</p>
+                    </div>
+                    <span class="ml-auto text-arcade-lime font-arcade text-[10px]">████ 100%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- In Development -->
+              <div>
+                <div class="flex items-center gap-3 mb-4">
+                  <span class="font-arcade text-arcade-cyan text-sm">// IN DEVELOPMENT</span>
+                  <span class="font-arcade text-[10px] text-arcade-cyan border border-arcade-cyan px-2 py-0.5 animate-pulse">WIP</span>
+                </div>
+                <div class="grid sm:grid-cols-2 gap-4">
+                  <div class="border border-gray-700 bg-black/50 p-4 flex items-center gap-4 opacity-70">
+                    <div class="size-12 border border-gray-600 flex items-center justify-center">
+                      <span class="font-arcade text-gray-400">Go</span>
+                    </div>
+                    <div>
+                      <p class="text-gray-300 font-arcade text-sm">GO</p>
+                      <p class="text-gray-500 text-xs font-arcade">+ COBRA</p>
+                    </div>
+                    <span class="ml-auto text-arcade-yellow font-arcade text-[10px]">██░░ 50%</span>
+                  </div>
+                  <div class="border border-gray-700 bg-black/50 p-4 flex items-center gap-4 opacity-70">
+                    <div class="size-12 border border-gray-600 flex items-center justify-center">
+                      <span class="font-arcade text-gray-400">Py</span>
+                    </div>
+                    <div>
+                      <p class="text-gray-300 font-arcade text-sm">PYTHON</p>
+                      <p class="text-gray-500 text-xs font-arcade">+ CLICK</p>
+                    </div>
+                    <span class="ml-auto text-gray-500 font-arcade text-[10px]">░░░░ 0%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Future Features -->
+              <div>
+                <div class="flex items-center gap-3 mb-4">
+                  <span class="font-arcade text-arcade-purple text-sm">// FUTURE</span>
+                  <span class="font-arcade text-[10px] text-arcade-purple border border-arcade-purple px-2 py-0.5">PLANNED</span>
+                </div>
+                <div class="border border-gray-700 bg-black/50 p-4">
+                  <ul class="space-y-2 text-gray-400">
+                    <li class="flex items-center gap-3">
+                      <span class="text-arcade-purple font-arcade">▸</span>
+                      <span>Plugin system for custom generators</span>
+                      <span class="ml-auto font-arcade text-[10px] text-gray-600">QUEUED</span>
+                    </li>
+                    <li class="flex items-center gap-3">
+                      <span class="text-arcade-purple font-arcade">▸</span>
+                      <span>Config file validation LSP</span>
+                      <span class="ml-auto font-arcade text-[10px] text-gray-600">QUEUED</span>
+                    </li>
+                    <li class="flex items-center gap-3">
+                      <span class="text-arcade-purple font-arcade">▸</span>
+                      <span>Visual CLI builder (GUI)</span>
+                      <span class="ml-auto font-arcade text-[10px] text-gray-600">QUEUED</span>
+                    </li>
+                    <li class="flex items-center gap-3">
+                      <span class="text-arcade-purple font-arcade">▸</span>
+                      <span>More languages (community vote)</span>
+                      <span class="ml-auto font-arcade text-[10px] text-gray-600">QUEUED</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Vote CTA -->
+              <div class="border-t border-arcade-yellow/30 pt-6">
+                <a
+                  href="https://github.com/roushou/bao/issues"
+                  target="_blank"
+                  class="flex items-center justify-center gap-3 border-2 border-arcade-yellow bg-black px-6 py-3 font-arcade text-sm text-arcade-yellow hover:bg-arcade-yellow hover:text-black transition-all shadow-[0_0_15px_rgba(255,215,0,0.2)] hover:shadow-[0_0_25px_rgba(255,215,0,0.4)]"
+                >
+                  <span>VOTE FOR NEXT FEATURE</span>
+                  <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Scrolling Banner -->
+    <div
+      class="bg-arcade-pink text-black font-arcade text-xs md:text-lg py-2 overflow-hidden border-y-4 border-white transform -rotate-1 my-12 md:my-20"
+    >
+      <div class="whitespace-nowrap animate-scroll">
+        BAO CLI /// GENERATE CLIs /// RUST /// TYPESCRIPT /// TYPE SAFE /// HANDLER
+        STUBS /// OPEN SOURCE /// BAO CLI /// GENERATE CLIs /// RUST /// TYPESCRIPT
+        /// TYPE SAFE /// HANDLER STUBS /// OPEN SOURCE ///
+      </div>
+    </div>
+
+    <!-- Installation Section -->
+    <section id="install" class="py-12 md:py-20 container mx-auto px-4 text-center">
+      <h2 class="text-xl md:text-2xl lg:text-3xl font-arcade mb-6 md:mb-8 text-white">
+        GET STARTED
+      </h2>
+
+      <div
+        class="max-w-2xl mx-auto border-2 border-arcade-purple p-8 rounded-xl relative overflow-hidden group shadow-[0_0_30px_rgba(123,44,191,0.3)]"
+      >
+        <div
+          class="absolute inset-0 bg-arcade-purple/5 opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+        </div>
+
+        <!-- Window header -->
+        <div class="absolute top-0 left-0 right-0 bg-black px-4 py-2 border-b-2 border-arcade-purple/50 flex items-center gap-3">
+          <div class="flex gap-2">
+            <div class="size-2 bg-arcade-pink shadow-[0_0_6px_rgba(255,0,255,0.8)]"></div>
+            <div class="size-2 bg-arcade-yellow shadow-[0_0_6px_rgba(255,215,0,0.8)]"></div>
+            <div class="size-2 bg-arcade-lime shadow-[0_0_6px_rgba(57,255,20,0.8)]"></div>
+          </div>
+          <span class="font-arcade text-[10px] text-arcade-purple">terminal://install</span>
+        </div>
+
+        <div class="mt-8">
+          <div
+            class="flex items-center justify-between bg-black p-4 border-l-2 border-arcade-purple group-hover:border-arcade-pink transition-colors"
+          >
+            <div class="flex items-center gap-3">
+              <span class="text-arcade-cyan font-bold">▶</span>
+              <code class="text-arcade-lime text-lg">cargo install baobao</code>
+            </div>
+            <button
+              id="copy-install"
+              class="text-gray-600 hover:text-arcade-pink transition-colors"
+              title="Copy"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                ><path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                ></path></svg
+              >
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-800 bg-black pt-12 pb-8">
+      <div class="container mx-auto px-4 text-center">
+        <div class="mb-8">
+          <!-- Bao Character Footer Logo -->
+          <svg
+            class="w-20 h-20 mx-auto mb-4"
+            viewBox="0 0 48 48"
+            fill="none"
+            style="filter: drop-shadow(0 0 10px rgba(57,255,20,0.5))"
+          >
+            <!-- Bao body - puffy dome -->
+            <path d="M6 32 Q6 16 24 12 Q42 16 42 32 Q42 40 24 42 Q6 40 6 32Z" fill="#fafafa"/>
+            <!-- Top knot -->
+            <ellipse cx="24" cy="10" rx="6" ry="4" fill="#f0f0f0"/>
+            <ellipse cx="24" cy="8" rx="3" ry="2" fill="#e5e5e5"/>
+            <!-- Pleat lines -->
+            <path d="M24 14 L24 22" stroke="#e5e5e5" stroke-width="1" opacity="0.7"/>
+            <path d="M18 15 Q20 20 19 24" stroke="#e5e5e5" stroke-width="1" opacity="0.7"/>
+            <path d="M30 15 Q28 20 29 24" stroke="#e5e5e5" stroke-width="1" opacity="0.7"/>
+            <!-- Eyes - cute round -->
+            <circle cx="16" cy="28" r="4" fill="#1a1a2e"/>
+            <circle cx="32" cy="28" r="4" fill="#1a1a2e"/>
+            <!-- Eye highlights -->
+            <circle cx="17.5" cy="26.5" r="1.5" fill="#fff"/>
+            <circle cx="33.5" cy="26.5" r="1.5" fill="#fff"/>
+            <circle cx="15" cy="29" r="0.8" fill="#fff" opacity="0.5"/>
+            <circle cx="31" cy="29" r="0.8" fill="#fff" opacity="0.5"/>
+            <!-- Blush -->
+            <ellipse cx="9" cy="32" rx="3" ry="2" fill="#39ff14" opacity="0.25"/>
+            <ellipse cx="39" cy="32" rx="3" ry="2" fill="#39ff14" opacity="0.25"/>
+            <!-- Happy mouth -->
+            <path d="M20 34 Q24 38 28 34" stroke="#1a1a2e" stroke-width="2" stroke-linecap="round" fill="none"/>
+            <!-- Neon outline glow -->
+            <path d="M6 32 Q6 16 24 12 Q42 16 42 32 Q42 40 24 42 Q6 40 6 32Z" fill="none" stroke="#39ff14" stroke-width="1" opacity="0.4"/>
+          </svg>
+        </div>
+        <div class="flex justify-center gap-6 mb-8">
+          <a
+            href="https://github.com/roushou/bao"
+            class="text-gray-400 hover:text-arcade-pink transition-colors">GITHUB</a
+          >
+          <a href="#" class="text-gray-400 hover:text-arcade-cyan transition-colors"
+            >TWITTER</a
+          >
+        </div>
+        <p class="font-code text-xs text-gray-700">
+          &copy; 2025 Bao CLI • MIT License
+        </p>
+      </div>
+    </footer>
+
+    <script is:inline define:vars={{ codeText }}>
+      // --- TYPEWRITER EFFECT ---
+      const codeElement = document.getElementById("typewriter");
+      let charIndex = 0;
+
+      function typeWriter() {
+        if (charIndex < codeText.length) {
+          codeElement.innerHTML += codeText.charAt(charIndex);
+          charIndex++;
+          setTimeout(typeWriter, Math.random() * 30 + 10);
+        } else {
+          setTimeout(() => {
+            codeElement.innerHTML = "";
+            charIndex = 0;
+            typeWriter();
+          }, 5000);
+        }
+      }
+
+      setTimeout(typeWriter, 1000);
+
+      // --- STARFIELD BACKGROUND ---
+      const canvas = document.getElementById("starfield");
+      const ctx = canvas.getContext("2d");
+      let stars = [];
+      let width, height;
+
+      function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+      }
+
+      // Arcade color palette for stars
+      const arcadeColors = [
+        { r: 255, g: 0, b: 255 },   // pink
+        { r: 0, g: 255, b: 255 },   // cyan
+        { r: 57, g: 255, b: 20 },   // lime
+        { r: 255, g: 215, b: 0 },   // yellow
+        { r: 123, g: 44, b: 191 },  // purple
+      ];
+
+      class Star {
+        constructor() {
+          this.reset();
+        }
+
+        reset() {
+          this.x = (Math.random() - 0.5) * width * 2;
+          this.y = (Math.random() - 0.5) * height * 2;
+          this.z = Math.random() * width;
+          this.pz = this.z;
+          this.color = arcadeColors[Math.floor(Math.random() * arcadeColors.length)];
+        }
+
+        update() {
+          this.z = this.z - 10;
+          if (this.z < 1) {
+            this.reset();
+          }
+        }
+
+        draw() {
+          const sx = (this.x / this.z) * width + width / 2;
+          const sy = (this.y / this.z) * height + height / 2;
+          const r = (1 - this.z / width) * 4;
+          const px = (this.x / this.pz) * width + width / 2;
+          const py = (this.y / this.pz) * height + height / 2;
+
+          this.pz = this.z;
+
+          if (sx < 0 || sx > width || sy < 0 || sy > height) return;
+
+          const alpha = 1 - this.z / width;
+          const { r: cr, g: cg, b: cb } = this.color;
+
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(sx, sy);
+          ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha})`;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(sx, sy, r > 0 ? r : 0, 0, Math.PI * 2);
+          ctx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`;
+          ctx.fill();
+        }
+      }
+
+      function initStars() {
+        stars = [];
+        for (let i = 0; i < 4000; i++) {
+          stars.push(new Star());
+        }
+      }
+
+      function animateStars() {
+        ctx.fillStyle = "rgba(5, 4, 10, 0.4)";
+        ctx.fillRect(0, 0, width, height);
+
+        stars.forEach((star) => {
+          star.update();
+          star.draw();
+        });
+
+        requestAnimationFrame(animateStars);
+      }
+
+      window.addEventListener("resize", resize);
+      resize();
+      initStars();
+      animateStars();
+
+      // --- CLIPBOARD ---
+      function copyToClipboard(text, btn) {
+        navigator.clipboard.writeText(text);
+        const original = btn.innerHTML;
+        btn.innerHTML = `<span class="text-green-500 font-arcade text-xs">OK!</span>`;
+        setTimeout(() => {
+          btn.innerHTML = original;
+        }, 2000);
+      }
+
+      document.getElementById("copy-install")?.addEventListener("click", function () {
+        copyToClipboard("cargo install baobao", this);
+      });
+
+      document.getElementById("hero-copy-install")?.addEventListener("click", function () {
+        navigator.clipboard.writeText("cargo install baobao");
+        const icon = this.querySelector("svg");
+        const originalIcon = icon.outerHTML;
+        icon.outerHTML = `<svg class="ml-2 w-4 h-4 text-arcade-lime transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>`;
+        this.classList.add("shadow-[0_0_40px_rgba(57,255,20,0.5)]");
+        this.classList.remove("shadow-[0_0_20px_rgba(0,255,255,0.3)]");
+        setTimeout(() => {
+          this.querySelector("svg").outerHTML = originalIcon;
+          this.classList.remove("shadow-[0_0_40px_rgba(57,255,20,0.5)]");
+          this.classList.add("shadow-[0_0_20px_rgba(0,255,255,0.3)]");
+        }, 1500);
+      });
+
+      // --- TUTORIAL MODE COPY BUTTONS ---
+      document.querySelectorAll(".copy-btn").forEach((btn) => {
+        btn.addEventListener("click", function () {
+          const text = this.getAttribute("data-copy");
+          navigator.clipboard.writeText(text);
+          const svg = this.querySelector("svg");
+          const originalHTML = this.innerHTML;
+          this.innerHTML = `<span class="text-arcade-lime text-xs">✓</span>`;
+          setTimeout(() => {
+            this.innerHTML = originalHTML;
+          }, 1500);
+        });
+      });
+
+      // --- TAB SWITCHING (Combo Demo) ---
+      const tabRust = document.querySelector(".tab-rust");
+      const tabTs = document.querySelector(".tab-ts");
+      const codeRust = document.getElementById("code-rust");
+      const codeTs = document.getElementById("code-ts");
+
+      tabRust?.addEventListener("click", () => {
+        tabRust.classList.add("text-black", "bg-arcade-cyan");
+        tabRust.classList.remove("text-gray-500", "border", "border-gray-700");
+        tabTs.classList.remove("text-black", "bg-arcade-cyan");
+        tabTs.classList.add("text-gray-500", "border", "border-gray-700");
+        codeRust.classList.remove("hidden");
+        codeTs.classList.add("hidden");
+      });
+
+      tabTs?.addEventListener("click", () => {
+        tabTs.classList.add("text-black", "bg-arcade-cyan");
+        tabTs.classList.remove("text-gray-500", "border", "border-gray-700");
+        tabRust.classList.remove("text-black", "bg-arcade-cyan");
+        tabRust.classList.add("text-gray-500", "border", "border-gray-700");
+        codeTs.classList.remove("hidden");
+        codeRust.classList.add("hidden");
+      });
+
+      // --- MOBILE MENU ---
+      const mobileMenuBtn = document.getElementById("mobile-menu-btn");
+      const mobileMenu = document.getElementById("mobile-menu");
+      const mobileMenuClose = document.getElementById("mobile-menu-close");
+      const mobileMenuLinks = document.querySelectorAll(".mobile-menu-link");
+
+      mobileMenuBtn?.addEventListener("click", () => {
+        mobileMenu?.classList.remove("hidden");
+        document.body.style.overflow = "hidden";
+      });
+
+      mobileMenuClose?.addEventListener("click", () => {
+        mobileMenu?.classList.add("hidden");
+        document.body.style.overflow = "";
+      });
+
+      mobileMenuLinks.forEach(link => {
+        link.addEventListener("click", () => {
+          mobileMenu?.classList.add("hidden");
+          document.body.style.overflow = "";
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,157 @@
+---
+import DocsLayout from "../../../layouts/DocsLayout.astro";
+---
+
+<DocsLayout title="Subcommands" description="Create nested command hierarchies">
+  <div class="mb-8 md:mb-12">
+    <h1 class="text-2xl md:text-4xl font-arcade text-white mb-4">
+      SUBCOMMANDS
+    </h1>
+    <p class="text-gray-400 text-base md:text-lg leading-relaxed">
+      Create nested command hierarchies.
+    </p>
+  </div>
+
+  <!-- Overview -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-purple mb-6 pb-2 border-b border-arcade-purple/30">
+      // OVERVIEW
+    </h2>
+
+    <p class="text-gray-400 mb-6">
+      Nest commands using <code class="text-arcade-purple">.commands.</code> within a parent command. You can nest as deep as needed.
+    </p>
+
+    <div class="border-2 border-arcade-purple/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-purple/30">
+        <span class="font-arcade text-[10px] text-arcade-purple">bao.toml</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-yellow">[commands.db]</span>
+description = <span class="text-arcade-lime">"Database operations"</span>
+
+<span class="text-arcade-yellow">[commands.db.commands.migrate]</span>
+description = <span class="text-arcade-lime">"Run migrations"</span>
+
+<span class="text-arcade-yellow">[[commands.db.commands.migrate.flags]]</span>
+name = <span class="text-arcade-lime">"dry_run"</span>
+short = <span class="text-arcade-lime">"n"</span>
+description = <span class="text-arcade-lime">"Preview only"</span>
+
+<span class="text-arcade-yellow">[commands.db.commands.seed]</span>
+description = <span class="text-arcade-lime">"Seed data"</span>
+
+<span class="text-arcade-yellow">[commands.db.commands.reset]</span>
+description = <span class="text-arcade-lime">"Reset database"</span></code></pre>
+    </div>
+
+    <p class="text-gray-400 mb-4">Usage:</p>
+    <div class="border border-arcade-purple/30 rounded overflow-hidden">
+      <pre class="p-3 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp db migrate --dry-run</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp db seed</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp db reset</span>
+
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp db --help</span>
+<span class="text-gray-400">Database operations
+
+Usage: myapp db &lt;COMMAND&gt;
+
+Commands:
+  migrate  Run migrations
+  seed     Seed data
+  reset    Reset database</span></code></pre>
+    </div>
+  </section>
+
+  <!-- Deep Nesting -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-cyan mb-6 pb-2 border-b border-arcade-cyan/30">
+      // DEEP NESTING
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      You can nest commands multiple levels deep:
+    </p>
+
+    <div class="border-2 border-arcade-cyan/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-cyan/30">
+        <span class="font-arcade text-[10px] text-arcade-cyan">bao.toml</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-yellow">[commands.config]</span>
+description = <span class="text-arcade-lime">"Configuration management"</span>
+
+<span class="text-arcade-yellow">[commands.config.commands.db]</span>
+description = <span class="text-arcade-lime">"Database config"</span>
+
+<span class="text-arcade-yellow">[commands.config.commands.db.commands.set]</span>
+description = <span class="text-arcade-lime">"Set database URL"</span>
+
+<span class="text-arcade-yellow">[[commands.config.commands.db.commands.set.args]]</span>
+name = <span class="text-arcade-lime">"url"</span>
+type = <span class="text-arcade-lime">"string"</span></code></pre>
+    </div>
+
+    <div class="border border-arcade-cyan/30 rounded overflow-hidden">
+      <pre class="p-3 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp config db set postgres://localhost/mydb</span></code></pre>
+    </div>
+  </section>
+
+  <!-- Using bao add -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-yellow mb-6 pb-2 border-b border-arcade-yellow/30">
+      // USING BAO ADD
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      Add nested commands using slash notation:
+    </p>
+
+    <div class="border-2 border-arcade-yellow/50 rounded-lg overflow-hidden mb-6">
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add command db</span>
+<span class="text-gray-500">  Added command "db" to bao.toml</span>
+
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add command db/migrate</span>
+<span class="text-gray-500">  Added command "migrate" under "db"</span>
+
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add command db/seed</span>
+<span class="text-gray-500">  Added command "seed" under "db"</span>
+
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add flag db/migrate dry_run</span>
+<span class="text-gray-500">  Added flag "dry_run" to command "db/migrate"</span></code></pre>
+    </div>
+
+    <div class="bg-arcade-yellow/10 border border-arcade-yellow/30 p-3 rounded text-sm">
+      <p class="text-gray-400"><span class="text-arcade-yellow font-semibold">Tip:</span> Use slash notation (<code class="text-arcade-cyan">db/migrate</code>) to reference nested commands in all bao commands.</p>
+    </div>
+  </section>
+
+  <!-- Generated Structure -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-lime mb-6 pb-2 border-b border-arcade-lime/30">
+      // GENERATED STRUCTURE
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      Nested commands create a directory hierarchy:
+    </p>
+
+    <div class="border border-arcade-lime/30 rounded overflow-hidden">
+      <pre class="p-3 text-sm bg-arcade-dark"><code class="text-gray-300">src/commands/
+<span class="text-arcade-cyan">├──</span> db/
+<span class="text-arcade-cyan">│   ├──</span> migrate.rs    <span class="text-gray-500"># db migrate handler</span>
+<span class="text-arcade-cyan">│   ├──</span> seed.rs       <span class="text-gray-500"># db seed handler</span>
+<span class="text-arcade-cyan">│   ├──</span> reset.rs      <span class="text-gray-500"># db reset handler</span>
+<span class="text-arcade-cyan">│   └──</span> mod.rs
+<span class="text-arcade-cyan">└──</span> mod.rs</code></pre>
+    </div>
+  </section>
+
+  <!-- Navigation -->
+  <div class="mt-12 pt-8 border-t border-gray-800 flex justify-between items-center">
+    <a href="/docs/guide/flags" class="inline-flex items-center gap-2 text-gray-400 hover:text-white font-arcade text-sm">
+      <span>&larr;</span> Flags
+    </a>
+    <a href="/docs/guide/context" class="inline-flex items-center gap-2 text-arcade-cyan hover:underline font-arcade text-sm">
+      Context <span>&rarr;</span>
+    </a>
+  </div>
+</DocsLayout>

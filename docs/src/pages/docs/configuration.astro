@@ -1,0 +1,548 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+---
+
+<DocsLayout title="Configuration" description="Complete reference for bao.toml configuration options">
+  <!-- Page Header -->
+  <div class="mb-8 md:mb-12">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="font-arcade text-[10px] text-arcade-yellow border border-arcade-yellow px-2 py-1">REFERENCE</span>
+    </div>
+    <h1 class="text-2xl md:text-4xl font-arcade text-white mb-4">
+      <span class="text-arcade-yellow">CONFIGURATION</span>
+    </h1>
+    <p class="text-gray-400 text-base md:text-lg leading-relaxed">
+      Everything you can do in <code class="text-arcade-yellow">bao.toml</code>.
+    </p>
+  </div>
+
+  <!-- Quick Overview -->
+  <section class="mb-12">
+    <div class="bg-arcade-yellow/10 border border-arcade-yellow/30 p-4 rounded">
+      <p class="text-gray-400 text-sm">
+        <span class="text-arcade-yellow font-semibold">TL;DR:</span> Define your CLI's name, language, and commands.
+        Each command can have arguments (positional) and flags (optional).
+        Nest commands with <code class="text-arcade-cyan">.commands</code>. Share state with <code class="text-arcade-cyan">[context]</code>.
+      </p>
+    </div>
+  </section>
+
+  <!-- Table of Contents -->
+  <nav class="mb-12 p-4 border border-gray-700 bg-black/30 rounded">
+    <p class="font-arcade text-[10px] text-gray-500 mb-3">// ON THIS PAGE</p>
+    <ul class="grid sm:grid-cols-2 gap-2 text-sm">
+      <li><a href="#cli" class="text-gray-400 hover:text-arcade-cyan">&gt; [cli] Metadata</a></li>
+      <li><a href="#commands" class="text-gray-400 hover:text-arcade-pink">&gt; [commands] Definitions</a></li>
+      <li><a href="#args" class="text-gray-400 hover:text-arcade-lime">&gt; Arguments (positional)</a></li>
+      <li><a href="#flags" class="text-gray-400 hover:text-arcade-yellow">&gt; Flags (optional)</a></li>
+      <li><a href="#subcommands" class="text-gray-400 hover:text-arcade-purple">&gt; Subcommands (nested)</a></li>
+      <li><a href="#context" class="text-gray-400 hover:text-arcade-cyan">&gt; [context] Shared state</a></li>
+    </ul>
+  </nav>
+
+  <!-- CLI Section -->
+  <section id="cli" class="mb-12 scroll-mt-24">
+    <h2 class="font-arcade text-xl text-arcade-cyan mb-6 pb-2 border-b border-arcade-cyan/30">
+      // [cli] - METADATA
+    </h2>
+
+    <p class="text-gray-400 mb-6">
+      Every <code class="text-arcade-yellow">bao.toml</code> starts with <code class="text-arcade-cyan">[cli]</code>. Only <code class="text-arcade-lime">name</code> and <code class="text-arcade-lime">language</code> are required.
+    </p>
+
+    <div class="border-2 border-arcade-cyan/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-cyan/30">
+        <span class="font-arcade text-[10px] text-arcade-cyan">bao.toml</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-yellow">[cli]</span>
+name = <span class="text-arcade-lime">"deploy"</span>                        <span class="text-gray-500"># Binary name</span>
+version = <span class="text-arcade-lime">"1.0.0"</span>                      <span class="text-gray-500"># Shown in --version</span>
+description = <span class="text-arcade-lime">"Deploy your apps"</span>        <span class="text-gray-500"># Shown in --help</span>
+language = <span class="text-arcade-lime">"rust"</span>                       <span class="text-gray-500"># "rust" or "typescript"</span></code></pre>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-cyan border-b border-gray-700">FIELD</th>
+            <th class="text-left p-3 text-arcade-cyan border-b border-gray-700">DEFAULT</th>
+            <th class="text-left p-3 text-arcade-cyan border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">name</code> <span class="text-arcade-pink text-xs">*</span></td>
+            <td class="p-3">-</td>
+            <td class="p-3">Your CLI's binary name</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">language</code> <span class="text-arcade-pink text-xs">*</span></td>
+            <td class="p-3">-</td>
+            <td class="p-3"><code class="text-arcade-cyan">"rust"</code> or <code class="text-arcade-cyan">"typescript"</code></td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">version</code></td>
+            <td class="p-3">"0.1.0"</td>
+            <td class="p-3">Version shown with <code class="text-arcade-cyan">--version</code></td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">description</code></td>
+            <td class="p-3">-</td>
+            <td class="p-3">Description shown in help text</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-lime">author</code></td>
+            <td class="p-3">-</td>
+            <td class="p-3">Author information</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-gray-500 text-xs mt-2"><span class="text-arcade-pink">*</span> Required field</p>
+  </section>
+
+  <!-- Commands Section -->
+  <section id="commands" class="mb-12 scroll-mt-24">
+    <h2 class="font-arcade text-xl text-arcade-pink mb-6 pb-2 border-b border-arcade-pink/30">
+      // [commands] - DEFINITIONS
+    </h2>
+
+    <p class="text-gray-400 mb-6">
+      Each command is defined as <code class="text-arcade-pink">[commands.name]</code>. A description is required.
+    </p>
+
+    <div class="border-2 border-arcade-pink/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-pink/30">
+        <span class="font-arcade text-[10px] text-arcade-pink">bao.toml</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-yellow">[commands.deploy]</span>
+description = <span class="text-arcade-lime">"Deploy to an environment"</span>
+
+<span class="text-arcade-yellow">[commands.status]</span>
+description = <span class="text-arcade-lime">"Check deployment status"</span>
+
+<span class="text-arcade-yellow">[commands.logs]</span>
+description = <span class="text-arcade-lime">"View application logs"</span></code></pre>
+    </div>
+
+    <p class="text-gray-400 mb-4">This generates a CLI with three commands:</p>
+
+    <div class="border border-arcade-pink/30 rounded overflow-hidden mb-6">
+      <pre class="p-3 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp --help</span>
+<span class="text-gray-400">Usage: myapp &lt;COMMAND&gt;
+
+Commands:
+  deploy  Deploy to an environment
+  status  Check deployment status
+  logs    View application logs
+  help    Print help</span></code></pre>
+    </div>
+
+    <div class="bg-arcade-pink/10 border border-arcade-pink/30 p-4 rounded">
+      <p class="text-arcade-pink text-sm font-arcade mb-2">NAMING RULES</p>
+      <p class="text-gray-400 text-sm">
+        Names must start with a letter and contain only letters, numbers, underscores, or hyphens.
+        Reserved keywords (<code class="text-arcade-yellow">fn</code>, <code class="text-arcade-yellow">async</code>, <code class="text-arcade-yellow">struct</code>, etc.) are not allowed.
+      </p>
+    </div>
+  </section>
+
+  <!-- Arguments Section -->
+  <section id="args" class="mb-12 scroll-mt-24">
+    <h2 class="font-arcade text-xl text-arcade-lime mb-6 pb-2 border-b border-arcade-lime/30">
+      // ARGUMENTS (POSITIONAL)
+    </h2>
+
+    <p class="text-gray-400 mb-6">
+      Arguments are positional values. Use <code class="text-arcade-lime">[[commands.name.args]]</code> to add them. Order matters.
+    </p>
+
+    <div class="border-2 border-arcade-lime/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-lime/30">
+        <span class="font-arcade text-[10px] text-arcade-lime">bao.toml</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-yellow">[commands.copy]</span>
+description = <span class="text-arcade-lime">"Copy a file"</span>
+
+<span class="text-arcade-yellow">[[commands.copy.args]]</span>
+name = <span class="text-arcade-lime">"source"</span>
+type = <span class="text-arcade-lime">"path"</span>
+description = <span class="text-arcade-lime">"Source file"</span>
+
+<span class="text-arcade-yellow">[[commands.copy.args]]</span>
+name = <span class="text-arcade-lime">"dest"</span>
+type = <span class="text-arcade-lime">"path"</span>
+description = <span class="text-arcade-lime">"Destination"</span></code></pre>
+    </div>
+
+    <p class="text-gray-400 mb-4">Usage:</p>
+    <div class="border border-arcade-lime/30 rounded overflow-hidden mb-6">
+      <pre class="p-3 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp copy ./file.txt ./backup/file.txt</span></code></pre>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Options</h3>
+    <div class="overflow-x-auto mb-6">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-lime border-b border-gray-700">FIELD</th>
+            <th class="text-left p-3 text-arcade-lime border-b border-gray-700">DEFAULT</th>
+            <th class="text-left p-3 text-arcade-lime border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">name</code> <span class="text-arcade-pink text-xs">*</span></td>
+            <td class="p-3">-</td>
+            <td class="p-3">Argument name</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">type</code> <span class="text-arcade-pink text-xs">*</span></td>
+            <td class="p-3">-</td>
+            <td class="p-3">See types below</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">description</code></td>
+            <td class="p-3">-</td>
+            <td class="p-3">Help text</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">required</code></td>
+            <td class="p-3">true</td>
+            <td class="p-3">Make optional with <code class="text-arcade-cyan">false</code></td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-lime">default</code></td>
+            <td class="p-3">-</td>
+            <td class="p-3">Default value (makes arg optional)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Types</h3>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+      <div class="bg-black/30 border border-gray-700 p-2 text-center">
+        <code class="text-arcade-cyan text-sm">string</code>
+        <p class="text-gray-500 text-xs mt-1">Text</p>
+      </div>
+      <div class="bg-black/30 border border-gray-700 p-2 text-center">
+        <code class="text-arcade-cyan text-sm">int</code>
+        <p class="text-gray-500 text-xs mt-1">Integer</p>
+      </div>
+      <div class="bg-black/30 border border-gray-700 p-2 text-center">
+        <code class="text-arcade-cyan text-sm">float</code>
+        <p class="text-gray-500 text-xs mt-1">Decimal</p>
+      </div>
+      <div class="bg-black/30 border border-gray-700 p-2 text-center">
+        <code class="text-arcade-cyan text-sm">bool</code>
+        <p class="text-gray-500 text-xs mt-1">true/false</p>
+      </div>
+      <div class="bg-black/30 border border-gray-700 p-2 text-center">
+        <code class="text-arcade-cyan text-sm">path</code>
+        <p class="text-gray-500 text-xs mt-1">File path</p>
+      </div>
+    </div>
+    <p class="text-gray-500 text-xs mt-2"><span class="text-arcade-pink">*</span> Required field</p>
+  </section>
+
+  <!-- Flags Section -->
+  <section id="flags" class="mb-12 scroll-mt-24">
+    <h2 class="font-arcade text-xl text-arcade-yellow mb-6 pb-2 border-b border-arcade-yellow/30">
+      // FLAGS (OPTIONAL)
+    </h2>
+
+    <p class="text-gray-400 mb-6">
+      Flags are optional named arguments (<code class="text-arcade-cyan">--verbose</code>, <code class="text-arcade-cyan">-v</code>). Use <code class="text-arcade-yellow">[[commands.name.flags]]</code>.
+    </p>
+
+    <div class="border-2 border-arcade-yellow/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-yellow/30">
+        <span class="font-arcade text-[10px] text-arcade-yellow">bao.toml</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-yellow">[commands.build]</span>
+description = <span class="text-arcade-lime">"Build the project"</span>
+
+<span class="text-arcade-yellow">[[commands.build.flags]]</span>
+name = <span class="text-arcade-lime">"release"</span>
+short = <span class="text-arcade-lime">"r"</span>
+description = <span class="text-arcade-lime">"Build in release mode"</span>
+
+<span class="text-arcade-yellow">[[commands.build.flags]]</span>
+name = <span class="text-arcade-lime">"jobs"</span>
+type = <span class="text-arcade-lime">"int"</span>
+short = <span class="text-arcade-lime">"j"</span>
+default = <span class="text-arcade-cyan">4</span>
+description = <span class="text-arcade-lime">"Parallel jobs"</span></code></pre>
+    </div>
+
+    <p class="text-gray-400 mb-4">Usage:</p>
+    <div class="border border-arcade-yellow/30 rounded overflow-hidden mb-6">
+      <pre class="p-3 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp build --release --jobs 8</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp build -r -j 8</span>            <span class="text-gray-500"># Short form</span></code></pre>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Options</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-yellow border-b border-gray-700">FIELD</th>
+            <th class="text-left p-3 text-arcade-yellow border-b border-gray-700">DEFAULT</th>
+            <th class="text-left p-3 text-arcade-yellow border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">name</code> <span class="text-arcade-pink text-xs">*</span></td>
+            <td class="p-3">-</td>
+            <td class="p-3">Flag name (becomes <code class="text-arcade-cyan">--name</code>)</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">type</code></td>
+            <td class="p-3">"bool"</td>
+            <td class="p-3">Same types as arguments</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">short</code></td>
+            <td class="p-3">-</td>
+            <td class="p-3">Single char (e.g., <code class="text-arcade-cyan">"v"</code> for <code class="text-arcade-cyan">-v</code>)</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-lime">description</code></td>
+            <td class="p-3">-</td>
+            <td class="p-3">Help text</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-lime">default</code></td>
+            <td class="p-3">-</td>
+            <td class="p-3">Default value</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-gray-500 text-xs mt-2"><span class="text-arcade-pink">*</span> Required field</p>
+  </section>
+
+  <!-- Subcommands Section -->
+  <section id="subcommands" class="mb-12 scroll-mt-24">
+    <h2 class="font-arcade text-xl text-arcade-purple mb-6 pb-2 border-b border-arcade-purple/30">
+      // SUBCOMMANDS (NESTED)
+    </h2>
+
+    <p class="text-gray-400 mb-6">
+      Nest commands using <code class="text-arcade-purple">.commands.</code> within a parent command. You can nest as deep as needed.
+    </p>
+
+    <div class="border-2 border-arcade-purple/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-purple/30">
+        <span class="font-arcade text-[10px] text-arcade-purple">bao.toml</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-yellow">[commands.db]</span>
+description = <span class="text-arcade-lime">"Database operations"</span>
+
+<span class="text-arcade-yellow">[commands.db.commands.migrate]</span>
+description = <span class="text-arcade-lime">"Run migrations"</span>
+
+<span class="text-arcade-yellow">[[commands.db.commands.migrate.flags]]</span>
+name = <span class="text-arcade-lime">"dry_run"</span>
+short = <span class="text-arcade-lime">"n"</span>
+description = <span class="text-arcade-lime">"Preview only"</span>
+
+<span class="text-arcade-yellow">[commands.db.commands.seed]</span>
+description = <span class="text-arcade-lime">"Seed data"</span>
+
+<span class="text-arcade-yellow">[commands.db.commands.reset]</span>
+description = <span class="text-arcade-lime">"Reset database"</span></code></pre>
+    </div>
+
+    <p class="text-gray-400 mb-4">Usage:</p>
+    <div class="border border-arcade-purple/30 rounded overflow-hidden mb-6">
+      <pre class="p-3 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp db migrate --dry-run</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp db seed</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp db reset</span>
+
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp db --help</span>
+<span class="text-gray-400">Database operations
+
+Usage: myapp db &lt;COMMAND&gt;
+
+Commands:
+  migrate  Run migrations
+  seed     Seed data
+  reset    Reset database</span></code></pre>
+    </div>
+
+    <div class="bg-arcade-purple/10 border border-arcade-purple/30 p-3 rounded text-sm">
+      <p class="text-gray-400"><span class="text-arcade-purple font-semibold">Tip:</span> Use <code class="text-arcade-cyan">bao add command db/migrate</code> to add nested commands via CLI.</p>
+    </div>
+  </section>
+
+  <!-- Context Section -->
+  <section id="context" class="mb-12 scroll-mt-24">
+    <h2 class="font-arcade text-xl text-arcade-cyan mb-6 pb-2 border-b border-arcade-cyan/30">
+      // [context] - SHARED STATE
+    </h2>
+
+    <p class="text-gray-400 mb-6">
+      Share state across all handlers: database connections, HTTP clients, configuration. Define fields in <code class="text-arcade-cyan">[context]</code>.
+    </p>
+
+    <div class="border-2 border-arcade-cyan/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-cyan/30">
+        <span class="font-arcade text-[10px] text-arcade-cyan">bao.toml</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-yellow">[context]</span>
+fields = [<span class="text-arcade-lime">"db"</span>, <span class="text-arcade-lime">"config"</span>]</code></pre>
+    </div>
+
+    <p class="text-gray-400 mb-4">Bao generates a Context struct. You fill in the types:</p>
+
+    <div class="border border-arcade-cyan/30 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-cyan/30">
+        <span class="font-arcade text-[10px] text-arcade-cyan">src/context.rs</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-pink">pub struct</span> <span class="text-arcade-cyan">Context</span> &#123;
+    <span class="text-arcade-pink">pub</span> db: <span class="text-arcade-cyan">DatabasePool</span>,     <span class="text-gray-500">// Your type</span>
+    <span class="text-arcade-pink">pub</span> config: <span class="text-arcade-cyan">AppConfig</span>,    <span class="text-gray-500">// Your type</span>
+&#125;</code></pre>
+    </div>
+
+    <p class="text-gray-400 mb-4">Every handler receives the context:</p>
+
+    <div class="border border-arcade-cyan/30 rounded-lg overflow-hidden">
+      <div class="bg-black px-4 py-2 border-b border-arcade-cyan/30">
+        <span class="font-arcade text-[10px] text-arcade-cyan">src/commands/deploy.rs</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-pink">pub async fn</span> <span class="text-arcade-yellow">execute</span>(ctx: &amp;<span class="text-arcade-cyan">Context</span>, args: <span class="text-arcade-cyan">DeployArgs</span>) &#123;
+    <span class="text-gray-500">// Access shared state</span>
+    <span class="text-arcade-pink">let</span> conn = ctx.db.get_connection();
+    <span class="text-arcade-pink">let</span> env = &amp;ctx.config.environment;
+&#125;</code></pre>
+    </div>
+  </section>
+
+  <!-- Full Example -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-white mb-6 pb-2 border-b border-gray-700">
+      // FULL EXAMPLE
+    </h2>
+
+    <div class="border-2 border-gray-600 rounded-lg overflow-hidden">
+      <div class="bg-black px-4 py-2 border-b border-gray-600 flex items-center justify-between">
+        <span class="font-arcade text-[10px] text-gray-400">bao.toml</span>
+        <button class="copy-btn text-gray-500 hover:text-arcade-lime transition-colors" data-copy='[cli]
+name = "deploy-cli"
+version = "1.0.0"
+description = "Deployment management CLI"
+language = "rust"
+
+[context]
+fields = ["config", "client"]
+
+[commands.deploy]
+description = "Deploy to an environment"
+
+[[commands.deploy.args]]
+name = "environment"
+type = "string"
+description = "Target environment (dev/staging/prod)"
+
+[[commands.deploy.flags]]
+name = "force"
+short = "f"
+description = "Force deployment without confirmation"
+
+[[commands.deploy.flags]]
+name = "dry_run"
+short = "n"
+description = "Preview changes without deploying"
+
+[commands.status]
+description = "Check deployment status"
+
+[[commands.status.args]]
+name = "service"
+type = "string"
+required = false
+description = "Specific service to check"
+
+[commands.rollback]
+description = "Rollback to previous version"
+
+[[commands.rollback.flags]]
+name = "confirm"
+description = "Skip confirmation prompt"'>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+        </button>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-yellow">[cli]</span>
+name = <span class="text-arcade-lime">"deploy-cli"</span>
+version = <span class="text-arcade-lime">"1.0.0"</span>
+description = <span class="text-arcade-lime">"Deployment management CLI"</span>
+language = <span class="text-arcade-lime">"rust"</span>
+
+<span class="text-arcade-yellow">[context]</span>
+fields = [<span class="text-arcade-lime">"config"</span>, <span class="text-arcade-lime">"client"</span>]
+
+<span class="text-arcade-yellow">[commands.deploy]</span>
+description = <span class="text-arcade-lime">"Deploy to an environment"</span>
+
+<span class="text-arcade-yellow">[[commands.deploy.args]]</span>
+name = <span class="text-arcade-lime">"environment"</span>
+type = <span class="text-arcade-lime">"string"</span>
+description = <span class="text-arcade-lime">"Target environment (dev/staging/prod)"</span>
+
+<span class="text-arcade-yellow">[[commands.deploy.flags]]</span>
+name = <span class="text-arcade-lime">"force"</span>
+short = <span class="text-arcade-lime">"f"</span>
+description = <span class="text-arcade-lime">"Force deployment without confirmation"</span>
+
+<span class="text-arcade-yellow">[[commands.deploy.flags]]</span>
+name = <span class="text-arcade-lime">"dry_run"</span>
+short = <span class="text-arcade-lime">"n"</span>
+description = <span class="text-arcade-lime">"Preview changes without deploying"</span>
+
+<span class="text-arcade-yellow">[commands.status]</span>
+description = <span class="text-arcade-lime">"Check deployment status"</span>
+
+<span class="text-arcade-yellow">[[commands.status.args]]</span>
+name = <span class="text-arcade-lime">"service"</span>
+type = <span class="text-arcade-lime">"string"</span>
+required = <span class="text-arcade-cyan">false</span>
+description = <span class="text-arcade-lime">"Specific service to check"</span>
+
+<span class="text-arcade-yellow">[commands.rollback]</span>
+description = <span class="text-arcade-lime">"Rollback to previous version"</span>
+
+<span class="text-arcade-yellow">[[commands.rollback.flags]]</span>
+name = <span class="text-arcade-lime">"confirm"</span>
+description = <span class="text-arcade-lime">"Skip confirmation prompt"</span></code></pre>
+    </div>
+  </section>
+
+  <!-- Navigation -->
+  <div class="mt-12 pt-8 border-t border-gray-800 flex justify-between items-center">
+    <a href="/docs/getting-started" class="inline-flex items-center gap-2 text-gray-400 hover:text-white font-arcade text-sm">
+      <span>&larr;</span> Getting Started
+    </a>
+    <a href="/docs/commands" class="inline-flex items-center gap-2 text-arcade-pink hover:underline font-arcade text-sm">
+      Commands <span>&rarr;</span>
+    </a>
+  </div>
+</DocsLayout>
+
+<script is:inline>
+  document.querySelectorAll(".copy-btn").forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const text = this.getAttribute("data-copy");
+      navigator.clipboard.writeText(text);
+      const originalHTML = this.innerHTML;
+      this.innerHTML = `<span class="text-arcade-lime text-xs">OK</span>`;
+      setTimeout(() => {
+        this.innerHTML = originalHTML;
+      }, 1500);
+    });
+  });
+</script>

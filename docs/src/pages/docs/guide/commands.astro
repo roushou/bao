@@ -1,0 +1,138 @@
+---
+import DocsLayout from "../../../layouts/DocsLayout.astro";
+---
+
+<DocsLayout title="Commands" description="Define and organize commands in your CLI">
+  <div class="mb-8 md:mb-12">
+    <h1 class="text-2xl md:text-4xl font-arcade text-white mb-4">
+      COMMANDS
+    </h1>
+    <p class="text-gray-400 text-base md:text-lg leading-relaxed">
+      Define and organize commands in your CLI.
+    </p>
+  </div>
+
+  <!-- Defining Commands -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-pink mb-6 pb-2 border-b border-arcade-pink/30">
+      // DEFINING COMMANDS
+    </h2>
+
+    <p class="text-gray-400 mb-6">
+      Each command is defined as <code class="text-arcade-pink">[commands.name]</code>. A description is required.
+    </p>
+
+    <div class="border-2 border-arcade-pink/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-pink/30">
+        <span class="font-arcade text-[10px] text-arcade-pink">bao.toml</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-yellow">[commands.deploy]</span>
+description = <span class="text-arcade-lime">"Deploy to an environment"</span>
+
+<span class="text-arcade-yellow">[commands.status]</span>
+description = <span class="text-arcade-lime">"Check deployment status"</span>
+
+<span class="text-arcade-yellow">[commands.logs]</span>
+description = <span class="text-arcade-lime">"View application logs"</span></code></pre>
+    </div>
+
+    <p class="text-gray-400 mb-4">This generates a CLI with three commands:</p>
+
+    <div class="border border-arcade-pink/30 rounded overflow-hidden mb-6">
+      <pre class="p-3 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">myapp --help</span>
+<span class="text-gray-400">Usage: myapp &lt;COMMAND&gt;
+
+Commands:
+  deploy  Deploy to an environment
+  status  Check deployment status
+  logs    View application logs
+  help    Print help</span></code></pre>
+    </div>
+  </section>
+
+  <!-- Naming Rules -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-cyan mb-6 pb-2 border-b border-arcade-cyan/30">
+      // NAMING RULES
+    </h2>
+
+    <div class="bg-arcade-cyan/10 border border-arcade-cyan/30 p-4 rounded mb-6">
+      <p class="text-gray-400 text-sm">
+        Names must start with a letter and contain only letters, numbers, underscores, or hyphens.
+        Reserved keywords (<code class="text-arcade-yellow">fn</code>, <code class="text-arcade-yellow">async</code>, <code class="text-arcade-yellow">struct</code>, etc.) are not allowed.
+      </p>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div class="border border-arcade-lime/50 bg-black/30 p-4">
+        <p class="font-arcade text-arcade-lime text-xs mb-3">VALID NAMES</p>
+        <ul class="space-y-1 text-gray-400 text-sm">
+          <li><code class="text-arcade-lime">deploy</code></li>
+          <li><code class="text-arcade-lime">run_tests</code></li>
+          <li><code class="text-arcade-lime">my-command</code></li>
+          <li><code class="text-arcade-lime">cmd2</code></li>
+        </ul>
+      </div>
+      <div class="border border-arcade-pink/50 bg-black/30 p-4">
+        <p class="font-arcade text-arcade-pink text-xs mb-3">INVALID NAMES</p>
+        <ul class="space-y-1 text-gray-400 text-sm">
+          <li><code class="text-arcade-pink">2fast</code> <span class="text-gray-500">(starts with number)</span></li>
+          <li><code class="text-arcade-pink">fn</code> <span class="text-gray-500">(reserved keyword)</span></li>
+          <li><code class="text-arcade-pink">my command</code> <span class="text-gray-500">(contains space)</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Using bao add -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-yellow mb-6 pb-2 border-b border-arcade-yellow/30">
+      // USING BAO ADD
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      You can add commands via the CLI instead of editing <code class="text-arcade-yellow">bao.toml</code> manually:
+    </p>
+
+    <div class="border-2 border-arcade-yellow/50 rounded-lg overflow-hidden mb-6">
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add command deploy</span>
+<span class="text-gray-500">  Added command "deploy" to bao.toml</span>
+
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add command status</span>
+<span class="text-gray-500">  Added command "status" to bao.toml</span></code></pre>
+    </div>
+  </section>
+
+  <!-- Generated Code -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-lime mb-6 pb-2 border-b border-arcade-lime/30">
+      // GENERATED CODE
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      After running <code class="text-arcade-cyan">bao bake</code>, each command gets its own handler file:
+    </p>
+
+    <div class="border border-arcade-lime/30 rounded overflow-hidden mb-4">
+      <pre class="p-3 text-sm bg-arcade-dark"><code class="text-gray-300">src/commands/
+<span class="text-arcade-cyan">├──</span> deploy.rs    <span class="text-gray-500"># Your handler code</span>
+<span class="text-arcade-cyan">├──</span> status.rs    <span class="text-gray-500"># Your handler code</span>
+<span class="text-arcade-cyan">├──</span> logs.rs      <span class="text-gray-500"># Your handler code</span>
+<span class="text-arcade-cyan">└──</span> mod.rs       <span class="text-gray-500"># Module exports (generated)</span></code></pre>
+    </div>
+
+    <div class="bg-arcade-lime/10 border border-arcade-lime/30 p-3 rounded text-sm">
+      <p class="text-gray-400"><span class="text-arcade-lime font-semibold">Safe to regenerate:</span> Your handler implementations are preserved when you run <code class="text-arcade-cyan">bao bake</code> again.</p>
+    </div>
+  </section>
+
+  <!-- Navigation -->
+  <div class="mt-12 pt-8 border-t border-gray-800 flex justify-between items-center">
+    <a href="/docs/guide/cli-metadata" class="inline-flex items-center gap-2 text-gray-400 hover:text-white font-arcade text-sm">
+      <span>&larr;</span> CLI Metadata
+    </a>
+    <a href="/docs/guide/arguments" class="inline-flex items-center gap-2 text-arcade-lime hover:underline font-arcade text-sm">
+      Arguments <span>&rarr;</span>
+    </a>
+  </div>
+</DocsLayout>

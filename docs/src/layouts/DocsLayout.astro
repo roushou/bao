@@ -1,0 +1,219 @@
+---
+import "../styles/global.css";
+
+interface Props {
+	title: string;
+	description?: string;
+}
+
+const { title, description = "Bao CLI Documentation" } = Astro.props;
+const currentPath = Astro.url.pathname;
+
+const navSections = [
+	{
+		title: "GETTING STARTED",
+		color: "arcade-lime",
+		items: [
+			{ href: "/docs", label: "Introduction" },
+			{ href: "/docs/installation", label: "Installation" },
+			{ href: "/docs/quickstart", label: "Quick Start" },
+		],
+	},
+	{
+		title: "GUIDE",
+		color: "arcade-yellow",
+		items: [
+			{ href: "/docs/guide/cli-metadata", label: "CLI Metadata" },
+			{ href: "/docs/guide/commands", label: "Commands" },
+			{ href: "/docs/guide/arguments", label: "Arguments" },
+			{ href: "/docs/guide/flags", label: "Flags" },
+			{ href: "/docs/guide/subcommands", label: "Subcommands" },
+			{ href: "/docs/guide/context", label: "Context" },
+		],
+	},
+	{
+		title: "REFERENCE",
+		color: "arcade-pink",
+		items: [
+			{ href: "/docs/reference/init", label: "bao init" },
+			{ href: "/docs/reference/bake", label: "bao bake" },
+			{ href: "/docs/reference/add", label: "bao add" },
+			{ href: "/docs/reference/remove", label: "bao remove" },
+			{ href: "/docs/reference/rename", label: "bao rename" },
+			{ href: "/docs/reference/list", label: "bao list" },
+			{ href: "/docs/reference/info", label: "bao info" },
+			{ href: "/docs/reference/check", label: "bao check" },
+			{ href: "/docs/reference/clean", label: "bao clean" },
+			{ href: "/docs/reference/fmt", label: "bao fmt" },
+			{ href: "/docs/reference/run", label: "bao run" },
+			{ href: "/docs/reference/completions", label: "bao completions" },
+		],
+	},
+];
+
+function isActive(href: string) {
+	if (href === "/docs") {
+		return currentPath === "/docs" || currentPath === "/docs/";
+	}
+	return currentPath === href || currentPath === href + "/";
+}
+
+// Flatten for mobile menu
+const allNavItems = navSections.flatMap((section) =>
+	section.items.map((item) => ({ ...item, color: section.color })),
+);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title} | Bao Docs</title>
+    <meta name="description" content={description} />
+    <meta name="robots" content="index, follow" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+
+  <body class="font-code antialiased min-h-screen flex flex-col">
+    <!-- Top Navigation -->
+    <nav class="fixed top-0 w-full z-50 bg-black/95 backdrop-blur-sm border-b-2 border-arcade-cyan p-3 md:p-4">
+      <div class="container mx-auto flex justify-between items-center">
+        <a href="/" class="flex items-center gap-2 md:gap-3">
+          <svg
+            class="w-8 h-8 md:w-10 md:h-10"
+            viewBox="0 0 48 48"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            style="filter: drop-shadow(0 0 6px rgba(255,0,255,0.6))"
+          >
+            <path d="M6 32 Q6 16 24 12 Q42 16 42 32 Q42 40 24 42 Q6 40 6 32Z" fill="#fafafa"/>
+            <ellipse cx="24" cy="10" rx="6" ry="4" fill="#f0f0f0"/>
+            <ellipse cx="24" cy="8" rx="3" ry="2" fill="#e5e5e5"/>
+            <circle cx="16" cy="28" r="4" fill="#1a1a2e"/>
+            <circle cx="32" cy="28" r="4" fill="#1a1a2e"/>
+            <circle cx="17.5" cy="26.5" r="1.5" fill="#fff"/>
+            <circle cx="33.5" cy="26.5" r="1.5" fill="#fff"/>
+            <ellipse cx="9" cy="32" rx="3" ry="2" fill="#ff00ff" opacity="0.25"/>
+            <ellipse cx="39" cy="32" rx="3" ry="2" fill="#ff00ff" opacity="0.25"/>
+            <path d="M20 34 Q24 38 28 34" stroke="#1a1a2e" stroke-width="2" stroke-linecap="round" fill="none"/>
+            <path d="M6 32 Q6 16 24 12 Q42 16 42 32 Q42 40 24 42 Q6 40 6 32Z" fill="none" stroke="#ff00ff" stroke-width="1" opacity="0.4"/>
+          </svg>
+          <span class="font-arcade text-arcade-cyan text-base md:text-lg">BAO</span>
+          <span class="font-arcade text-arcade-pink text-[10px] md:text-xs border border-arcade-pink px-1.5 py-0.5">DOCS</span>
+        </a>
+
+        <div class="flex items-center gap-3 md:gap-4">
+          <a
+            href="https://github.com/roushou/bao"
+            target="_blank"
+            class="flex items-center gap-2 text-gray-400 hover:text-arcade-cyan transition-colors"
+          >
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          </a>
+          <!-- Mobile menu button -->
+          <button
+            id="docs-mobile-menu-btn"
+            class="md:hidden flex items-center justify-center size-8 border border-arcade-cyan text-arcade-cyan"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div id="docs-mobile-menu" class="fixed inset-0 z-40 bg-black/95 backdrop-blur-sm hidden md:hidden pt-20 overflow-y-auto">
+      <div class="flex flex-col p-6 font-arcade text-sm">
+        {navSections.map((section) => (
+          <div class="mb-6">
+            <div class={`text-${section.color}/70 text-xs mb-3`}>// {section.title}</div>
+            {section.items.map((item) => (
+              <a
+                href={item.href}
+                class={`docs-mobile-link block py-2 pl-3 transition-colors ${isActive(item.href) ? `text-${section.color}` : 'text-gray-400 hover:text-white'}`}
+              >
+                <span class={`text-${section.color}`}>&gt;</span> {item.label.toUpperCase()}
+              </a>
+            ))}
+          </div>
+        ))}
+        <button id="docs-mobile-menu-close" class="mt-4 border-2 border-arcade-pink text-arcade-pink px-6 py-2 font-arcade text-xs self-center">
+          CLOSE
+        </button>
+      </div>
+    </div>
+
+    <div class="flex flex-1 pt-16">
+      <!-- Sidebar -->
+      <aside class="hidden md:block w-64 lg:w-72 border-r border-gray-800 bg-black/50 fixed top-16 bottom-0 overflow-y-auto">
+        <nav class="p-4 lg:p-6">
+          {navSections.map((section, index) => (
+            <div class={index > 0 ? "mt-6" : ""}>
+              <div class={`font-arcade text-xs text-${section.color}/70 mb-3 pb-2 border-b border-${section.color}/20`}>
+                // {section.title}
+              </div>
+              <div class="space-y-1">
+                {section.items.map((item) => (
+                  <a
+                    href={item.href}
+                    class={`block px-3 py-1.5 font-arcade text-[11px] transition-all border-l-2 ${
+                      isActive(item.href)
+                        ? `border-${section.color} text-${section.color} bg-${section.color}/10`
+                        : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
+                    }`}
+                  >
+                    {item.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="flex-1 md:ml-64 lg:ml-72 min-h-screen">
+        <div class="container mx-auto px-4 md:px-8 lg:px-12 py-8 md:py-12 max-w-4xl">
+          <slot />
+        </div>
+      </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="md:ml-64 lg:ml-72 border-t border-gray-800 bg-black py-6">
+      <div class="container mx-auto px-4 md:px-8 lg:px-12 max-w-4xl">
+        <p class="font-code text-xs text-gray-600 text-center">
+          &copy; 2025 Bao CLI &bull; MIT License
+        </p>
+      </div>
+    </footer>
+
+    <script is:inline>
+      // Mobile menu toggle
+      const mobileMenuBtn = document.getElementById("docs-mobile-menu-btn");
+      const mobileMenu = document.getElementById("docs-mobile-menu");
+      const mobileMenuClose = document.getElementById("docs-mobile-menu-close");
+      const mobileLinks = document.querySelectorAll(".docs-mobile-link");
+
+      mobileMenuBtn?.addEventListener("click", () => {
+        mobileMenu?.classList.remove("hidden");
+        document.body.style.overflow = "hidden";
+      });
+
+      mobileMenuClose?.addEventListener("click", () => {
+        mobileMenu?.classList.add("hidden");
+        document.body.style.overflow = "";
+      });
+
+      mobileLinks.forEach(link => {
+        link.addEventListener("click", () => {
+          mobileMenu?.classList.add("hidden");
+          document.body.style.overflow = "";
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,113 @@
+---
+import DocsLayout from "../../../layouts/DocsLayout.astro";
+---
+
+<DocsLayout title="bao remove" description="Remove commands, arguments, or flags">
+  <div class="mb-8 md:mb-12">
+    <h1 class="text-2xl md:text-4xl font-arcade text-white mb-4">
+      bao remove
+    </h1>
+    <p class="text-gray-400 text-base md:text-lg leading-relaxed">
+      Remove commands, arguments, flags, or context fields from <code class="text-arcade-yellow">bao.toml</code>.
+    </p>
+  </div>
+
+  <!-- Usage -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-purple mb-6 pb-2 border-b border-arcade-purple/30">
+      // USAGE
+    </h2>
+
+    <div class="border-2 border-arcade-purple/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-purple/30">
+        <span class="font-arcade text-[10px] text-arcade-purple">syntax</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-arcade-lime">bao remove &lt;SUBCOMMAND&gt;</code></pre>
+    </div>
+  </section>
+
+  <!-- Subcommands -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-cyan mb-6 pb-2 border-b border-arcade-cyan/30">
+      // SUBCOMMANDS
+    </h2>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-purple border-b border-gray-700">SUBCOMMAND</th>
+            <th class="text-left p-3 text-arcade-purple border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">command &lt;NAME&gt;</code></td>
+            <td class="p-3">Remove a command</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">arg &lt;COMMAND&gt; &lt;NAME&gt;</code></td>
+            <td class="p-3">Remove an argument from a command</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">flag &lt;COMMAND&gt; &lt;NAME&gt;</code></td>
+            <td class="p-3">Remove a flag from a command</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-cyan">context &lt;NAME&gt;</code></td>
+            <td class="p-3">Remove a context field</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Examples -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-pink mb-6 pb-2 border-b border-arcade-pink/30">
+      // EXAMPLES
+    </h2>
+
+    <div class="border border-arcade-pink/30 rounded overflow-hidden">
+      <pre class="p-4 text-sm bg-arcade-dark"><code><span class="text-gray-500"># Remove a command</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao remove command deploy</span>
+<span class="text-gray-500">  Removed command "deploy" from bao.toml</span>
+
+<span class="text-gray-500"># Remove a nested command</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao remove command db/migrate</span>
+<span class="text-gray-500">  Removed command "migrate" from "db"</span>
+
+<span class="text-gray-500"># Remove an argument</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao remove arg deploy environment</span>
+<span class="text-gray-500">  Removed argument "environment" from command "deploy"</span>
+
+<span class="text-gray-500"># Remove a flag</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao remove flag deploy force</span>
+<span class="text-gray-500">  Removed flag "force" from command "deploy"</span>
+
+<span class="text-gray-500"># Remove a context field</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao remove context db</span>
+<span class="text-gray-500">  Removed context field "db" from bao.toml</span></code></pre>
+    </div>
+  </section>
+
+  <!-- Note -->
+  <section class="mb-12">
+    <div class="bg-arcade-yellow/10 border border-arcade-yellow/30 p-4 rounded">
+      <p class="text-arcade-yellow text-sm font-arcade mb-2">NOTE</p>
+      <p class="text-gray-400 text-sm">
+        Removing items from <code class="text-arcade-yellow">bao.toml</code> does not delete generated handler files. Use <a href="/docs/reference/clean" class="text-arcade-cyan hover:underline">bao clean</a> to remove orphaned files.
+      </p>
+    </div>
+  </section>
+
+  <!-- Navigation -->
+  <div class="mt-12 pt-8 border-t border-gray-800 flex justify-between items-center">
+    <a href="/docs/reference/add" class="inline-flex items-center gap-2 text-gray-400 hover:text-white font-arcade text-sm">
+      <span>&larr;</span> bao add
+    </a>
+    <a href="/docs/reference/rename" class="inline-flex items-center gap-2 text-arcade-pink hover:underline font-arcade text-sm">
+      bao rename <span>&rarr;</span>
+    </a>
+  </div>
+</DocsLayout>

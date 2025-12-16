@@ -1,0 +1,32 @@
+        <svg
+          class="w-11 h-11"
+          viewBox="0 0 48 48"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style="filter: drop-shadow(0 0 6px rgba(255,0,255,0.6))"
+        >
+          <!-- Bao body - puffy dome -->
+          <path d="M6 32 Q6 16 24 12 Q42 16 42 32 Q42 40 24 42 Q6 40 6 32Z" fill="#fafafa"/>
+          <!-- Top knot -->
+          <ellipse cx="24" cy="10" rx="6" ry="4" fill="#f0f0f0"/>
+          <ellipse cx="24" cy="8" rx="3" ry="2" fill="#e5e5e5"/>
+          <!-- Pleat lines -->
+          <path d="M24 14 L24 22" stroke="#e5e5e5" stroke-width="1" opacity="0.7"/>
+          <path d="M18 15 Q20 20 19 24" stroke="#e5e5e5" stroke-width="1" opacity="0.7"/>
+          <path d="M30 15 Q28 20 29 24" stroke="#e5e5e5" stroke-width="1" opacity="0.7"/>
+          <!-- Eyes - cute round -->
+          <circle cx="16" cy="28" r="4" fill="#1a1a2e"/>
+          <circle cx="32" cy="28" r="4" fill="#1a1a2e"/>
+          <!-- Eye highlights -->
+          <circle cx="17.5" cy="26.5" r="1.5" fill="#fff"/>
+          <circle cx="33.5" cy="26.5" r="1.5" fill="#fff"/>
+          <circle cx="15" cy="29" r="0.8" fill="#fff" opacity="0.5"/>
+          <circle cx="31" cy="29" r="0.8" fill="#fff" opacity="0.5"/>
+          <!-- Blush -->
+          <ellipse cx="9" cy="32" rx="3" ry="2" fill="#ff00ff" opacity="0.25"/>
+          <ellipse cx="39" cy="32" rx="3" ry="2" fill="#ff00ff" opacity="0.25"/>
+          <!-- Happy mouth -->
+          <path d="M20 34 Q24 38 28 34" stroke="#1a1a2e" stroke-width="2" stroke-linecap="round" fill="none"/>
+          <!-- Neon outline glow -->
+          <path d="M6 32 Q6 16 24 12 Q42 16 42 32 Q42 40 24 42 Q6 40 6 32Z" fill="none" stroke="#ff00ff" stroke-width="1" opacity="0.4"/>
+        </svg>

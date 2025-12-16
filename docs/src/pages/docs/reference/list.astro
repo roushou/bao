@@ -1,0 +1,100 @@
+---
+import DocsLayout from "../../../layouts/DocsLayout.astro";
+---
+
+<DocsLayout title="bao list" description="List commands and context fields">
+  <div class="mb-8 md:mb-12">
+    <h1 class="text-2xl md:text-4xl font-arcade text-white mb-4">
+      bao list
+    </h1>
+    <p class="text-gray-400 text-base md:text-lg leading-relaxed">
+      List all commands and context fields defined in <code class="text-arcade-yellow">bao.toml</code>.
+    </p>
+  </div>
+
+  <!-- Usage -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-cyan mb-6 pb-2 border-b border-arcade-cyan/30">
+      // USAGE
+    </h2>
+
+    <div class="border-2 border-arcade-cyan/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-cyan/30">
+        <span class="font-arcade text-[10px] text-arcade-cyan">syntax</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-arcade-lime">bao list [OPTIONS]</code></pre>
+    </div>
+  </section>
+
+  <!-- Options -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-yellow mb-6 pb-2 border-b border-arcade-yellow/30">
+      // OPTIONS
+    </h2>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-cyan border-b border-gray-700">OPTION</th>
+            <th class="text-left p-3 text-arcade-cyan border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">-p, --path &lt;PATH&gt;</code></td>
+            <td class="p-3">Path to bao.toml</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-cyan">-h, --help</code></td>
+            <td class="p-3">Print help information</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Example Output -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-pink mb-6 pb-2 border-b border-arcade-pink/30">
+      // EXAMPLE OUTPUT
+    </h2>
+
+    <div class="border-2 border-arcade-pink/50 rounded-lg overflow-hidden">
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao list</span>
+<span class="text-gray-400">
+CLI: deploy-cli (rust)
+
+Commands:
+  deploy        Deploy to an environment
+    args:
+      environment (string) - Target environment
+    flags:
+      --force, -f          - Force deployment
+      --dry-run, -n        - Preview changes
+  status        Check deployment status
+    args:
+      service (string?)    - Specific service
+  db            Database operations
+    migrate     Run migrations
+      flags:
+        --dry-run, -n      - Preview only
+    seed        Seed data
+    reset       Reset database
+
+Context:
+  config
+  client</span></code></pre>
+    </div>
+  </section>
+
+  <!-- Navigation -->
+  <div class="mt-12 pt-8 border-t border-gray-800 flex justify-between items-center">
+    <a href="/docs/reference/rename" class="inline-flex items-center gap-2 text-gray-400 hover:text-white font-arcade text-sm">
+      <span>&larr;</span> bao rename
+    </a>
+    <a href="/docs/reference/info" class="inline-flex items-center gap-2 text-arcade-pink hover:underline font-arcade text-sm">
+      bao info <span>&rarr;</span>
+    </a>
+  </div>
+</DocsLayout>

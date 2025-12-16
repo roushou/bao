@@ -1,0 +1,496 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+---
+
+<DocsLayout title="CLI Commands" description="Reference for all Bao CLI commands">
+  <!-- Page Header -->
+  <div class="mb-8 md:mb-12">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="font-arcade text-[10px] text-arcade-pink border border-arcade-pink px-2 py-1">REFERENCE</span>
+    </div>
+    <h1 class="text-2xl md:text-4xl font-arcade text-white mb-4">
+      CLI <span class="text-arcade-pink">COMMANDS</span>
+    </h1>
+    <p class="text-gray-400 text-base md:text-lg leading-relaxed">
+      All the commands you need to build and manage CLIs.
+    </p>
+  </div>
+
+  <!-- Common Workflow -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-cyan mb-6 pb-2 border-b border-arcade-cyan/30">
+      // TYPICAL WORKFLOW
+    </h2>
+
+    <div class="border border-arcade-cyan/30 rounded overflow-hidden mb-6">
+      <pre class="p-4 text-sm bg-arcade-dark"><code><span class="text-gray-500"># 1. Create a new project</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao init myapp --language rust</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">cd myapp</span>
+
+<span class="text-gray-500"># 2. Add commands</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add command deploy</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add arg deploy environment</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add flag deploy force</span>
+
+<span class="text-gray-500"># 3. Generate and run</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao bake</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao run -- deploy production --force</span></code></pre>
+    </div>
+  </section>
+
+  <!-- Quick Reference -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-yellow mb-6 pb-2 border-b border-arcade-yellow/30">
+      // ALL COMMANDS
+    </h2>
+
+    <div class="grid sm:grid-cols-2 gap-3">
+      <a href="#init" class="block p-3 border border-gray-700 hover:border-arcade-lime bg-black/30 transition-colors">
+        <code class="text-arcade-lime text-sm">bao init</code>
+        <p class="text-gray-500 text-xs mt-1">Create a new project</p>
+      </a>
+      <a href="#bake" class="block p-3 border border-gray-700 hover:border-arcade-pink bg-black/30 transition-colors">
+        <code class="text-arcade-pink text-sm">bao bake</code>
+        <p class="text-gray-500 text-xs mt-1">Generate code from bao.toml</p>
+      </a>
+      <a href="#add" class="block p-3 border border-gray-700 hover:border-arcade-yellow bg-black/30 transition-colors">
+        <code class="text-arcade-yellow text-sm">bao add</code>
+        <p class="text-gray-500 text-xs mt-1">Add commands, args, or flags</p>
+      </a>
+      <a href="#remove" class="block p-3 border border-gray-700 hover:border-arcade-purple bg-black/30 transition-colors">
+        <code class="text-arcade-purple text-sm">bao remove</code>
+        <p class="text-gray-500 text-xs mt-1">Remove items from manifest</p>
+      </a>
+      <a href="#list" class="block p-3 border border-gray-700 hover:border-arcade-cyan bg-black/30 transition-colors">
+        <code class="text-arcade-cyan text-sm">bao list</code>
+        <p class="text-gray-500 text-xs mt-1">List commands and context</p>
+      </a>
+      <a href="#check" class="block p-3 border border-gray-700 hover:border-arcade-lime bg-black/30 transition-colors">
+        <code class="text-arcade-lime text-sm">bao check</code>
+        <p class="text-gray-500 text-xs mt-1">Validate bao.toml</p>
+      </a>
+      <a href="#clean" class="block p-3 border border-gray-700 hover:border-arcade-yellow bg-black/30 transition-colors">
+        <code class="text-arcade-yellow text-sm">bao clean</code>
+        <p class="text-gray-500 text-xs mt-1">Remove orphaned files</p>
+      </a>
+      <a href="#run" class="block p-3 border border-gray-700 hover:border-arcade-pink bg-black/30 transition-colors">
+        <code class="text-arcade-pink text-sm">bao run</code>
+        <p class="text-gray-500 text-xs mt-1">Run your CLI</p>
+      </a>
+    </div>
+  </section>
+
+  <!-- bao init -->
+  <section class="mb-12" id="init">
+    <h2 class="font-arcade text-xl text-arcade-lime mb-6 pb-2 border-b border-arcade-lime/30">
+      // bao init
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      Create a new CLI project with everything you need to start.
+    </p>
+
+    <div class="border-2 border-arcade-lime/50 rounded-lg overflow-hidden mb-6">
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao init myapp --language rust</span>
+<span class="text-gray-500">  Creating myapp/
+  Creating myapp/bao.toml
+  Creating myapp/Cargo.toml
+  Creating myapp/src/main.rs
+  Creating myapp/src/cli.rs
+  Creating myapp/src/context.rs
+
+  Project created successfully!</span></code></pre>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Options</h3>
+    <div class="overflow-x-auto mb-6">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-lime border-b border-gray-700">OPTION</th>
+            <th class="text-left p-3 text-arcade-lime border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">[NAME]</code></td>
+            <td class="p-3">Project name (prompts if not provided)</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-cyan">-l, --language</code></td>
+            <td class="p-3"><code class="text-arcade-lime">rust</code> or <code class="text-arcade-lime">typescript</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Examples</h3>
+    <div class="border border-arcade-lime/30 rounded overflow-hidden">
+      <pre class="p-4 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao init</span>                           <span class="text-gray-500"># Interactive</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao init myapp --language rust</span>     <span class="text-gray-500"># Rust project</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao init myapp -l typescript</span>       <span class="text-gray-500"># TypeScript project</span></code></pre>
+    </div>
+  </section>
+
+  <!-- bao bake -->
+  <section class="mb-12" id="bake">
+    <h2 class="font-arcade text-xl text-arcade-pink mb-6 pb-2 border-b border-arcade-pink/30">
+      // bao bake
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      Generate code from <code class="text-arcade-yellow">bao.toml</code>. Run this after every manifest change.
+    </p>
+
+    <div class="border-2 border-arcade-pink/50 rounded-lg overflow-hidden mb-6">
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao bake</span>
+<span class="text-gray-500">  Generated src/cli.rs
+  Generated src/commands/deploy.rs
+  Generated src/commands/mod.rs
+
+  Done! 3 files generated.</span></code></pre>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Options</h3>
+    <div class="overflow-x-auto mb-6">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-pink border-b border-gray-700">OPTION</th>
+            <th class="text-left p-3 text-arcade-pink border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">-p, --path</code></td>
+            <td class="p-3">Path to bao.toml (default: current dir)</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-cyan">--dry-run</code></td>
+            <td class="p-3">Preview without writing files</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="bg-arcade-lime/10 border border-arcade-lime/30 p-4 rounded mb-6">
+      <p class="text-arcade-lime text-sm font-arcade mb-2">SAFE TO RUN</p>
+      <p class="text-gray-400 text-sm">
+        Your handler code in <code class="text-arcade-cyan">src/commands/</code> is never overwritten. Only the CLI structure is regenerated.
+      </p>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Examples</h3>
+    <div class="border border-arcade-pink/30 rounded overflow-hidden">
+      <pre class="p-4 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao bake</span>                     <span class="text-gray-500"># Generate code</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao bake --dry-run</span>           <span class="text-gray-500"># Preview only</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao bake -p ./other/project</span>  <span class="text-gray-500"># Different path</span></code></pre>
+    </div>
+  </section>
+
+  <!-- bao add -->
+  <section class="mb-12" id="add">
+    <h2 class="font-arcade text-xl text-arcade-yellow mb-6 pb-2 border-b border-arcade-yellow/30">
+      // bao add
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      Add commands, arguments, flags, or context fields to <code class="text-arcade-yellow">bao.toml</code>.
+    </p>
+
+    <div class="border-2 border-arcade-yellow/50 rounded-lg overflow-hidden mb-6">
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add command deploy</span>
+<span class="text-gray-500">  Added command "deploy" to bao.toml</span>
+
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add arg deploy environment</span>
+<span class="text-gray-500">  Added argument "environment" to command "deploy"</span>
+
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add flag deploy force</span>
+<span class="text-gray-500">  Added flag "force" to command "deploy"</span></code></pre>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Subcommands</h3>
+    <div class="overflow-x-auto mb-6">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-yellow border-b border-gray-700">USAGE</th>
+            <th class="text-left p-3 text-arcade-yellow border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">command &lt;name&gt;</code></td>
+            <td class="p-3">Add a new command</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">arg &lt;cmd&gt; &lt;name&gt;</code></td>
+            <td class="p-3">Add argument to command</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">flag &lt;cmd&gt; &lt;name&gt;</code></td>
+            <td class="p-3">Add flag to command</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-cyan">context &lt;name&gt;</code></td>
+            <td class="p-3">Add context field</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="bg-arcade-yellow/10 border border-arcade-yellow/30 p-3 rounded mb-6 text-sm">
+      <p class="text-gray-400"><span class="text-arcade-yellow font-semibold">Nested commands:</span> Use slash notation like <code class="text-arcade-cyan">bao add command db/migrate</code></p>
+    </div>
+  </section>
+
+  <!-- bao remove -->
+  <section class="mb-12" id="remove">
+    <h2 class="font-arcade text-xl text-arcade-purple mb-6 pb-2 border-b border-arcade-purple/30">
+      // bao remove
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      Remove commands, arguments, or flags from your <code class="text-arcade-yellow">bao.toml</code>.
+    </p>
+
+    <div class="border-2 border-arcade-purple/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-purple/30">
+        <span class="font-arcade text-[10px] text-arcade-purple">usage</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-arcade-lime">bao remove &lt;SUBCOMMAND&gt;</code></pre>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Subcommands</h3>
+    <div class="overflow-x-auto mb-6">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-purple border-b border-gray-700">SUBCOMMAND</th>
+            <th class="text-left p-3 text-arcade-purple border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">command &lt;NAME&gt;</code></td>
+            <td class="p-3">Remove a command</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">arg &lt;COMMAND&gt; &lt;NAME&gt;</code></td>
+            <td class="p-3">Remove an argument from a command</td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">flag &lt;COMMAND&gt; &lt;NAME&gt;</code></td>
+            <td class="p-3">Remove a flag from a command</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-cyan">context &lt;NAME&gt;</code></td>
+            <td class="p-3">Remove a context field</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Examples</h3>
+    <div class="border border-arcade-purple/30 rounded overflow-hidden">
+      <pre class="p-4 text-sm bg-arcade-dark"><code><span class="text-gray-500"># Remove a command</span>
+<span class="text-arcade-lime">bao remove command deploy</span>
+
+<span class="text-gray-500"># Remove an argument</span>
+<span class="text-arcade-lime">bao remove arg deploy environment</span>
+
+<span class="text-gray-500"># Remove a flag</span>
+<span class="text-arcade-lime">bao remove flag deploy force</span></code></pre>
+    </div>
+  </section>
+
+  <!-- bao list -->
+  <section class="mb-12" id="list">
+    <h2 class="font-arcade text-xl text-arcade-cyan mb-6 pb-2 border-b border-arcade-cyan/30">
+      // bao list
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      List all commands and context fields defined in your <code class="text-arcade-yellow">bao.toml</code>.
+    </p>
+
+    <div class="border-2 border-arcade-cyan/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-cyan/30">
+        <span class="font-arcade text-[10px] text-arcade-cyan">usage</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-arcade-lime">bao list [OPTIONS]</code></pre>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Options</h3>
+    <div class="overflow-x-auto mb-6">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-cyan border-b border-gray-700">OPTION</th>
+            <th class="text-left p-3 text-arcade-cyan border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">-p, --path &lt;PATH&gt;</code></td>
+            <td class="p-3">Path to bao.toml</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-cyan">-h, --help</code></td>
+            <td class="p-3">Print help</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- bao check -->
+  <section class="mb-12" id="check">
+    <h2 class="font-arcade text-xl text-arcade-lime mb-6 pb-2 border-b border-arcade-lime/30">
+      // bao check
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      Validate your <code class="text-arcade-yellow">bao.toml</code> for syntax errors and configuration issues.
+    </p>
+
+    <div class="border-2 border-arcade-lime/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-lime/30">
+        <span class="font-arcade text-[10px] text-arcade-lime">usage</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-arcade-lime">bao check [OPTIONS]</code></pre>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">What it checks</h3>
+    <ul class="space-y-2 text-gray-400 mb-6">
+      <li class="flex items-center gap-2">
+        <span class="text-arcade-lime">+</span> TOML syntax validity
+      </li>
+      <li class="flex items-center gap-2">
+        <span class="text-arcade-lime">+</span> Required fields presence
+      </li>
+      <li class="flex items-center gap-2">
+        <span class="text-arcade-lime">+</span> Command name validity (no reserved keywords)
+      </li>
+      <li class="flex items-center gap-2">
+        <span class="text-arcade-lime">+</span> Duplicate short flags
+      </li>
+      <li class="flex items-center gap-2">
+        <span class="text-arcade-lime">+</span> Type correctness
+      </li>
+    </ul>
+  </section>
+
+  <!-- bao clean -->
+  <section class="mb-12" id="clean">
+    <h2 class="font-arcade text-xl text-arcade-yellow mb-6 pb-2 border-b border-arcade-yellow/30">
+      // bao clean
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      Remove generated files that are no longer referenced in <code class="text-arcade-yellow">bao.toml</code>.
+      Useful after removing commands.
+    </p>
+
+    <div class="border-2 border-arcade-yellow/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-yellow/30">
+        <span class="font-arcade text-[10px] text-arcade-yellow">usage</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-arcade-lime">bao clean [OPTIONS]</code></pre>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Options</h3>
+    <div class="overflow-x-auto mb-6">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-yellow border-b border-gray-700">OPTION</th>
+            <th class="text-left p-3 text-arcade-yellow border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">--dry-run</code></td>
+            <td class="p-3">Preview what would be deleted</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-cyan">-h, --help</code></td>
+            <td class="p-3">Print help</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- bao run -->
+  <section class="mb-12" id="run">
+    <h2 class="font-arcade text-xl text-arcade-pink mb-6 pb-2 border-b border-arcade-pink/30">
+      // bao run
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      Build and run your CLI. Uses <code class="text-arcade-cyan">cargo run</code> for Rust, <code class="text-arcade-cyan">bun run</code> for TypeScript.
+    </p>
+
+    <div class="border-2 border-arcade-pink/50 rounded-lg overflow-hidden mb-6">
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao run -- deploy production --force</span>
+<span class="text-gray-500">   Compiling myapp v1.0.0
+    Finished dev target(s)
+     Running `target/debug/myapp deploy production --force`</span>
+<span class="text-gray-400">Deploying to production (force mode)...</span></code></pre>
+    </div>
+
+    <div class="bg-arcade-pink/10 border border-arcade-pink/30 p-3 rounded mb-6 text-sm">
+      <p class="text-gray-400"><span class="text-arcade-pink font-semibold">Important:</span> Use <code class="text-arcade-cyan">--</code> to separate bao options from your CLI arguments.</p>
+    </div>
+
+    <h3 class="font-arcade text-white text-sm mb-4">Examples</h3>
+    <div class="border border-arcade-pink/30 rounded overflow-hidden">
+      <pre class="p-4 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao run</span>                           <span class="text-gray-500"># Run with no args</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao run -- --help</span>                 <span class="text-gray-500"># Show CLI help</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao run -- deploy prod --force</span>   <span class="text-gray-500"># Run with args</span></code></pre>
+    </div>
+  </section>
+
+  <!-- Global Options -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-white mb-6 pb-2 border-b border-gray-700">
+      // GLOBAL OPTIONS
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      These options are available for all commands:
+    </p>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-gray-400 border-b border-gray-700">OPTION</th>
+            <th class="text-left p-3 text-gray-400 border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">-h, --help</code></td>
+            <td class="p-3">Print help information</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-cyan">-V, --version</code></td>
+            <td class="p-3">Print version information</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Navigation -->
+  <div class="mt-12 pt-8 border-t border-gray-800 flex justify-between items-center">
+    <a href="/docs/configuration" class="inline-flex items-center gap-2 text-gray-400 hover:text-white font-arcade text-sm">
+      <span>&larr;</span> Configuration
+    </a>
+    <a href="https://github.com/roushou/bao" target="_blank" class="inline-flex items-center gap-2 text-arcade-cyan hover:underline font-arcade text-sm">
+      GitHub <span>&rarr;</span>
+    </a>
+  </div>
+</DocsLayout>

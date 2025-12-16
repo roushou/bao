@@ -1,0 +1,124 @@
+---
+import DocsLayout from "../../../layouts/DocsLayout.astro";
+---
+
+<DocsLayout title="bao completions" description="Generate shell completions for Bao CLI">
+  <div class="mb-8 md:mb-12">
+    <h1 class="text-2xl md:text-4xl font-arcade text-white mb-4">
+      bao completions
+    </h1>
+    <p class="text-gray-400 text-base md:text-lg leading-relaxed">
+      Generate shell completion scripts for Bao CLI.
+    </p>
+  </div>
+
+  <!-- Usage -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-yellow mb-6 pb-2 border-b border-arcade-yellow/30">
+      // USAGE
+    </h2>
+
+    <div class="border-2 border-arcade-yellow/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-yellow/30">
+        <span class="font-arcade text-[10px] text-arcade-yellow">syntax</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-arcade-lime">bao completions &lt;SHELL&gt;</code></pre>
+    </div>
+  </section>
+
+  <!-- Supported Shells -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-cyan mb-6 pb-2 border-b border-arcade-cyan/30">
+      // SUPPORTED SHELLS
+    </h2>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-yellow border-b border-gray-700">SHELL</th>
+            <th class="text-left p-3 text-arcade-yellow border-b border-gray-700">VALUE</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3">Bash</td>
+            <td class="p-3"><code class="text-arcade-cyan">bash</code></td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3">Zsh</td>
+            <td class="p-3"><code class="text-arcade-cyan">zsh</code></td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3">Fish</td>
+            <td class="p-3"><code class="text-arcade-cyan">fish</code></td>
+          </tr>
+          <tr class="border-b border-gray-800">
+            <td class="p-3">PowerShell</td>
+            <td class="p-3"><code class="text-arcade-cyan">powershell</code></td>
+          </tr>
+          <tr>
+            <td class="p-3">Elvish</td>
+            <td class="p-3"><code class="text-arcade-cyan">elvish</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Installation -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-pink mb-6 pb-2 border-b border-arcade-pink/30">
+      // INSTALLATION
+    </h2>
+
+    <div class="space-y-6">
+      <!-- Bash -->
+      <div>
+        <h3 class="font-arcade text-sm text-arcade-lime mb-3">BASH</h3>
+        <div class="border border-arcade-lime/30 rounded overflow-hidden">
+          <pre class="p-4 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao completions bash > ~/.local/share/bash-completion/completions/bao</span></code></pre>
+        </div>
+      </div>
+
+      <!-- Zsh -->
+      <div>
+        <h3 class="font-arcade text-sm text-arcade-lime mb-3">ZSH</h3>
+        <div class="border border-arcade-lime/30 rounded overflow-hidden">
+          <pre class="p-4 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao completions zsh > ~/.zfunc/_bao</span>
+
+<span class="text-gray-500"># Add to ~/.zshrc if not already present:</span>
+<span class="text-arcade-lime">fpath+=~/.zfunc</span>
+<span class="text-arcade-lime">autoload -Uz compinit && compinit</span></code></pre>
+        </div>
+      </div>
+
+      <!-- Fish -->
+      <div>
+        <h3 class="font-arcade text-sm text-arcade-lime mb-3">FISH</h3>
+        <div class="border border-arcade-lime/30 rounded overflow-hidden">
+          <pre class="p-4 text-sm bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao completions fish > ~/.config/fish/completions/bao.fish</span></code></pre>
+        </div>
+      </div>
+
+      <!-- PowerShell -->
+      <div>
+        <h3 class="font-arcade text-sm text-arcade-lime mb-3">POWERSHELL</h3>
+        <div class="border border-arcade-lime/30 rounded overflow-hidden">
+          <pre class="p-4 text-sm bg-arcade-dark"><code><span class="text-gray-500"># Add to your PowerShell profile:</span>
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao completions powershell >> $PROFILE</span></code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Navigation -->
+  <div class="mt-12 pt-8 border-t border-gray-800 flex justify-between items-center">
+    <a href="/docs/reference/run" class="inline-flex items-center gap-2 text-gray-400 hover:text-white font-arcade text-sm">
+      <span>&larr;</span> bao run
+    </a>
+    <a href="/docs" class="inline-flex items-center gap-2 text-arcade-pink hover:underline font-arcade text-sm">
+      Back to Docs <span>&rarr;</span>
+    </a>
+  </div>
+</DocsLayout>

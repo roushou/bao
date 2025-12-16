@@ -1,0 +1,140 @@
+---
+import DocsLayout from "../../../layouts/DocsLayout.astro";
+---
+
+<DocsLayout title="bao info" description="Display project information and statistics">
+  <div class="mb-8 md:mb-12">
+    <h1 class="text-2xl md:text-4xl font-arcade text-white mb-4">
+      bao info
+    </h1>
+    <p class="text-gray-400 text-base md:text-lg leading-relaxed">
+      Display detailed information about your CLI project including metadata, statistics, context configuration, and command tree.
+    </p>
+  </div>
+
+  <!-- Usage -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-yellow mb-6 pb-2 border-b border-arcade-yellow/30">
+      // USAGE
+    </h2>
+
+    <div class="border-2 border-arcade-yellow/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-yellow/30">
+        <span class="font-arcade text-[10px] text-arcade-yellow">syntax</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-arcade-lime">bao info [OPTIONS]</code></pre>
+    </div>
+  </section>
+
+  <!-- Options -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-cyan mb-6 pb-2 border-b border-arcade-cyan/30">
+      // OPTIONS
+    </h2>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border border-gray-700">
+        <thead>
+          <tr class="bg-black/50 font-arcade text-[10px]">
+            <th class="text-left p-3 text-arcade-yellow border-b border-gray-700">OPTION</th>
+            <th class="text-left p-3 text-arcade-yellow border-b border-gray-700">DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-400">
+          <tr class="border-b border-gray-800">
+            <td class="p-3"><code class="text-arcade-cyan">-c, --config &lt;PATH&gt;</code></td>
+            <td class="p-3">Path to bao.toml (defaults to ./bao.toml)</td>
+          </tr>
+          <tr>
+            <td class="p-3"><code class="text-arcade-cyan">-h, --help</code></td>
+            <td class="p-3">Print help information</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Example Output -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-pink mb-6 pb-2 border-b border-arcade-pink/30">
+      // EXAMPLE OUTPUT
+    </h2>
+
+    <div class="border border-arcade-pink/30 rounded overflow-hidden">
+      <pre class="p-4 text-sm bg-arcade-dark overflow-x-auto"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao info</span>
+
+  <span class="text-white">myapp</span>
+  <span class="text-gray-600">─────</span>
+  <span class="text-gray-400">A CLI application for deployment</span>
+
+  <span class="text-gray-500">Version</span>     <span class="text-white">0.1.0</span>
+  <span class="text-gray-500">Author</span>      <span class="text-white">Your Name</span>
+  <span class="text-gray-500">Config</span>      <span class="text-white">/home/user/myapp/bao.toml</span>
+
+  <span class="text-gray-500">Statistics</span>
+  <span class="text-gray-600">──────────</span>
+  <span class="text-gray-500">Commands</span>    <span class="text-arcade-lime">4</span> <span class="text-gray-600">(2 nested)</span>
+  <span class="text-gray-500">Arguments</span>   <span class="text-arcade-cyan">5</span>
+  <span class="text-gray-500">Flags</span>       <span class="text-arcade-pink">8</span>
+
+  <span class="text-gray-500">Context</span>
+  <span class="text-gray-600">───────</span>
+  <span class="text-gray-500">database</span>    <span class="text-arcade-lime">PostgreSQL</span> <span class="text-gray-600">(DATABASE_URL)</span>
+              <span class="text-gray-600">└─ max connections: 10</span>
+  <span class="text-gray-500">http</span>        <span class="text-arcade-cyan">reqwest::Client</span> <span class="text-gray-600">(30s timeout)</span>
+
+  <span class="text-gray-500">Commands</span>
+  <span class="text-gray-600">────────</span>
+  <span class="text-gray-600">├─</span> <span class="text-white">deploy</span> <span class="text-gray-600">(2 args, 3 flags)</span>
+  <span class="text-gray-600">├─</span> <span class="text-white">status</span> <span class="text-gray-600">(1 arg)</span>
+  <span class="text-gray-600">├─</span> <span class="text-white">users</span>
+  <span class="text-gray-600">│  ├─</span> <span class="text-white">create</span> <span class="text-gray-600">(1 arg, 2 flags)</span>
+  <span class="text-gray-600">│  └─</span> <span class="text-white">delete</span> <span class="text-gray-600">(1 arg)</span>
+  <span class="text-gray-600">└─</span> <span class="text-white">config</span> <span class="text-gray-600">(2 flags)</span></code></pre>
+    </div>
+  </section>
+
+  <!-- What's Displayed -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-lime mb-6 pb-2 border-b border-arcade-lime/30">
+      // WHAT'S DISPLAYED
+    </h2>
+
+    <ul class="space-y-3 text-gray-400">
+      <li class="flex items-start gap-3">
+        <span class="text-arcade-lime">▸</span>
+        <div>
+          <span class="text-white">Metadata</span> — CLI name, description, version, author, and config file path
+        </div>
+      </li>
+      <li class="flex items-start gap-3">
+        <span class="text-arcade-lime">▸</span>
+        <div>
+          <span class="text-white">Statistics</span> — Total count of commands (including nested), arguments, and flags
+        </div>
+      </li>
+      <li class="flex items-start gap-3">
+        <span class="text-arcade-lime">▸</span>
+        <div>
+          <span class="text-white">Context</span> — Configured context fields (database, HTTP client) with connection details
+        </div>
+      </li>
+      <li class="flex items-start gap-3">
+        <span class="text-arcade-lime">▸</span>
+        <div>
+          <span class="text-white">Command Tree</span> — Visual tree of all commands and subcommands with their args/flags count
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <!-- Navigation -->
+  <div class="mt-12 pt-8 border-t border-gray-800 flex justify-between items-center">
+    <a href="/docs/reference/list" class="inline-flex items-center gap-2 text-gray-400 hover:text-white font-arcade text-sm">
+      <span>&larr;</span> bao list
+    </a>
+    <a href="/docs/reference/check" class="inline-flex items-center gap-2 text-arcade-pink hover:underline font-arcade text-sm">
+      bao check <span>&rarr;</span>
+    </a>
+  </div>
+</DocsLayout>

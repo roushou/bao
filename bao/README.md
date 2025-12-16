@@ -59,10 +59,14 @@ bao bake
 | `bao bake` | Generate code from bao.toml |
 | `bao add command <name>` | Add a new command |
 | `bao remove command <name>` | Remove a command |
+| `bao rename command <old> <new>` | Rename a command |
 | `bao list` | List commands and context |
+| `bao info` | Display project info and statistics |
 | `bao check` | Validate bao.toml |
 | `bao clean` | Remove orphaned generated files |
+| `bao fmt` | Format bao.toml |
 | `bao run` | Run the CLI (shortcut for `cargo run --`) |
+| `bao completions <shell>` | Generate shell completions |
 
 ## Features
 

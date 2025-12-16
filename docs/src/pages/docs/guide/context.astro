@@ -1,0 +1,146 @@
+---
+import DocsLayout from "../../../layouts/DocsLayout.astro";
+---
+
+<DocsLayout title="Context" description="Share state across all command handlers">
+  <div class="mb-8 md:mb-12">
+    <h1 class="text-2xl md:text-4xl font-arcade text-white mb-4">
+      CONTEXT
+    </h1>
+    <p class="text-gray-400 text-base md:text-lg leading-relaxed">
+      Share state across all command handlers.
+    </p>
+  </div>
+
+  <!-- Overview -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-cyan mb-6 pb-2 border-b border-arcade-cyan/30">
+      // OVERVIEW
+    </h2>
+
+    <p class="text-gray-400 mb-6">
+      Share state across all handlers: database connections, HTTP clients, configuration. Define fields in <code class="text-arcade-cyan">[context]</code>.
+    </p>
+
+    <div class="border-2 border-arcade-cyan/50 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-cyan/30">
+        <span class="font-arcade text-[10px] text-arcade-cyan">bao.toml</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-yellow">[context]</span>
+fields = [<span class="text-arcade-lime">"db"</span>, <span class="text-arcade-lime">"config"</span>]</code></pre>
+    </div>
+  </section>
+
+  <!-- Generated Code -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-pink mb-6 pb-2 border-b border-arcade-pink/30">
+      // GENERATED CODE
+    </h2>
+
+    <p class="text-gray-400 mb-4">Bao generates a Context struct. You fill in the types:</p>
+
+    <div class="border border-arcade-pink/30 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-pink/30">
+        <span class="font-arcade text-[10px] text-arcade-pink">src/context.rs</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-pink">pub struct</span> <span class="text-arcade-cyan">Context</span> &#123;
+    <span class="text-arcade-pink">pub</span> db: <span class="text-arcade-cyan">DatabasePool</span>,     <span class="text-gray-500">// Your type</span>
+    <span class="text-arcade-pink">pub</span> config: <span class="text-arcade-cyan">AppConfig</span>,    <span class="text-gray-500">// Your type</span>
+&#125;</code></pre>
+    </div>
+
+    <div class="bg-arcade-pink/10 border border-arcade-pink/30 p-3 rounded text-sm">
+      <p class="text-gray-400"><span class="text-arcade-pink font-semibold">Your file:</span> The <code class="text-arcade-cyan">context.rs</code> file is yours to edit. Bao won't overwrite it after the initial generation.</p>
+    </div>
+  </section>
+
+  <!-- Using Context -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-yellow mb-6 pb-2 border-b border-arcade-yellow/30">
+      // USING CONTEXT
+    </h2>
+
+    <p class="text-gray-400 mb-4">Every handler receives the context:</p>
+
+    <div class="border border-arcade-yellow/30 rounded-lg overflow-hidden mb-6">
+      <div class="bg-black px-4 py-2 border-b border-arcade-yellow/30">
+        <span class="font-arcade text-[10px] text-arcade-yellow">src/commands/deploy.rs</span>
+      </div>
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code class="text-gray-300"><span class="text-arcade-pink">pub async fn</span> <span class="text-arcade-yellow">execute</span>(ctx: &amp;<span class="text-arcade-cyan">Context</span>, args: <span class="text-arcade-cyan">DeployArgs</span>) &#123;
+    <span class="text-gray-500">// Access shared state</span>
+    <span class="text-arcade-pink">let</span> conn = ctx.db.get_connection();
+    <span class="text-arcade-pink">let</span> env = &amp;ctx.config.environment;
+&#125;</code></pre>
+    </div>
+  </section>
+
+  <!-- Common Use Cases -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-lime mb-6 pb-2 border-b border-arcade-lime/30">
+      // COMMON USE CASES
+    </h2>
+
+    <div class="space-y-4">
+      <div class="flex items-start gap-4 p-4 border-l-2 border-arcade-cyan/50 bg-black/30">
+        <span class="text-arcade-cyan font-arcade shrink-0">+</span>
+        <div>
+          <h3 class="text-white font-semibold mb-1">Database Connections</h3>
+          <p class="text-gray-400 text-sm">Share a connection pool across all commands.</p>
+        </div>
+      </div>
+
+      <div class="flex items-start gap-4 p-4 border-l-2 border-arcade-pink/50 bg-black/30">
+        <span class="text-arcade-pink font-arcade shrink-0">+</span>
+        <div>
+          <h3 class="text-white font-semibold mb-1">HTTP Clients</h3>
+          <p class="text-gray-400 text-sm">Reuse configured HTTP clients with auth headers.</p>
+        </div>
+      </div>
+
+      <div class="flex items-start gap-4 p-4 border-l-2 border-arcade-yellow/50 bg-black/30">
+        <span class="text-arcade-yellow font-arcade shrink-0">+</span>
+        <div>
+          <h3 class="text-white font-semibold mb-1">Configuration</h3>
+          <p class="text-gray-400 text-sm">Load config once, access everywhere.</p>
+        </div>
+      </div>
+
+      <div class="flex items-start gap-4 p-4 border-l-2 border-arcade-lime/50 bg-black/30">
+        <span class="text-arcade-lime font-arcade shrink-0">+</span>
+        <div>
+          <h3 class="text-white font-semibold mb-1">Logging</h3>
+          <p class="text-gray-400 text-sm">Share a configured logger instance.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Using bao add -->
+  <section class="mb-12">
+    <h2 class="font-arcade text-xl text-arcade-purple mb-6 pb-2 border-b border-arcade-purple/30">
+      // USING BAO ADD
+    </h2>
+
+    <p class="text-gray-400 mb-4">
+      Add context fields via the CLI:
+    </p>
+
+    <div class="border-2 border-arcade-purple/50 rounded-lg overflow-hidden">
+      <pre class="p-4 text-sm overflow-x-auto bg-arcade-dark"><code><span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add context db</span>
+<span class="text-gray-500">  Added context field "db" to bao.toml</span>
+
+<span class="text-arcade-cyan">$</span> <span class="text-arcade-lime">bao add context config</span>
+<span class="text-gray-500">  Added context field "config" to bao.toml</span></code></pre>
+    </div>
+  </section>
+
+  <!-- Navigation -->
+  <div class="mt-12 pt-8 border-t border-gray-800 flex justify-between items-center">
+    <a href="/docs/guide/subcommands" class="inline-flex items-center gap-2 text-gray-400 hover:text-white font-arcade text-sm">
+      <span>&larr;</span> Subcommands
+    </a>
+    <a href="/docs/reference/init" class="inline-flex items-center gap-2 text-arcade-pink hover:underline font-arcade text-sm">
+      bao init <span>&rarr;</span>
+    </a>
+  </div>
+</DocsLayout>
