@@ -1,5 +1,8 @@
 ---
 import "../styles/global.css";
+import { parseChangelog, formatDate } from "../utils/changelog";
+
+const releases = parseChangelog(3);
 
 const codeText = `[cli]
 name = "deploy"
@@ -959,70 +962,34 @@ const comboTs = `<span class="text-arcade-cyan">import</span> &#123; cli, comman
 
             <!-- Releases -->
             <div class="bg-arcade-dark p-6 space-y-6">
-              <!-- v0.4.2 -->
-              <div class="group">
-                <div class="flex items-center gap-4 mb-3">
-                  <span class="font-arcade text-arcade-lime text-base">v0.4.2</span>
-                  <div class="flex-1 h-px bg-arcade-cyan/20"></div>
-                  <span class="font-arcade text-xs text-gray-500">Dec 15, 2024</span>
-                </div>
-                <ul class="space-y-2 text-gray-400 text-base pl-2">
-                  <li class="flex items-center gap-2">
-                    <span class="text-arcade-lime">+</span>
-                    <span>Added <code class="text-arcade-cyan">bao rename</code> command</span>
-                  </li>
-                  <li class="flex items-center gap-2">
-                    <span class="text-arcade-lime">+</span>
-                    <span>Added <code class="text-arcade-cyan">bao info</code> command</span>
-                  </li>
-                  <li class="flex items-center gap-2">
-                    <span class="text-arcade-pink">~</span>
-                    <span>Improved handler preservation during regeneration</span>
-                  </li>
-                </ul>
-              </div>
-
-              <!-- v0.4.1 -->
-              <div class="group">
-                <div class="flex items-center gap-4 mb-3">
-                  <span class="font-arcade text-arcade-lime text-base">v0.4.1</span>
-                  <div class="flex-1 h-px bg-arcade-cyan/20"></div>
-                  <span class="font-arcade text-xs text-gray-500">Dec 10, 2024</span>
-                </div>
-                <ul class="space-y-2 text-gray-400 text-base pl-2">
-                  <li class="flex items-center gap-2">
-                    <span class="text-arcade-lime">+</span>
-                    <span>TypeScript generator improvements</span>
-                  </li>
-                  <li class="flex items-center gap-2">
-                    <span class="text-arcade-pink">~</span>
-                    <span>Better error messages for invalid configurations</span>
-                  </li>
-                </ul>
-              </div>
-
-              <!-- v0.4.0 -->
-              <div class="group">
-                <div class="flex items-center gap-4 mb-3">
-                  <span class="font-arcade text-arcade-lime text-base">v0.4.0</span>
-                  <div class="flex-1 h-px bg-arcade-cyan/20"></div>
-                  <span class="font-arcade text-xs text-gray-500">Dec 1, 2024</span>
-                </div>
-                <ul class="space-y-2 text-gray-400 text-base pl-2">
-                  <li class="flex items-center gap-2">
-                    <span class="text-arcade-lime">+</span>
-                    <span>Context support (database pools, HTTP clients)</span>
-                  </li>
-                  <li class="flex items-center gap-2">
-                    <span class="text-arcade-lime">+</span>
-                    <span>Added <code class="text-arcade-cyan">bao fmt</code> command</span>
-                  </li>
-                  <li class="flex items-center gap-2">
-                    <span class="text-arcade-lime">+</span>
-                    <span>Shell completions generation</span>
-                  </li>
-                </ul>
-              </div>
+              {releases.length === 0 ? (
+                <p class="text-gray-500 text-center">No releases found</p>
+              ) : (
+                releases.map((release) => (
+                  <div class="group">
+                    <div class="flex items-center gap-4 mb-3">
+                      <span class="font-arcade text-arcade-lime text-base">v{release.version}</span>
+                      <div class="flex-1 h-px bg-arcade-cyan/20"></div>
+                      <span class="font-arcade text-xs text-gray-500">{formatDate(release.date)}</span>
+                    </div>
+                    <ul class="space-y-2 text-gray-400 text-base pl-2">
+                      {release.sections.map((section) => (
+                        section.entries.slice(0, 4).map((entry) => (
+                          <li class="flex items-start gap-2">
+                            <span class={section.title === "Features" ? "text-arcade-lime" : section.title === "Bug Fixes" ? "text-arcade-yellow" : "text-arcade-pink"}>
+                              {section.title === "Features" ? "+" : section.title === "Bug Fixes" ? "!" : "~"}
+                            </span>
+                            <span>
+                              {entry.scope && <code class="text-arcade-cyan text-sm">({entry.scope})</code>}{" "}
+                              {entry.text}
+                            </span>
+                          </li>
+                        ))
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
