@@ -55,6 +55,10 @@ pub struct Arg {
 
     /// Default value (makes argument optional)
     pub default: Option<toml::Value>,
+
+    /// Allowed choices for this argument (creates enum in generated code)
+    #[serde(default)]
+    pub choices: Option<Vec<String>>,
 }
 
 pub(crate) fn default_true() -> bool {
@@ -77,6 +81,10 @@ pub struct Flag {
 
     /// Default value
     pub default: Option<toml::Value>,
+
+    /// Allowed choices for this flag (creates enum in generated code)
+    #[serde(default)]
+    pub choices: Option<Vec<String>>,
 }
 
 /// Supported argument types
@@ -491,6 +499,64 @@ mod tests {
         let arg = cmd.args.get("count").unwrap();
         assert!(arg.default.is_some());
         assert_eq!(arg.default.as_ref().unwrap().as_integer(), Some(5));
+    }
+
+    #[test]
+    fn test_arg_with_choices() {
+        let schema = parse(
+            r#"
+            [cli]
+            name = "test"
+            language = "rust"
+
+            [commands.build]
+            description = "Build project"
+
+            [[commands.build.args]]
+            name = "target"
+            type = "string"
+            choices = ["debug", "release", "profile"]
+            description = "Build target"
+            "#,
+        );
+
+        let cmd = schema.commands.get("build").unwrap();
+        let arg = cmd.args.get("target").unwrap();
+        assert!(arg.choices.is_some());
+        let choices = arg.choices.as_ref().unwrap();
+        assert_eq!(choices.len(), 3);
+        assert_eq!(choices[0], "debug");
+        assert_eq!(choices[1], "release");
+        assert_eq!(choices[2], "profile");
+    }
+
+    #[test]
+    fn test_flag_with_choices() {
+        let schema = parse(
+            r#"
+            [cli]
+            name = "test"
+            language = "rust"
+
+            [commands.build]
+            description = "Build project"
+
+            [[commands.build.flags]]
+            name = "format"
+            type = "string"
+            short = "f"
+            choices = ["json", "yaml", "toml"]
+            "#,
+        );
+
+        let cmd = schema.commands.get("build").unwrap();
+        let flag = cmd.flags.get("format").unwrap();
+        assert!(flag.choices.is_some());
+        let choices = flag.choices.as_ref().unwrap();
+        assert_eq!(choices.len(), 3);
+        assert_eq!(choices[0], "json");
+        assert_eq!(choices[1], "yaml");
+        assert_eq!(choices[2], "toml");
     }
 
     #[test]

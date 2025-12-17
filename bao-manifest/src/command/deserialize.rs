@@ -18,6 +18,8 @@ pub(super) struct ArgWithName {
     required: bool,
     description: Option<String>,
     default: Option<toml::Value>,
+    #[serde(default)]
+    choices: Option<Vec<String>>,
 }
 
 /// Flag with name field for array format deserialization
@@ -29,6 +31,8 @@ pub(super) struct FlagWithName {
     short: Option<char>,
     description: Option<String>,
     default: Option<toml::Value>,
+    #[serde(default)]
+    choices: Option<Vec<String>>,
 }
 
 /// Untagged enum to support both array and map formats for args
@@ -52,6 +56,7 @@ impl From<ArgsFormat> for HashMap<String, Arg> {
                             required: a.required,
                             description: a.description,
                             default: a.default,
+                            choices: a.choices,
                         },
                     )
                 })
@@ -101,6 +106,7 @@ where
                         short: item.short.map(|c| Spanned::new(0..0, c)),
                         description: item.description,
                         default: item.default,
+                        choices: item.choices,
                     },
                 );
             }

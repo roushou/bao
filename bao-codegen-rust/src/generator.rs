@@ -388,6 +388,29 @@ impl<'a> Generator<'a> {
     }
 
     fn generate_args_struct(&self, pascal_name: &str, command: &Command) -> String {
+        use baobao_codegen::builder::CodeBuilder;
+
+        let mut builder = CodeBuilder::rust();
+
+        // First, generate choice enums for args and flags that have choices
+        for (arg_name, arg) in &command.args {
+            if let Some(choices) = &arg.choices {
+                let enum_name = format!("{}{}Choice", pascal_name, to_pascal_case(arg_name));
+                let choice_enum = Self::generate_choice_enum(&enum_name, choices);
+                builder.push_raw(&choice_enum);
+                builder.push_blank();
+            }
+        }
+
+        for (flag_name, flag) in &command.flags {
+            if let Some(choices) = &flag.choices {
+                let enum_name = format!("{}{}Choice", pascal_name, to_pascal_case(flag_name));
+                let choice_enum = Self::generate_choice_enum(&enum_name, choices);
+                builder.push_raw(&choice_enum);
+                builder.push_blank();
+            }
+        }
+
         let mut s = Struct::new(format!("{}Args", pascal_name))
             .doc(&command.description)
             .derive("Args")
@@ -395,9 +418,15 @@ impl<'a> Generator<'a> {
 
         // Generate positional args
         for (arg_name, arg) in &command.args {
-            let rust_type = Self::map_arg_type(&arg.arg_type);
+            // Determine the type - use enum if choices are present
+            let rust_type = if arg.choices.is_some() {
+                format!("{}{}Choice", pascal_name, to_pascal_case(arg_name))
+            } else {
+                Self::map_arg_type(&arg.arg_type).to_string()
+            };
+
             let field_type = if arg.required && arg.default.is_none() {
-                rust_type.to_string()
+                rust_type.clone()
             } else {
                 format!("Option<{}>", rust_type)
             };
@@ -422,11 +451,17 @@ impl<'a> Generator<'a> {
                 ));
             }
 
-            let rust_type = Self::map_arg_type(&flag.flag_type);
-            let field_type = if flag.flag_type == ArgType::Bool {
+            // Determine the type - use enum if choices are present
+            let rust_type = if flag.choices.is_some() {
+                format!("{}{}Choice", pascal_name, to_pascal_case(flag_name))
+            } else {
+                Self::map_arg_type(&flag.flag_type).to_string()
+            };
+
+            let field_type = if flag.flag_type == ArgType::Bool && flag.choices.is_none() {
                 "bool".to_string()
             } else if flag.default.is_some() {
-                rust_type.to_string()
+                rust_type.clone()
             } else {
                 format!("Option<{}>", rust_type)
             };
@@ -439,7 +474,24 @@ impl<'a> Generator<'a> {
             s = s.field(field);
         }
 
-        s.build()
+        builder.push_raw(&s.build());
+        builder.build()
+    }
+
+    /// Generate a clap ValueEnum for choices.
+    fn generate_choice_enum(name: &str, choices: &[String]) -> String {
+        let mut e = Enum::new(name)
+            .derive("Debug")
+            .derive("Clone")
+            .derive("clap::ValueEnum");
+
+        for choice in choices {
+            let variant_name = to_pascal_case(choice);
+            let variant = Variant::new(&variant_name).attr(format!("value(name = \"{}\")", choice));
+            e = e.variant(variant);
+        }
+
+        e.build()
     }
 
     /// Map manifest ArgType to Rust type string.

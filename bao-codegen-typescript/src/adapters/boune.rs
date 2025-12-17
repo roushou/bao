@@ -37,6 +37,7 @@ impl BouneAdapter {
         has_default: bool,
         default: Option<&toml::Value>,
         description: Option<&str>,
+        choices: Option<&[String]>,
     ) -> String {
         self.build_argument_chain(
             Self::convert_arg_type(arg_type),
@@ -44,6 +45,7 @@ impl BouneAdapter {
             has_default,
             default,
             description,
+            choices,
         )
     }
 
@@ -55,12 +57,22 @@ impl BouneAdapter {
         has_default: bool,
         default: Option<&toml::Value>,
         description: Option<&str>,
+        choices: Option<&[String]>,
     ) -> String {
         let boune_type = self.map_arg_type(arg_type);
         let mut chain = MethodChain::new(format!("argument.{}", boune_type));
 
         if required && !has_default {
             chain = chain.call_empty("required");
+        }
+
+        if let Some(choices) = choices {
+            let choices_array = choices
+                .iter()
+                .map(|c| format!("\"{}\"", c))
+                .collect::<Vec<_>>()
+                .join(", ");
+            chain = chain.call("choices", format!("[{}]", choices_array));
         }
 
         if let Some(default) = default {
@@ -81,12 +93,14 @@ impl BouneAdapter {
         short: Option<char>,
         default: Option<&toml::Value>,
         description: Option<&str>,
+        choices: Option<&[String]>,
     ) -> String {
         self.build_option_chain(
             Self::convert_arg_type(flag_type),
             short,
             default,
             description,
+            choices,
         )
     }
 
@@ -97,12 +111,22 @@ impl BouneAdapter {
         short: Option<char>,
         default: Option<&toml::Value>,
         description: Option<&str>,
+        choices: Option<&[String]>,
     ) -> String {
         let boune_type = self.map_arg_type(flag_type);
         let mut chain = MethodChain::new(format!("option.{}", boune_type));
 
         if let Some(short) = short {
             chain = chain.call("short", format!("\"{}\"", short));
+        }
+
+        if let Some(choices) = choices {
+            let choices_array = choices
+                .iter()
+                .map(|c| format!("\"{}\"", c))
+                .collect::<Vec<_>>()
+                .join(", ");
+            chain = chain.call("choices", format!("[{}]", choices_array));
         }
 
         if let Some(default) = default {

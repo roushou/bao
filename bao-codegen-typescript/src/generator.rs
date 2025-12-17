@@ -374,6 +374,7 @@ impl<'a> Generator<'a> {
             arg.default.is_some(),
             arg.default.as_ref(),
             arg.description.as_deref(),
+            arg.choices.as_deref(),
         )
     }
 
@@ -383,6 +384,7 @@ impl<'a> Generator<'a> {
             flag.short_char(),
             flag.default.as_ref(),
             flag.description.as_deref(),
+            flag.choices.as_deref(),
         )
     }
 

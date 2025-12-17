@@ -8,6 +8,7 @@ pub struct Variant {
     pub name: String,
     pub doc: Option<String>,
     pub data: Option<String>,
+    pub attrs: Vec<String>,
 }
 
 impl Variant {
@@ -16,6 +17,7 @@ impl Variant {
             name: name.into(),
             doc: None,
             data: None,
+            attrs: Vec::new(),
         }
     }
 
@@ -27,6 +29,12 @@ impl Variant {
     /// Set tuple data for the variant, e.g., `Foo(Bar)`.
     pub fn tuple(mut self, data: impl Into<String>) -> Self {
         self.data = Some(data.into());
+        self
+    }
+
+    /// Add an attribute to the variant, e.g., `value(name = "foo")`.
+    pub fn attr(mut self, attr: impl Into<String>) -> Self {
+        self.attrs.push(attr.into());
         self
     }
 }
@@ -118,6 +126,12 @@ impl Enum {
                 b
             };
 
+            // Add variant attributes
+            let b = variant
+                .attrs
+                .iter()
+                .fold(b, |b, attr| b.line(&format!("#[{}]", attr)));
+
             let variant_str = match &variant.data {
                 Some(data) => format!("{}({}),", variant.name, data),
                 None => format!("{},", variant.name),
@@ -140,6 +154,11 @@ impl Enum {
 
                 if let Some(doc) = &variant.doc {
                     fragments.push(CodeFragment::RustDoc(doc.clone()));
+                }
+
+                // Add variant attributes
+                for attr in &variant.attrs {
+                    fragments.push(CodeFragment::Line(format!("#[{}]", attr)));
                 }
 
                 let variant_str = match &variant.data {
