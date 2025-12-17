@@ -47,7 +47,7 @@ pub mod files;
 pub use adapters::{BouneAdapter, BunSqliteAdapter};
 pub use ast::{ArrowFn, Import, JsObject, MethodChain};
 pub use baobao_codegen::language::{GenerateResult, LanguageCodegen, PreviewFile};
-pub use code_file::{CodeFile, RawCode};
+pub use code_file::{CodeFile, RawCode, Shebang};
 pub use generator::Generator;
 pub use naming::TS_NAMING;
 pub use type_mapper::TypeScriptTypeMapper;

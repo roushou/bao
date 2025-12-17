@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use baobao_core::{FileRules, GeneratedFile, Overwrite};
 
 use crate::{
+    Shebang,
     ast::Import,
     code_file::{CodeFile, RawCode},
 };
@@ -26,7 +27,7 @@ impl GeneratedFile for IndexTs {
 
     fn render(&self) -> String {
         CodeFile::new()
-            .add(RawCode::new("#!/usr/bin/env bun"))
+            .add(Shebang::bun())
             .import(Import::new("./cli.ts").named("app"))
             .add(RawCode::new("app.run();"))
             .render()

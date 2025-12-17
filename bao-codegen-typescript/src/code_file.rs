@@ -3,19 +3,46 @@
 //! Provides a high-level API for generating TypeScript files with
 //! organized imports, body content, and exports sections.
 
+use std::any::Any;
+
 use baobao_codegen::builder::{CodeBuilder, CodeFragment, Indent, Renderable};
 
 use crate::ast::{Export, Import};
 
+/// A shebang line that appears at the very top of the file.
+///
+/// Used for executable scripts (e.g., `#!/usr/bin/env bun`).
+#[derive(Debug, Clone)]
+pub struct Shebang(String);
+
+impl Shebang {
+    /// Create a new shebang line.
+    pub fn new(shebang: impl Into<String>) -> Self {
+        Self(shebang.into())
+    }
+
+    /// Create a bun shebang (`#!/usr/bin/env bun`).
+    pub fn bun() -> Self {
+        Self::new("#!/usr/bin/env bun")
+    }
+}
+
+impl Renderable for Shebang {
+    fn to_fragments(&self) -> Vec<CodeFragment> {
+        vec![CodeFragment::Line(self.0.clone())]
+    }
+}
+
 /// A structured representation of a TypeScript file.
 ///
-/// Organizes code into three sections: imports, body, and exports.
+/// Organizes code into four sections: shebang, imports, body, and exports.
 /// Each section is rendered in order with appropriate blank lines.
 ///
 /// # Example
 ///
 /// ```ignore
 /// let file = CodeFile::new()
+///     .shebang(Shebang::bun())
 ///     .import(Import::new("boune").named("defineCommand"))
 ///     .add(command_schema)
 ///     .export(Export::new().named("fooCommand"))
@@ -23,6 +50,7 @@ use crate::ast::{Export, Import};
 /// ```
 #[derive(Default)]
 pub struct CodeFile {
+    shebang: Option<Shebang>,
     imports: Vec<Import>,
     body: Vec<Vec<CodeFragment>>,
     exports: Vec<Export>,
@@ -32,6 +60,12 @@ impl CodeFile {
     /// Create a new empty CodeFile.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Set the shebang line (placed at the very top of the file).
+    pub fn shebang(mut self, shebang: Shebang) -> Self {
+        self.shebang = Some(shebang);
+        self
     }
 
     /// Add an import statement.
@@ -47,9 +81,15 @@ impl CodeFile {
     }
 
     /// Add a body element (any Renderable).
+    ///
+    /// If the element is a `Shebang`, it will be placed at the top of the file.
     #[allow(clippy::should_implement_trait)]
-    pub fn add<R: Renderable>(mut self, node: R) -> Self {
-        self.body.push(node.to_fragments());
+    pub fn add<R: Renderable + Any>(mut self, node: R) -> Self {
+        if let Some(shebang) = (&node as &dyn Any).downcast_ref::<Shebang>() {
+            self.shebang = Some(shebang.clone());
+        } else {
+            self.body.push(node.to_fragments());
+        }
         self
     }
 
@@ -82,17 +122,29 @@ impl CodeFile {
     pub fn render_with_indent(&self, indent: Indent) -> String {
         let mut builder = CodeBuilder::new(indent);
 
-        // 1. Render imports
+        // 1. Render shebang (must be first line)
+        if let Some(shebang) = &self.shebang {
+            builder.emit(shebang);
+        }
+
+        // 2. Blank line between shebang and imports
+        let has_content =
+            !self.imports.is_empty() || !self.body.is_empty() || !self.exports.is_empty();
+        if self.shebang.is_some() && has_content {
+            builder.push_blank();
+        }
+
+        // 3. Render imports
         for import in &self.imports {
             builder.emit(import);
         }
 
-        // 2. Blank line between imports and body
+        // 4. Blank line between imports and body
         if !self.imports.is_empty() && (!self.body.is_empty() || !self.exports.is_empty()) {
             builder.push_blank();
         }
 
-        // 3. Render body with blank lines between elements
+        // 5. Render body with blank lines between elements
         for (i, fragments) in self.body.iter().enumerate() {
             if i > 0 {
                 builder.push_blank();
@@ -102,12 +154,12 @@ impl CodeFile {
             }
         }
 
-        // 4. Blank line before exports
+        // 6. Blank line before exports
         if !self.body.is_empty() && !self.exports.is_empty() {
             builder.push_blank();
         }
 
-        // 5. Render exports
+        // 7. Render exports
         for export in &self.exports {
             builder.emit(export);
         }
@@ -200,5 +252,24 @@ mod tests {
 
         let code = file.render();
         assert!(code.contains("const a = 1;\n\nconst b = 2;"));
+    }
+
+    #[test]
+    fn test_shebang_at_top() {
+        let file = CodeFile::new()
+            .add(Shebang::bun())
+            .import(Import::new("./cli.ts").named("app"))
+            .add(RawCode::new("app.run();"));
+
+        let code = file.render();
+        assert!(code.starts_with("#!/usr/bin/env bun\n"));
+        assert!(code.contains("#!/usr/bin/env bun\n\nimport { app }"));
+    }
+
+    #[test]
+    fn test_shebang_only() {
+        let file = CodeFile::new().shebang(Shebang::bun());
+        let code = file.render();
+        assert_eq!(code, "#!/usr/bin/env bun\n");
     }
 }
