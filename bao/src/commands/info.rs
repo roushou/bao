@@ -1,5 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
+use baobao_codegen::schema::{CommandTree, CommandTreeExt, DisplayStyle};
 use baobao_manifest::{BaoToml, Command, ContextField};
 use clap::Args;
 use eyre::Result;
@@ -74,7 +75,8 @@ impl InfoCommand {
         if !schema.commands.is_empty() {
             println!("  Commands");
             println!("  ────────");
-            print_command_tree(&schema.commands, "  ");
+            let tree = CommandTree::new(schema);
+            println!("{}", tree.display_style(DisplayStyle::TreeBox).indent("  "));
         }
 
         Ok(())
@@ -153,49 +155,6 @@ fn print_http_info(http: &ContextField) {
         println!();
         if let Some(ua) = &config.user_agent {
             println!("              └─ user-agent: {}", ua);
-        }
-    }
-}
-
-fn print_command_tree(commands: &HashMap<String, Command>, indent: &str) {
-    let mut names: Vec<_> = commands.keys().collect();
-    names.sort();
-
-    for (i, name) in names.iter().enumerate() {
-        let cmd = &commands[*name];
-        let is_last = i == names.len() - 1;
-        let prefix = if is_last { "└─" } else { "├─" };
-        let child_indent = if is_last { "   " } else { "│  " };
-
-        // Command name and description
-        print!("{}{} {}", indent, prefix, name);
-
-        // Show args/flags count inline
-        let mut meta = Vec::new();
-        if !cmd.args.is_empty() {
-            meta.push(format!(
-                "{} arg{}",
-                cmd.args.len(),
-                if cmd.args.len() == 1 { "" } else { "s" }
-            ));
-        }
-        if !cmd.flags.is_empty() {
-            meta.push(format!(
-                "{} flag{}",
-                cmd.flags.len(),
-                if cmd.flags.len() == 1 { "" } else { "s" }
-            ));
-        }
-
-        if meta.is_empty() {
-            println!();
-        } else {
-            println!(" ({})", meta.join(", "));
-        }
-
-        // Recurse into subcommands
-        if cmd.has_subcommands() {
-            print_command_tree(&cmd.commands, &format!("{}{}", indent, child_indent));
         }
     }
 }

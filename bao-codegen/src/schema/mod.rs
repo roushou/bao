@@ -5,11 +5,14 @@
 //! - [`FlatCommand`] - Flattened command with path information
 //! - [`CommandInfo`] - Command metadata for code generation
 //! - [`ContextFieldInfo`] - Context field metadata for code generation
+//! - [`CommandTreeDisplay`] - Declarative command tree formatting
 
 mod commands;
+mod display;
 mod types;
 
 pub use commands::{CommandTree, FlatCommand};
+pub use display::{CommandTreeDisplay, CommandTreeExt, DisplayStyle};
 pub use types::{
     CommandInfo, ContextFieldInfo, PoolConfigInfo, SqliteConfigInfo, collect_context_fields,
 };

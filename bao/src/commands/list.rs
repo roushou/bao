@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use baobao_manifest::{BaoToml, Command};
+use baobao_codegen::schema::{CommandTree, CommandTreeExt, DisplayStyle};
+use baobao_manifest::BaoToml;
 use clap::Args;
 use eyre::Result;
 
@@ -22,12 +23,12 @@ impl ListCommand {
             println!("No commands defined");
         } else {
             println!("Commands:");
-            let mut names: Vec<_> = schema.commands.keys().collect();
-            names.sort();
-            for name in names {
-                let cmd = &schema.commands[name];
-                print_command(name, cmd, 1);
-            }
+            let tree = CommandTree::new(schema);
+            println!(
+                "{}",
+                tree.display_style(DisplayStyle::WithDescriptions)
+                    .indent("  ")
+            );
         }
 
         if !schema.context.is_empty() {
@@ -38,19 +39,5 @@ impl ListCommand {
         }
 
         Ok(())
-    }
-}
-
-fn print_command(name: &str, cmd: &Command, depth: usize) {
-    let indent = "  ".repeat(depth);
-    println!("{}{} - {}", indent, name, cmd.description);
-
-    if cmd.has_subcommands() {
-        let mut subnames: Vec<_> = cmd.commands.keys().collect();
-        subnames.sort();
-        for subname in subnames {
-            let subcmd = &cmd.commands[subname];
-            print_command(subname, subcmd, depth + 1);
-        }
     }
 }

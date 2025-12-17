@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use baobao_manifest::{BaoToml, Command};
+use baobao_codegen::schema::{CommandTree, CommandTreeExt, DisplayStyle};
+use baobao_manifest::BaoToml;
 use clap::Args;
 use eyre::Result;
 
@@ -30,13 +31,17 @@ impl CheckCommand {
         }
 
         // Commands
-        let cmd_count = Self::count_commands(&schema.commands);
+        let tree = CommandTree::new(schema);
+        let cmd_count = tree.leaf_count();
         println!(
             "  {} command{}:",
             cmd_count,
             if cmd_count == 1 { "" } else { "s" }
         );
-        Self::print_commands(&schema.commands, "    ");
+        println!(
+            "{}",
+            tree.display_style(DisplayStyle::Simple).indent("    ")
+        );
 
         // Context
         if !schema.context.is_empty() {
@@ -52,31 +57,5 @@ impl CheckCommand {
         }
 
         Ok(())
-    }
-
-    fn count_commands(commands: &std::collections::HashMap<String, Command>) -> usize {
-        let mut total = 0;
-        for cmd in commands.values() {
-            if cmd.has_subcommands() {
-                total += Self::count_commands(&cmd.commands);
-            } else {
-                total += 1;
-            }
-        }
-        total
-    }
-
-    fn print_commands(commands: &std::collections::HashMap<String, Command>, indent: &str) {
-        let mut names: Vec<_> = commands.keys().collect();
-        names.sort();
-        for name in names {
-            let cmd = &commands[name];
-            if cmd.has_subcommands() {
-                println!("{}{}", indent, name);
-                Self::print_commands(&cmd.commands, &format!("{}  ", indent));
-            } else {
-                println!("{}{}", indent, name);
-            }
-        }
     }
 }

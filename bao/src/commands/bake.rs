@@ -1,9 +1,12 @@
 use std::path::PathBuf;
 
-use baobao_codegen::{language::LanguageCodegen, schema::CommandTree};
+use baobao_codegen::{
+    language::LanguageCodegen,
+    schema::{CommandTree, CommandTreeExt, DisplayStyle},
+};
 use baobao_codegen_rust::Generator as RustGenerator;
 use baobao_codegen_typescript::Generator as TypeScriptGenerator;
-use baobao_manifest::{BaoToml, Command, Language, Manifest};
+use baobao_manifest::{BaoToml, Language, Manifest};
 use clap::Args;
 use eyre::{Context, Result};
 
@@ -62,39 +65,8 @@ impl BakeCommand {
             .generate(&self.output)
             .wrap_err("Failed to generate code")?;
 
-        // Print header
-        println!("{} v{}", schema.cli.name, schema.cli.version);
-        if let Some(desc) = &schema.cli.description {
-            println!("{}", desc);
-        }
-        println!();
-
-        // Print commands
-        let total = Self::count_commands(schema);
-        println!("Commands ({}):", total);
-        Self::print_commands(&schema.commands, "  ");
-        println!();
-
-        // Print generation summary
-        println!("Generated: {}/src/generated/", self.output.display());
-
-        // Report created handler stubs
-        if !result.created_handlers.is_empty() {
-            println!();
-            println!("New handlers:");
-            for handler in &result.created_handlers {
-                println!("  + src/handlers/{}", handler);
-            }
-        }
-
-        // Warn about orphan handlers
-        if !result.orphan_handlers.is_empty() {
-            println!();
-            println!("Unused handlers:");
-            for orphan in &result.orphan_handlers {
-                println!("  - src/handlers/{}.rs", orphan);
-            }
-        }
+        Self::print_generation_summary(schema, &self.output, "src/generated/", ".rs");
+        Self::print_handler_changes(&result.created_handlers, &result.orphan_handlers, ".rs");
 
         Ok(())
     }
@@ -108,6 +80,18 @@ impl BakeCommand {
             .generate(&self.output)
             .wrap_err("Failed to generate code")?;
 
+        Self::print_generation_summary(schema, &self.output, "src/", ".ts");
+        Self::print_handler_changes(&result.created_handlers, &result.orphan_handlers, ".ts");
+
+        Ok(())
+    }
+
+    fn print_generation_summary(
+        schema: &Manifest,
+        output: &std::path::Path,
+        gen_subdir: &str,
+        _ext: &str,
+    ) {
         // Print header
         println!("{} v{}", schema.cli.name, schema.cli.version);
         if let Some(desc) = &schema.cli.description {
@@ -115,34 +99,35 @@ impl BakeCommand {
         }
         println!();
 
-        // Print commands
-        let total = Self::count_commands(schema);
-        println!("Commands ({}):", total);
-        Self::print_commands(&schema.commands, "  ");
+        // Print commands using declarative display
+        let tree = CommandTree::new(schema);
+        println!("Commands ({}):", tree.leaf_count());
+        println!(
+            "{}",
+            tree.display_style(DisplayStyle::WithSignature).indent("  ")
+        );
         println!();
 
         // Print generation summary
-        println!("Generated: {}/src/", self.output.display());
+        println!("Generated: {}/{}", output.display(), gen_subdir);
+    }
 
-        // Report created handler stubs
-        if !result.created_handlers.is_empty() {
+    fn print_handler_changes(created: &[String], orphans: &[String], ext: &str) {
+        if !created.is_empty() {
             println!();
             println!("New handlers:");
-            for handler in &result.created_handlers {
+            for handler in created {
                 println!("  + src/handlers/{}", handler);
             }
         }
 
-        // Warn about orphan handlers
-        if !result.orphan_handlers.is_empty() {
+        if !orphans.is_empty() {
             println!();
             println!("Unused handlers:");
-            for orphan in &result.orphan_handlers {
-                println!("  - src/handlers/{}.ts", orphan);
+            for orphan in orphans {
+                println!("  - src/handlers/{}{}", orphan, ext);
             }
         }
-
-        Ok(())
     }
 
     fn run_preview<G: LanguageCodegen>(&self, generator: &G) -> Result<()> {
@@ -157,59 +142,5 @@ impl BakeCommand {
         println!("{} files would be generated", files.len());
 
         Ok(())
-    }
-
-    fn count_commands(schema: &Manifest) -> usize {
-        CommandTree::new(schema).leaf_count()
-    }
-
-    fn print_commands(commands: &std::collections::HashMap<String, Command>, indent: &str) {
-        let mut sorted: Vec<_> = commands.iter().collect();
-        sorted.sort_by_key(|(name, _)| *name);
-
-        for (name, cmd) in sorted {
-            if cmd.has_subcommands() {
-                println!("{}{}", indent, name);
-                Self::print_commands(&cmd.commands, &format!("{}  ", indent));
-            } else {
-                let signature = Self::format_command_signature(name, cmd);
-                println!("{}{}", indent, signature);
-            }
-        }
-    }
-
-    fn format_command_signature(name: &str, cmd: &Command) -> String {
-        let mut parts = vec![name.to_string()];
-
-        // Add args
-        let mut sorted_args: Vec<_> = cmd.args.iter().collect();
-        sorted_args.sort_by_key(|(n, _)| *n);
-        for (arg_name, arg) in sorted_args {
-            if arg.required {
-                parts.push(format!("<{}>", arg_name));
-            } else {
-                parts.push(format!("[{}]", arg_name));
-            }
-        }
-
-        // Add flags
-        let mut sorted_flags: Vec<_> = cmd.flags.iter().collect();
-        sorted_flags.sort_by_key(|(n, _)| *n);
-        let flags: Vec<String> = sorted_flags
-            .iter()
-            .map(|(flag_name, flag)| {
-                if let Some(short) = flag.short_char() {
-                    format!("-{}/--{}", short, flag_name)
-                } else {
-                    format!("--{}", flag_name)
-                }
-            })
-            .collect();
-
-        if !flags.is_empty() {
-            parts.push(format!("[{}]", flags.join(" ")));
-        }
-
-        parts.join(" ")
     }
 }
