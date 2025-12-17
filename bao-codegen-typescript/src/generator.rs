@@ -9,15 +9,13 @@ use baobao_codegen::{
     schema::{CommandInfo, CommandTree, collect_context_fields},
 };
 use baobao_core::{GeneratedFile, to_camel_case, to_kebab_case};
-use baobao_manifest::{Command, Language, Manifest};
+use baobao_manifest::{Command, Manifest};
 use eyre::Result;
 
 use crate::{
     adapters::BouneAdapter,
     ast::{Import, JsObject},
-    files::{
-        BaoToml, CliTs, CommandTs, ContextTs, GitIgnore, HandlerTs, IndexTs, PackageJson, TsConfig,
-    },
+    files::{CliTs, CommandTs, ContextTs, GitIgnore, HandlerTs, IndexTs, PackageJson, TsConfig},
 };
 
 /// Marker string indicating an unmodified TypeScript handler stub.
@@ -81,12 +79,6 @@ impl<'a> Generator<'a> {
         ));
         registry.register(FileEntry::config("tsconfig.json", TsConfig.render()));
         registry.register(FileEntry::config(".gitignore", GitIgnore.render()));
-        registry.register(FileEntry::config(
-            "bao.toml",
-            BaoToml::new(&self.schema.cli.name, Language::TypeScript)
-                .with_version(self.schema.cli.version.clone())
-                .render(),
-        ));
 
         // Infrastructure files
         registry.register(FileEntry::infrastructure("src/index.ts", IndexTs.render()));

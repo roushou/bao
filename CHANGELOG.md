@@ -1,3 +1,21 @@
+## [0.4.2] - 2025-12-17
+
+### 🚀 Features
+
+- Setup changelog and display on the documentation website
+
+### 🐛 Bug Fixes
+
+- *(codegen-typescript)* Place `Shebang` at the top of the file
+- *(codegen-typescript)* Don't overwrite manifest on bake
+
+### 📚 Documentation
+
+- Update docs landing page
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove roadmap section from documentation website
 ## [0.4.1] - 2025-12-17
 
 ### 🚀 Features
