@@ -1,6 +1,7 @@
 //! Manifest types and parsing for bao.toml files.
 
 mod cli;
+mod edit;
 mod file;
 mod language;
 mod parse;
@@ -9,6 +10,10 @@ mod validate;
 use std::collections::HashMap;
 
 pub use cli::CliConfig;
+pub use edit::{
+    append_section, command_section_header, context_section_header, remove_toml_section,
+    rename_command_section,
+};
 pub use file::BaoToml;
 pub use language::Language;
 use serde::Deserialize;

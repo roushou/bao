@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use baobao_manifest::BaoToml;
+use baobao_manifest::{BaoToml, append_section, command_section_header, context_section_header};
 use clap::{Args, Subcommand};
 use eyre::{Result, bail};
 
@@ -63,30 +63,12 @@ impl AddCommand {
             bail!("Command '{}' already exists", args.name);
         }
 
-        // Build the TOML to append
-        let toml_section = if args.name.contains('/') {
-            // Subcommand: users/create -> [commands.users.commands.create]
-            let parts: Vec<&str> = args.name.split('/').collect();
-            let mut path = String::from("[commands");
-            for part in &parts[..parts.len() - 1] {
-                path.push('.');
-                path.push_str(part);
-                path.push_str(".commands");
-            }
-            path.push('.');
-            path.push_str(parts.last().unwrap());
-            path.push(']');
-            path
-        } else {
-            format!("[commands.{}]", args.name)
-        };
-
-        let new_content = format!(
-            "{}\n\n{}\ndescription = \"{}\"\n",
-            bao_toml.content().trim_end(),
-            toml_section,
+        let section = format!(
+            "{}\ndescription = \"{}\"",
+            command_section_header(&args.name),
             args.description
         );
+        let new_content = append_section(bao_toml.content(), &section);
 
         bao_toml.set_content(new_content)?;
         bao_toml.save()?;
@@ -124,20 +106,21 @@ impl AddCommand {
             bail!("Context field '{}' already exists", field_name);
         }
 
-        let context_toml = match args.context_type.as_str() {
+        let section = match args.context_type.as_str() {
             "sqlite" => format!(
-                "\n\n[context.{}]\ntype = \"sqlite\"\nenv = \"DATABASE_URL\"\ncreate_if_missing = true\njournal_mode = \"wal\"\nforeign_keys = true\n",
-                field_name
+                "{}\ntype = \"sqlite\"\nenv = \"DATABASE_URL\"\ncreate_if_missing = true\njournal_mode = \"wal\"\nforeign_keys = true",
+                context_section_header(&field_name)
             ),
             "postgres" | "mysql" => format!(
-                "\n\n[context.{}]\ntype = \"{}\"\nenv = \"DATABASE_URL\"\n",
-                field_name, args.context_type
+                "{}\ntype = \"{}\"\nenv = \"DATABASE_URL\"",
+                context_section_header(&field_name),
+                args.context_type
             ),
-            "http" => "\n\n[context.http]\n".to_string(),
+            "http" => context_section_header("http"),
             _ => unreachable!(),
         };
 
-        let new_content = format!("{}{}", bao_toml.content().trim_end(), context_toml);
+        let new_content = append_section(bao_toml.content(), &section);
         bao_toml.set_content(new_content)?;
         bao_toml.save()?;
         println!(

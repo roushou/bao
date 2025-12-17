@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use baobao_manifest::BaoToml;
+use baobao_manifest::{BaoToml, rename_command_section};
 use clap::{Args, Subcommand};
 use eyre::{Context, Result};
 
@@ -82,7 +82,8 @@ impl RenameCommand {
         }
 
         // Update bao.toml
-        let new_content = rename_in_toml(bao_toml.content(), &args.old_name, &args.new_name);
+        let new_content =
+            rename_command_section(bao_toml.content(), &args.old_name, &args.new_name);
         bao_toml.set_content(new_content)?;
         bao_toml.save()?;
 
@@ -159,44 +160,6 @@ fn validate_command_name(name: &str) -> Option<&'static str> {
     }
 
     None
-}
-
-/// Build a TOML section header from a command path
-fn build_section_header(name: &str) -> String {
-    if name.contains('/') {
-        let parts: Vec<&str> = name.split('/').collect();
-        let mut path = String::from("[commands");
-        for part in &parts[..parts.len() - 1] {
-            path.push('.');
-            path.push_str(part);
-            path.push_str(".commands");
-        }
-        path.push('.');
-        path.push_str(parts.last().unwrap());
-        path.push(']');
-        path
-    } else {
-        format!("[commands.{}]", name)
-    }
-}
-
-/// Rename a command in TOML content
-fn rename_in_toml(content: &str, old_name: &str, new_name: &str) -> String {
-    let old_header = build_section_header(old_name);
-    let new_header = build_section_header(new_name);
-
-    // Replace the section header
-    let mut result = content.replace(&old_header, &new_header);
-
-    // For top-level commands, also replace nested section prefixes
-    // e.g., renaming "users" -> "accounts" also updates [commands.users.commands.X]
-    if !old_name.contains('/') {
-        let old_prefix = format!("[commands.{}.", old_name);
-        let new_prefix = format!("[commands.{}.", new_name);
-        result = result.replace(&old_prefix, &new_prefix);
-    }
-
-    result
 }
 
 /// Convert a command name to snake_case for file paths

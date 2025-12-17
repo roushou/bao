@@ -46,4 +46,16 @@ pub use context::{
 // Error
 pub use error::{Error, Result, SourceContext};
 // Manifest
-pub use manifest::{BaoToml, CliConfig, Language, Manifest, ParseContext};
+pub use manifest::{
+    BaoToml,
+    CliConfig,
+    Language,
+    Manifest,
+    ParseContext,
+    // TOML editing utilities
+    append_section,
+    command_section_header,
+    context_section_header,
+    remove_toml_section,
+    rename_command_section,
+};
