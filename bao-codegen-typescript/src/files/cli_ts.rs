@@ -6,7 +6,7 @@ use baobao_codegen::schema::CommandInfo;
 use baobao_core::{FileRules, GeneratedFile, Overwrite, Version, to_camel_case, to_kebab_case};
 
 use crate::{
-    ast::{Const, Import},
+    ast::{Const, Import, JsObject},
     code_file::{CodeFile, RawCode},
 };
 
@@ -50,25 +50,20 @@ impl CliTs {
     }
 
     fn build_cli_schema(&self) -> String {
-        let mut schema = String::new();
-        schema.push_str("defineCli({\n");
-        schema.push_str(&format!("  name: \"{}\",\n", self.name));
-        schema.push_str(&format!("  version: \"{}\",\n", self.version));
-
-        if let Some(desc) = &self.description {
-            schema.push_str(&format!("  description: \"{}\",\n", desc));
-        }
-
-        // Commands object
-        schema.push_str("  commands: {\n");
-        for cmd in &self.commands {
+        // Build the commands object
+        let commands = self.commands.iter().fold(JsObject::new(), |obj, cmd| {
             let camel = to_camel_case(&cmd.name);
-            schema.push_str(&format!("    {}: {}Command,\n", camel, camel));
-        }
-        schema.push_str("  },\n");
+            obj.raw(&camel, format!("{}Command", camel))
+        });
 
-        schema.push_str("})");
-        schema
+        // Build the CLI config object
+        let config = JsObject::new()
+            .string("name", &self.name)
+            .string("version", self.version.to_string())
+            .string_opt("description", self.description.clone())
+            .object("commands", commands);
+
+        format!("defineCli({})", config.build().trim_end())
     }
 }
 
