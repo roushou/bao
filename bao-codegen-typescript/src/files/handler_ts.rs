@@ -9,6 +9,12 @@ use crate::{
     code_file::CodeFile,
 };
 
+/// Marker string indicating an unmodified TypeScript handler stub.
+///
+/// Files containing this marker are considered safe to delete during cleanup.
+/// This is used by both the stub generator and orphan detection.
+pub const STUB_MARKER: &str = "// TODO: implement";
+
 /// A handler stub file for a command.
 pub struct HandlerTs {
     pub command: String,

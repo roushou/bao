@@ -15,11 +15,11 @@ use eyre::Result;
 use crate::{
     adapters::BouneAdapter,
     ast::{Import, JsObject},
-    files::{CliTs, CommandTs, ContextTs, GitIgnore, HandlerTs, IndexTs, PackageJson, TsConfig},
+    files::{
+        CliTs, CommandTs, ContextTs, GitIgnore, HandlerTs, IndexTs, PackageJson, STUB_MARKER,
+        TsConfig,
+    },
 };
-
-/// Marker string indicating an unmodified TypeScript handler stub.
-const STUB_MARKER: &str = "// TODO: implement";
 
 /// TypeScript code generator that produces boune-based CLI code for Bun.
 pub struct Generator<'a> {

@@ -19,6 +19,6 @@ pub use commands_mod::CommandsMod;
 pub use context_rs::ContextRs;
 pub use generated_mod::GeneratedMod;
 pub use gitignore::GitIgnore;
-pub use handler_stub::HandlerStub;
+pub use handler_stub::{HandlerStub, STUB_MARKER};
 pub use handlers_mod::HandlersMod;
 pub use main_rs::MainRs;

@@ -18,12 +18,9 @@ use crate::{
     Struct, TokioAdapter, Use, Variant,
     files::{
         AppRs, CargoToml, CliRs, CommandRs, CommandsMod, ContextRs, GeneratedMod, HandlerStub,
-        HandlersMod, MainRs,
+        HandlersMod, MainRs, STUB_MARKER,
     },
 };
-
-/// Marker string indicating an unmodified Rust handler stub.
-const STUB_MARKER: &str = "todo!(\"implement";
 
 /// Rust code generator that produces clap-based CLI code
 pub struct Generator<'a> {

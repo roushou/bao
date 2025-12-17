@@ -4,6 +4,12 @@ use baobao_core::{FileRules, GeneratedFile, Overwrite, to_pascal_case, to_snake_
 
 use crate::{Fn, Param, RustFile, Use};
 
+/// Marker string indicating an unmodified Rust handler stub.
+///
+/// Files containing this marker are considered safe to delete during cleanup.
+/// This is used by both the stub generator and orphan detection.
+pub const STUB_MARKER: &str = "todo!(\"implement";
+
 /// A handler stub file for a command
 pub struct HandlerStub {
     pub command: String,
