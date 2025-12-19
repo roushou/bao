@@ -34,18 +34,19 @@ impl CliRs {
     }
 
     fn build_cli_struct(&self) -> Struct {
-        let mut s = Struct::new("Cli")
+        Struct::new("Cli")
             .derive("Parser")
             .derive("Debug")
             .attr(format!("command(name = \"{}\")", self.name))
             .attr(format!("command(version = \"{}\")", self.version))
-            .field(Field::new("command", "Commands").attr("command(subcommand)"));
-
-        if let Some(desc) = &self.description {
-            s = s.attr(format!("command(about = \"{}\")", desc));
-        }
-
-        s
+            .attr_if(
+                self.description.is_some(),
+                format!(
+                    "command(about = \"{}\")",
+                    self.description.as_deref().unwrap_or("")
+                ),
+            )
+            .field(Field::new("command", "Commands").attr("command(subcommand)"))
     }
 
     fn build_dispatch_impl(&self) -> Impl {
@@ -73,15 +74,12 @@ impl CliRs {
             match_expr = match_expr.arm(Arm::new(pattern).body(body));
         }
 
-        let mut dispatch = Fn::new("dispatch")
+        let dispatch = Fn::new("dispatch")
             .param(Param::new("self", ""))
             .param(Param::new("ctx", "&Context"))
             .returns("eyre::Result<()>")
-            .body_match(&match_expr);
-
-        if self.is_async {
-            dispatch = dispatch.async_();
-        }
+            .body_match(&match_expr)
+            .async_if(self.is_async);
 
         Impl::new("Cli").method(dispatch)
     }

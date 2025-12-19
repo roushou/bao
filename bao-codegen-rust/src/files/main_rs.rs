@@ -21,16 +21,12 @@ impl MainRs {
             "app::run()"
         };
 
-        let mut f = Fn::new("main")
+        Fn::new("main")
             .private()
             .returns("eyre::Result<()>")
-            .body(body);
-
-        if self.is_async {
-            f = f.async_().attr("tokio::main");
-        }
-
-        f
+            .body(body)
+            .async_if(self.is_async)
+            .attr_if(self.is_async, "tokio::main")
     }
 }
 

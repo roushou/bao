@@ -29,17 +29,12 @@ impl HandlerStub {
     fn build_run_fn(&self) -> Fn {
         let pascal = to_pascal_case(&self.command);
 
-        let mut f = Fn::new("run")
+        Fn::new("run")
             .param(Param::new("_ctx", "&Context"))
             .param(Param::new("args", format!("{}Args", pascal)))
             .returns("eyre::Result<()>")
-            .body_line(format!("todo!(\"implement {} command\")", self.command));
-
-        if self.is_async {
-            f = f.async_();
-        }
-
-        f
+            .body_line(format!("todo!(\"implement {} command\")", self.command))
+            .async_if(self.is_async)
     }
 }
 

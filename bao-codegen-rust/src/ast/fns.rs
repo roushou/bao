@@ -178,6 +178,21 @@ impl Fn {
         self
     }
 
+    /// Conditionally mark the function as async.
+    pub fn async_if(self, condition: bool) -> Self {
+        if condition { self.async_() } else { self }
+    }
+
+    /// Conditionally add an attribute.
+    pub fn attr_if(self, condition: bool, attr: impl Into<String>) -> Self {
+        if condition { self.attr(attr) } else { self }
+    }
+
+    /// Conditionally make the function private.
+    pub fn private_if(self, condition: bool) -> Self {
+        if condition { self.private() } else { self }
+    }
+
     pub fn param(mut self, param: Param) -> Self {
         self.params.push(param);
         self

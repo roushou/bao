@@ -48,11 +48,10 @@ impl ContextRs {
             format!("Ok(Self {{\n    {}\n}})", field_inits)
         };
 
-        let mut new_fn = Fn::new("new").returns("eyre::Result<Self>").body(body);
-
-        if has_async {
-            new_fn = new_fn.async_();
-        }
+        let new_fn = Fn::new("new")
+            .returns("eyre::Result<Self>")
+            .body(body)
+            .async_if(has_async);
 
         Impl::new("Context").method(new_fn)
     }

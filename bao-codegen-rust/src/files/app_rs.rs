@@ -17,19 +17,16 @@ impl AppRs {
     }
 
     fn build_run_fn(&self) -> Fn {
-        let body = if self.is_async {
-            "let ctx = Context::new().await?;\nCli::parse().dispatch(&ctx).await"
-        } else {
-            "let ctx = Context::new()?;\nCli::parse().dispatch(&ctx)"
-        };
+        let await_suffix = if self.is_async { ".await" } else { "" };
+        let body = format!(
+            "let ctx = Context::new(){}?;\nCli::parse().dispatch(&ctx){}",
+            await_suffix, await_suffix
+        );
 
-        let mut f = Fn::new("run").returns("eyre::Result<()>").body(body);
-
-        if self.is_async {
-            f = f.async_();
-        }
-
-        f
+        Fn::new("run")
+            .returns("eyre::Result<()>")
+            .body(body)
+            .async_if(self.is_async)
     }
 }
 

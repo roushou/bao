@@ -87,6 +87,16 @@ impl Struct {
         self
     }
 
+    /// Conditionally add a derive.
+    pub fn derive_if(self, condition: bool, derive: impl Into<String>) -> Self {
+        if condition { self.derive(derive) } else { self }
+    }
+
+    /// Conditionally add an attribute.
+    pub fn attr_if(self, condition: bool, attr: impl Into<String>) -> Self {
+        if condition { self.attr(attr) } else { self }
+    }
+
     /// Render the struct to a CodeBuilder.
     pub fn render(&self, builder: CodeBuilder) -> CodeBuilder {
         let vis = if self.is_public { "pub " } else { "" };
