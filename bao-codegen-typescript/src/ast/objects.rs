@@ -2,6 +2,8 @@
 
 use baobao_codegen::builder::{CodeBuilder, CodeFragment, Renderable};
 
+use super::arrays::JsArray;
+
 /// A property in a JavaScript object literal.
 #[derive(Debug, Clone)]
 pub struct Property {
@@ -20,6 +22,8 @@ pub enum PropertyValue {
     Object(JsObject),
     /// An arrow function body.
     ArrowFn(ArrowFn),
+    /// An array literal.
+    Array(JsArray),
 }
 
 impl Property {
@@ -52,6 +56,14 @@ impl Property {
         Self {
             key: key.into(),
             value: PropertyValue::ArrowFn(value),
+        }
+    }
+
+    /// Create a property with an array value.
+    pub fn array(key: impl Into<String>, value: JsArray) -> Self {
+        Self {
+            key: key.into(),
+            value: PropertyValue::Array(value),
         }
     }
 
@@ -133,6 +145,52 @@ impl JsObject {
     pub fn arrow_fn(mut self, key: impl Into<String>, value: ArrowFn) -> Self {
         self.properties.push(Property::arrow_fn(key, value));
         self
+    }
+
+    /// Add an array property.
+    pub fn array(mut self, key: impl Into<String>, value: JsArray) -> Self {
+        self.properties.push(Property::array(key, value));
+        self
+    }
+
+    /// Conditionally add an array property.
+    pub fn array_if(self, condition: bool, key: impl Into<String>, value: JsArray) -> Self {
+        if condition {
+            self.array(key, value)
+        } else {
+            self
+        }
+    }
+
+    /// Conditionally add an array property using an Option.
+    pub fn array_opt(self, key: impl Into<String>, value: Option<JsArray>) -> Self {
+        match value {
+            Some(v) => self.array(key, v),
+            None => self,
+        }
+    }
+
+    /// Add a property with a TOML value (converted to TypeScript literal).
+    ///
+    /// - Strings are quoted
+    /// - Numbers and booleans are raw
+    /// - Other types are ignored
+    pub fn toml(self, key: impl Into<String>, value: &toml::Value) -> Self {
+        match value {
+            toml::Value::String(s) => self.string(key, s),
+            toml::Value::Integer(i) => self.raw(key, i.to_string()),
+            toml::Value::Float(f) => self.raw(key, f.to_string()),
+            toml::Value::Boolean(b) => self.raw(key, b.to_string()),
+            _ => self,
+        }
+    }
+
+    /// Conditionally add a TOML value property.
+    pub fn toml_opt(self, key: impl Into<String>, value: Option<&toml::Value>) -> Self {
+        match value {
+            Some(v) => self.toml(key, v),
+            None => self,
+        }
     }
 
     /// Add a shorthand property where key equals the variable name.
@@ -218,6 +276,7 @@ impl JsObject {
                     let b = func.body.iter().fold(b, |b, line| b.line(line));
                     b.dedent().line("},")
                 }
+                PropertyValue::Array(arr) => b.line(&format!("{}: {},", prop.key, arr.build())),
             })
     }
 
@@ -234,7 +293,7 @@ impl JsObject {
                 PropertyValue::String(s) => CodeFragment::Line(format!("{}: \"{}\",", prop.key, s)),
                 PropertyValue::Raw(s) => CodeFragment::Line(format!("{}: {},", prop.key, s)),
                 PropertyValue::Object(obj) => {
-                    let mut body = obj.properties_to_fragments();
+                    let body = obj.properties_to_fragments();
                     // Remove trailing comma from nested object for cleaner output
                     CodeFragment::Block {
                         header: format!("{}: {{", prop.key),
@@ -254,6 +313,9 @@ impl JsObject {
                         body,
                         close: Some("},".to_string()),
                     }
+                }
+                PropertyValue::Array(arr) => {
+                    CodeFragment::Line(format!("{}: {},", prop.key, arr.build()))
                 }
             })
             .collect()

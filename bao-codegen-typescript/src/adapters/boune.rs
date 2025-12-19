@@ -9,7 +9,7 @@ use baobao_manifest::ArgType as ManifestArgType;
 
 use crate::{
     BOUNE_VERSION,
-    ast::{ArrowFn, JsObject},
+    ast::{ArrowFn, JsArray, JsObject},
 };
 
 /// Boune adapter for generating TypeScript CLI code targeting Bun runtime.
@@ -40,7 +40,7 @@ impl BouneAdapter {
         default: Option<&toml::Value>,
         description: Option<&str>,
         choices: Option<&[String]>,
-    ) -> String {
+    ) -> JsObject {
         self.build_argument_schema(
             Self::convert_arg_type(arg_type),
             required,
@@ -60,32 +60,18 @@ impl BouneAdapter {
         default: Option<&toml::Value>,
         description: Option<&str>,
         choices: Option<&[String]>,
-    ) -> String {
+    ) -> JsObject {
         let boune_type = self.map_arg_type(arg_type);
-        let mut parts = vec![format!("type: \"{}\"", boune_type)];
 
-        if required && default.is_none() {
-            parts.push("required: true".to_string());
-        }
-
-        if let Some(default) = default {
-            parts.push(format!("default: {}", toml_to_ts_literal(default)));
-        }
-
-        if let Some(desc) = description {
-            parts.push(format!("description: \"{}\"", desc));
-        }
-
-        if let Some(choices) = choices {
-            let choices_array = choices
-                .iter()
-                .map(|c| format!("\"{}\"", c))
-                .collect::<Vec<_>>()
-                .join(", ");
-            parts.push(format!("choices: [{}] as const", choices_array));
-        }
-
-        format!("{{ {} }}", parts.join(", "))
+        JsObject::new()
+            .string("type", boune_type)
+            .raw_if(required && default.is_none(), "required", "true")
+            .toml_opt("default", default)
+            .string_opt("description", description)
+            .array_opt(
+                "choices",
+                choices.map(|c| JsArray::from_strings(c).as_const()),
+            )
     }
 
     /// Build an option object schema for boune's declarative API using manifest types.
@@ -96,7 +82,7 @@ impl BouneAdapter {
         default: Option<&toml::Value>,
         description: Option<&str>,
         choices: Option<&[String]>,
-    ) -> String {
+    ) -> JsObject {
         self.build_option_schema(
             Self::convert_arg_type(flag_type),
             short,
@@ -116,32 +102,18 @@ impl BouneAdapter {
         default: Option<&toml::Value>,
         description: Option<&str>,
         choices: Option<&[String]>,
-    ) -> String {
+    ) -> JsObject {
         let boune_type = self.map_arg_type(flag_type);
-        let mut parts = vec![format!("type: \"{}\"", boune_type)];
 
-        if let Some(short) = short {
-            parts.push(format!("short: \"{}\"", short));
-        }
-
-        if let Some(default) = default {
-            parts.push(format!("default: {}", toml_to_ts_literal(default)));
-        }
-
-        if let Some(desc) = description {
-            parts.push(format!("description: \"{}\"", desc));
-        }
-
-        if let Some(choices) = choices {
-            let choices_array = choices
-                .iter()
-                .map(|c| format!("\"{}\"", c))
-                .collect::<Vec<_>>()
-                .join(", ");
-            parts.push(format!("choices: [{}] as const", choices_array));
-        }
-
-        format!("{{ {} }}", parts.join(", "))
+        JsObject::new()
+            .string("type", boune_type)
+            .string_opt("short", short.map(|c| c.to_string()))
+            .toml_opt("default", default)
+            .string_opt("description", description)
+            .array_opt(
+                "choices",
+                choices.map(|c| JsArray::from_strings(c).as_const()),
+            )
     }
 
     /// Map manifest argument type to TypeScript boune type.
@@ -282,17 +254,5 @@ impl CliAdapter for BouneAdapter {
 
     fn map_optional_type(&self, arg_type: ArgType) -> String {
         format!("{} | undefined", self.map_arg_type(arg_type))
-    }
-}
-
-/// Convert a TOML value to a TypeScript literal string.
-/// Strings are quoted, numbers and booleans are raw.
-fn toml_to_ts_literal(value: &toml::Value) -> String {
-    match value {
-        toml::Value::String(s) => format!("\"{}\"", s),
-        toml::Value::Integer(i) => i.to_string(),
-        toml::Value::Float(f) => f.to_string(),
-        toml::Value::Boolean(b) => b.to_string(),
-        _ => String::new(),
     }
 }

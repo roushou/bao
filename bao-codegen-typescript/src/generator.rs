@@ -282,7 +282,7 @@ impl<'a> Generator<'a> {
                 .iter()
                 .fold(JsObject::new(), |obj, (arg_name, arg)| {
                     let camel = to_camel_case(arg_name);
-                    obj.raw(&camel, self.build_argument_schema(arg))
+                    obj.object(&camel, self.build_argument_schema(arg))
                 });
 
             let args_obj = arguments.build();
@@ -296,7 +296,7 @@ impl<'a> Generator<'a> {
                 .iter()
                 .fold(JsObject::new(), |obj, (flag_name, flag)| {
                     let camel = to_camel_case(flag_name);
-                    obj.raw(&camel, self.build_option_schema(flag))
+                    obj.object(&camel, self.build_option_schema(flag))
                 });
 
             let opts_obj = options.build();
@@ -352,7 +352,7 @@ impl<'a> Generator<'a> {
         )
     }
 
-    fn build_argument_schema(&self, arg: &baobao_manifest::Arg) -> String {
+    fn build_argument_schema(&self, arg: &baobao_manifest::Arg) -> JsObject {
         self.cli_adapter.build_argument_schema_manifest(
             &arg.arg_type,
             arg.required,
@@ -362,7 +362,7 @@ impl<'a> Generator<'a> {
         )
     }
 
-    fn build_option_schema(&self, flag: &baobao_manifest::Flag) -> String {
+    fn build_option_schema(&self, flag: &baobao_manifest::Flag) -> JsObject {
         self.cli_adapter.build_option_schema_manifest(
             &flag.flag_type,
             flag.short_char(),

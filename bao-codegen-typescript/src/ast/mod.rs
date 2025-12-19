@@ -6,6 +6,7 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
+mod arrays;
 mod chain;
 mod consts;
 mod exports;
@@ -15,6 +16,7 @@ mod interface;
 mod objects;
 mod types;
 
+pub use arrays::JsArray;
 pub use chain::MethodChain;
 pub use consts::Const;
 pub use exports::Export;
