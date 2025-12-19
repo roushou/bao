@@ -1,0 +1,13 @@
+---
+source: bao-codegen-rust/tests/codegen_snapshots.rs
+assertion_line: 69
+expression: main_rs
+---
+mod app;
+mod context;
+mod generated;
+mod handlers;
+
+fn main() -> eyre::Result<()> {
+    app::run()
+}

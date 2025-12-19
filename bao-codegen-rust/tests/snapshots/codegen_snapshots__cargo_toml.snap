@@ -1,0 +1,13 @@
+---
+source: bao-codegen-rust/tests/codegen_snapshots.rs
+assertion_line: 247
+expression: cargo
+---
+[package]
+name = "myapp"
+version = "1.2.3"
+edition = "2024"
+
+[dependencies]
+eyre = "0.6"
+clap = { version = "4", features = ["derive"] }

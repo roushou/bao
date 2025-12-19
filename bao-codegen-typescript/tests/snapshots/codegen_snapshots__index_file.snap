@@ -1,0 +1,10 @@
+---
+source: bao-codegen-typescript/tests/codegen_snapshots.rs
+assertion_line: 274
+expression: index
+---
+#!/usr/bin/env bun
+
+import { app } from "./cli.ts";
+
+app.run();

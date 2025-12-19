@@ -1,0 +1,23 @@
+---
+source: bao-codegen-typescript/tests/codegen_snapshots.rs
+assertion_line: 293
+expression: package
+---
+{
+  "name": "myapp",
+  "version": "1.2.3",
+  "description": "A CLI application",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun run dist/index.js"
+  },
+  "dependencies": {
+    "boune": "^0.9.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}
