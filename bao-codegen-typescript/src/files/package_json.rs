@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 use baobao_core::{FileRules, GeneratedFile, Overwrite, Version};
 
+use crate::BOUNE_VERSION;
+
 const DEFAULT_DESCRIPTION: &str = "A CLI application";
 
 /// The package.json configuration file.
@@ -21,7 +23,7 @@ impl PackageJson {
             name: name.into(),
             version: Version::new(0, 1, 0),
             description: DEFAULT_DESCRIPTION.to_string(),
-            dependencies: vec![Dependency::new("boune", "^0.9.0")],
+            dependencies: vec![Dependency::new("boune", BOUNE_VERSION)],
             dev_dependencies: vec![
                 Dependency::new("@types/bun", "latest"),
                 Dependency::new("typescript", "^5.0.0"),

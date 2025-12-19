@@ -7,7 +7,10 @@ use baobao_codegen::{
 use baobao_core::ArgType;
 use baobao_manifest::ArgType as ManifestArgType;
 
-use crate::ast::{ArrowFn, JsObject};
+use crate::{
+    BOUNE_VERSION,
+    ast::{ArrowFn, JsObject},
+};
 
 /// Boune adapter for generating TypeScript CLI code targeting Bun runtime.
 #[derive(Debug, Clone, Default)]
@@ -174,7 +177,7 @@ impl CliAdapter for BouneAdapter {
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
-        vec![Dependency::new("boune", "^0.9.0")]
+        vec![Dependency::new("boune", BOUNE_VERSION)]
     }
 
     fn generate_cli(&self, info: &CliInfo) -> Vec<CodeFragment> {

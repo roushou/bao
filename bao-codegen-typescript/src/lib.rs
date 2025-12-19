@@ -35,6 +35,9 @@
 //! - `src/handlers/*.ts` - Handler stubs for implementation
 //! - `package.json`, `tsconfig.json`, `bao.toml`, `.gitignore`
 
+/// Target boune version for generated code.
+pub const BOUNE_VERSION: &str = "^0.9.0";
+
 mod code_file;
 mod generator;
 mod naming;
