@@ -1,3 +1,21 @@
+## [0.4.3] - 2025-12-19
+
+### 🚀 Features
+
+- *(codegen)* Add choices/enum support for args and flags
+
+### 🚜 Refactor
+
+- *(codegen)* Consolidate command tree printing into declarative display
+- *(manifest)* Extract TOML section manipulation into module
+- *(codegen-typescript)* Use `JsObject` AST for CLI schema generation
+- *(codegen)* Consolidate stub marker constants
+- *(codegen-typescript)* Migrate boune API from builder chains to object schema
+- *(codegen-typescript)* Centralize `boune` version into a constant
+
+### ⚙️ Miscellaneous Tasks
+
+- Release `v0.4.3`
 ## [0.4.2] - 2025-12-17
 
 ### 🚀 Features
