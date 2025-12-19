@@ -6,6 +6,8 @@ use baobao_codegen::{
 };
 use baobao_core::DatabaseType;
 
+use crate::ast::JsObject;
+
 /// Bun SQLite adapter using bun:sqlite.
 #[derive(Debug, Clone, Default)]
 pub struct BunSqliteAdapter;
@@ -62,21 +64,12 @@ impl DatabaseAdapter for BunSqliteAdapter {
         match info.db_type {
             DatabaseType::Sqlite => {
                 if let Some(sqlite) = &info.sqlite {
-                    let mut opts = Vec::new();
-
-                    if sqlite.read_only == Some(true) {
-                        opts.push("readonly: true");
-                    }
-
-                    if sqlite.create_if_missing == Some(true) {
-                        opts.push("create: true");
-                    }
+                    let opts = JsObject::new()
+                        .raw_if(sqlite.read_only == Some(true), "readonly", "true")
+                        .raw_if(sqlite.create_if_missing == Some(true), "create", "true");
 
                     if !opts.is_empty() {
-                        return Some(vec![CodeFragment::raw(format!(
-                            "{{ {} }}",
-                            opts.join(", ")
-                        ))]);
+                        return Some(vec![CodeFragment::raw(opts.build())]);
                     }
                 }
                 None
