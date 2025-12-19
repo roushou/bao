@@ -21,7 +21,7 @@ impl PackageJson {
             name: name.into(),
             version: Version::new(0, 1, 0),
             description: DEFAULT_DESCRIPTION.to_string(),
-            dependencies: vec![Dependency::new("boune", "^0.5.0")],
+            dependencies: vec![Dependency::new("boune", "^0.9.0")],
             dev_dependencies: vec![
                 Dependency::new("@types/bun", "latest"),
                 Dependency::new("typescript", "^5.0.0"),

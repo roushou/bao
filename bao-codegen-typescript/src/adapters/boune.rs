@@ -7,7 +7,7 @@ use baobao_codegen::{
 use baobao_core::ArgType;
 use baobao_manifest::ArgType as ManifestArgType;
 
-use crate::ast::{ArrowFn, JsObject, MethodChain};
+use crate::ast::{ArrowFn, JsObject};
 
 /// Boune adapter for generating TypeScript CLI code targeting Bun runtime.
 #[derive(Debug, Clone, Default)]
@@ -29,41 +29,48 @@ impl BouneAdapter {
         }
     }
 
-    /// Build an argument chain for boune's declarative API using manifest types.
-    pub fn build_argument_chain_manifest(
+    /// Build an argument object schema for boune's declarative API using manifest types.
+    pub fn build_argument_schema_manifest(
         &self,
         arg_type: &ManifestArgType,
         required: bool,
-        has_default: bool,
         default: Option<&toml::Value>,
         description: Option<&str>,
         choices: Option<&[String]>,
     ) -> String {
-        self.build_argument_chain(
+        self.build_argument_schema(
             Self::convert_arg_type(arg_type),
             required,
-            has_default,
             default,
             description,
             choices,
         )
     }
 
-    /// Build an argument chain for boune's declarative API.
-    pub fn build_argument_chain(
+    /// Build an argument object schema for boune's declarative API.
+    ///
+    /// Generates: `{ type: "string", required: true, description: "...", choices: [...] as const }`
+    pub fn build_argument_schema(
         &self,
         arg_type: ArgType,
         required: bool,
-        has_default: bool,
         default: Option<&toml::Value>,
         description: Option<&str>,
         choices: Option<&[String]>,
     ) -> String {
         let boune_type = self.map_arg_type(arg_type);
-        let mut chain = MethodChain::new(format!("argument.{}", boune_type));
+        let mut parts = vec![format!("type: \"{}\"", boune_type)];
 
-        if required && !has_default {
-            chain = chain.call_empty("required");
+        if required && default.is_none() {
+            parts.push("required: true".to_string());
+        }
+
+        if let Some(default) = default {
+            parts.push(format!("default: {}", toml_to_ts_literal(default)));
+        }
+
+        if let Some(desc) = description {
+            parts.push(format!("description: \"{}\"", desc));
         }
 
         if let Some(choices) = choices {
@@ -72,22 +79,14 @@ impl BouneAdapter {
                 .map(|c| format!("\"{}\"", c))
                 .collect::<Vec<_>>()
                 .join(", ");
-            chain = chain.call("choices", format!("[{}]", choices_array));
+            parts.push(format!("choices: [{}] as const", choices_array));
         }
 
-        if let Some(default) = default {
-            chain = chain.call("default", toml_to_ts_literal(default));
-        }
-
-        if let Some(desc) = description {
-            chain = chain.call("describe", format!("\"{}\"", desc));
-        }
-
-        chain.build_inline()
+        format!("{{ {} }}", parts.join(", "))
     }
 
-    /// Build an option chain for boune's declarative API using manifest types.
-    pub fn build_option_chain_manifest(
+    /// Build an option object schema for boune's declarative API using manifest types.
+    pub fn build_option_schema_manifest(
         &self,
         flag_type: &ManifestArgType,
         short: Option<char>,
@@ -95,7 +94,7 @@ impl BouneAdapter {
         description: Option<&str>,
         choices: Option<&[String]>,
     ) -> String {
-        self.build_option_chain(
+        self.build_option_schema(
             Self::convert_arg_type(flag_type),
             short,
             default,
@@ -104,8 +103,10 @@ impl BouneAdapter {
         )
     }
 
-    /// Build an option chain for boune's declarative API.
-    pub fn build_option_chain(
+    /// Build an option object schema for boune's declarative API.
+    ///
+    /// Generates: `{ type: "string", short: "x", default: ..., description: "...", choices: [...] as const }`
+    pub fn build_option_schema(
         &self,
         flag_type: ArgType,
         short: Option<char>,
@@ -114,10 +115,18 @@ impl BouneAdapter {
         choices: Option<&[String]>,
     ) -> String {
         let boune_type = self.map_arg_type(flag_type);
-        let mut chain = MethodChain::new(format!("option.{}", boune_type));
+        let mut parts = vec![format!("type: \"{}\"", boune_type)];
 
         if let Some(short) = short {
-            chain = chain.call("short", format!("\"{}\"", short));
+            parts.push(format!("short: \"{}\"", short));
+        }
+
+        if let Some(default) = default {
+            parts.push(format!("default: {}", toml_to_ts_literal(default)));
+        }
+
+        if let Some(desc) = description {
+            parts.push(format!("description: \"{}\"", desc));
         }
 
         if let Some(choices) = choices {
@@ -126,18 +135,10 @@ impl BouneAdapter {
                 .map(|c| format!("\"{}\"", c))
                 .collect::<Vec<_>>()
                 .join(", ");
-            chain = chain.call("choices", format!("[{}]", choices_array));
+            parts.push(format!("choices: [{}] as const", choices_array));
         }
 
-        if let Some(default) = default {
-            chain = chain.call("default", toml_to_ts_literal(default));
-        }
-
-        if let Some(desc) = description {
-            chain = chain.call("describe", format!("\"{}\"", desc));
-        }
-
-        chain.build_inline()
+        format!("{{ {} }}", parts.join(", "))
     }
 
     /// Map manifest argument type to TypeScript boune type.
@@ -173,7 +174,7 @@ impl CliAdapter for BouneAdapter {
     }
 
     fn dependencies(&self) -> Vec<Dependency> {
-        vec![Dependency::new("boune", "^0.5.0")]
+        vec![Dependency::new("boune", "^0.9.0")]
     }
 
     fn generate_cli(&self, info: &CliInfo) -> Vec<CodeFragment> {
@@ -253,14 +254,14 @@ impl CliAdapter for BouneAdapter {
     fn command_imports(&self, info: &CommandMeta) -> Vec<ImportSpec> {
         let mut imports = vec![ImportSpec::new("boune").symbol("defineCommand")];
 
+        // No longer need to import `argument` or `option` builders
+        // Type inference helpers are still needed
         if !info.args.is_empty() {
-            imports[0].symbols.push("argument".to_string());
             imports.push(ImportSpec::new("boune").symbol("InferArgs").type_only());
         }
 
         if !info.flags.is_empty() {
-            imports[0].symbols.push("option".to_string());
-            imports.push(ImportSpec::new("boune").symbol("InferOptions").type_only());
+            imports.push(ImportSpec::new("boune").symbol("InferOpts").type_only());
         }
 
         imports

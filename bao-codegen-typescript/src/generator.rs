@@ -3,7 +3,6 @@
 use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
-    builder::CodeBuilder,
     generation::{FileEntry, FileRegistry, HandlerPaths, find_orphan_commands},
     language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
     schema::{CommandInfo, CommandTree, collect_context_fields},
@@ -221,15 +220,12 @@ impl<'a> Generator<'a> {
             .object("subcommands", subcommands);
 
         // Build the command definition string
-        let mut builder = CodeBuilder::typescript();
-        builder
-            .push_raw(&format!(
-                "export const {}Command = defineCommand(",
-                camel_name
-            ))
-            .emit(&schema)
-            .push_raw(");");
-        let command_def = builder.build();
+        let schema_obj = schema.build();
+        let command_def = format!(
+            "export const {}Command = defineCommand({});",
+            camel_name,
+            schema_obj.trim_end()
+        );
 
         CodeFile::new()
             .imports(imports)
@@ -262,13 +258,13 @@ impl<'a> Generator<'a> {
         let depth = path_segments.len();
         let up_path = "../".repeat(depth);
 
-        // Build imports
+        // Build imports - no longer need `argument` or `option` builders
         let mut boune_import = Import::new("boune").named("defineCommand");
         if !command.args.is_empty() {
-            boune_import = boune_import.named("argument").named_type("InferArgs");
+            boune_import = boune_import.named_type("InferArgs");
         }
         if !command.flags.is_empty() {
-            boune_import = boune_import.named("option").named_type("InferOptions");
+            boune_import = boune_import.named_type("InferOpts");
         }
 
         let imports = vec![
@@ -286,15 +282,11 @@ impl<'a> Generator<'a> {
                 .iter()
                 .fold(JsObject::new(), |obj, (arg_name, arg)| {
                     let camel = to_camel_case(arg_name);
-                    obj.raw(&camel, self.build_argument_chain(arg))
+                    obj.raw(&camel, self.build_argument_schema(arg))
                 });
 
-            let mut builder = CodeBuilder::typescript();
-            builder
-                .push_raw("const args = ")
-                .emit(&arguments)
-                .push_line(" as const;");
-            body_parts.push(builder.build().trim_end().to_string());
+            let args_obj = arguments.build();
+            body_parts.push(format!("const args = {} as const;", args_obj.trim_end()));
         }
 
         // Options schema as const
@@ -304,15 +296,11 @@ impl<'a> Generator<'a> {
                 .iter()
                 .fold(JsObject::new(), |obj, (flag_name, flag)| {
                     let camel = to_camel_case(flag_name);
-                    obj.raw(&camel, self.build_option_chain(flag))
+                    obj.raw(&camel, self.build_option_schema(flag))
                 });
 
-            let mut builder = CodeBuilder::typescript();
-            builder
-                .push_raw("const options = ")
-                .emit(&options)
-                .push_line(" as const;");
-            body_parts.push(builder.build().trim_end().to_string());
+            let opts_obj = options.build();
+            body_parts.push(format!("const options = {} as const;", opts_obj.trim_end()));
         }
 
         // Command definition
@@ -329,7 +317,7 @@ impl<'a> Generator<'a> {
         }
         if !command.flags.is_empty() {
             type_exports.push(format!(
-                "export type {}Options = InferOptions<typeof options>;",
+                "export type {}Options = InferOpts<typeof options>;",
                 pascal_name
             ));
         }
@@ -356,30 +344,26 @@ impl<'a> Generator<'a> {
             .raw_if(!command.flags.is_empty(), "options", "options")
             .arrow_fn("action", action);
 
-        let mut builder = CodeBuilder::typescript();
-        builder
-            .push_raw(&format!(
-                "export const {}Command = defineCommand(",
-                camel_name
-            ))
-            .emit(&schema)
-            .push_line(");");
-        builder.build().trim_end().to_string()
+        let schema_obj = schema.build();
+        format!(
+            "export const {}Command = defineCommand({});",
+            camel_name,
+            schema_obj.trim_end()
+        )
     }
 
-    fn build_argument_chain(&self, arg: &baobao_manifest::Arg) -> String {
-        self.cli_adapter.build_argument_chain_manifest(
+    fn build_argument_schema(&self, arg: &baobao_manifest::Arg) -> String {
+        self.cli_adapter.build_argument_schema_manifest(
             &arg.arg_type,
             arg.required,
-            arg.default.is_some(),
             arg.default.as_ref(),
             arg.description.as_deref(),
             arg.choices.as_deref(),
         )
     }
 
-    fn build_option_chain(&self, flag: &baobao_manifest::Flag) -> String {
-        self.cli_adapter.build_option_chain_manifest(
+    fn build_option_schema(&self, flag: &baobao_manifest::Flag) -> String {
+        self.cli_adapter.build_option_schema_manifest(
             &flag.flag_type,
             flag.short_char(),
             flag.default.as_ref(),
