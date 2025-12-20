@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, GeneratedFile, Overwrite};
+use baobao_core::{FileRules, GeneratedFile};
 
 use crate::{
     Shebang,
@@ -19,10 +19,7 @@ impl GeneratedFile for IndexTs {
     }
 
     fn rules(&self) -> FileRules {
-        FileRules {
-            overwrite: Overwrite::IfMissing,
-            header: None,
-        }
+        FileRules::create_once()
     }
 
     fn render(&self) -> String {

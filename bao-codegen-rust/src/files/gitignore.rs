@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, GeneratedFile, Overwrite};
+use baobao_core::{FileRules, GeneratedFile};
 
 /// The .gitignore file
 pub struct GitIgnore;
@@ -11,10 +11,7 @@ impl GeneratedFile for GitIgnore {
     }
 
     fn rules(&self) -> FileRules {
-        FileRules {
-            overwrite: Overwrite::IfMissing,
-            header: None,
-        }
+        FileRules::create_once()
     }
 
     fn render(&self) -> String {

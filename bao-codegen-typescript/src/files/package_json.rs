@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, GeneratedFile, Overwrite, Version};
+use baobao_core::{FileRules, GeneratedFile, Version};
 
 use crate::BOUNE_VERSION;
 
@@ -82,10 +82,7 @@ impl GeneratedFile for PackageJson {
     }
 
     fn rules(&self) -> FileRules {
-        FileRules {
-            overwrite: Overwrite::IfMissing,
-            header: None,
-        }
+        FileRules::create_once()
     }
 
     fn render(&self) -> String {

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, GeneratedFile, Overwrite, to_snake_case};
+use baobao_core::{FileRules, GeneratedFile, to_snake_case};
 
 use crate::{RawCode, RustFile};
 
@@ -21,10 +21,7 @@ impl GeneratedFile for HandlersMod {
     }
 
     fn rules(&self) -> FileRules {
-        FileRules {
-            overwrite: Overwrite::Always,
-            header: None,
-        }
+        FileRules::always_overwrite()
     }
 
     fn render(&self) -> String {

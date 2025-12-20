@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, GeneratedFile, Overwrite, to_kebab_case, to_pascal_case};
+use baobao_core::{FileRules, GeneratedFile, to_kebab_case, to_pascal_case};
 
 use crate::{
     ast::{Fn, Import, Param},
@@ -111,10 +111,7 @@ impl GeneratedFile for HandlerTs {
     }
 
     fn rules(&self) -> FileRules {
-        FileRules {
-            overwrite: Overwrite::IfMissing,
-            header: None,
-        }
+        FileRules::create_once()
     }
 
     fn render(&self) -> String {

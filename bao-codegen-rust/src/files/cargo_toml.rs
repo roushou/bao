@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, GeneratedFile, Overwrite, Version};
+use baobao_core::{FileRules, GeneratedFile, Version};
 
 const DEFAULT_EDITION: &str = "2024";
 
@@ -49,10 +49,7 @@ impl GeneratedFile for CargoToml {
     }
 
     fn rules(&self) -> FileRules {
-        FileRules {
-            overwrite: Overwrite::Always,
-            header: None,
-        }
+        FileRules::always_overwrite()
     }
 
     fn render(&self) -> String {

@@ -119,12 +119,33 @@ pub enum Overwrite {
     IfMissing,
 }
 
-impl Default for FileRules {
-    fn default() -> Self {
+impl FileRules {
+    /// Rules for generated files that are always overwritten.
+    pub fn always_overwrite() -> Self {
         Self {
             overwrite: Overwrite::Always,
             header: None,
         }
+    }
+
+    /// Rules for user-editable files that are only created if missing.
+    pub fn create_once() -> Self {
+        Self {
+            overwrite: Overwrite::IfMissing,
+            header: None,
+        }
+    }
+
+    /// Set the header marker for this file.
+    pub fn with_header(mut self, header: &'static str) -> Self {
+        self.header = Some(header);
+        self
+    }
+}
+
+impl Default for FileRules {
+    fn default() -> Self {
+        Self::always_overwrite()
     }
 }
 

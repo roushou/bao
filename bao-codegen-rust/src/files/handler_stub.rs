@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, GeneratedFile, Overwrite, to_pascal_case, to_snake_case};
+use baobao_core::{FileRules, GeneratedFile, to_pascal_case, to_snake_case};
 
+use super::uses;
 use crate::{Fn, Param, RustFile, Use};
 
 /// Marker string indicating an unmodified Rust handler stub.
@@ -46,15 +47,12 @@ impl GeneratedFile for HandlerStub {
     }
 
     fn rules(&self) -> FileRules {
-        FileRules {
-            overwrite: Overwrite::IfMissing,
-            header: None,
-        }
+        FileRules::create_once()
     }
 
     fn render(&self) -> String {
         RustFile::new()
-            .use_stmt(Use::new("crate::context").symbol("Context"))
+            .use_stmt(uses::context())
             .use_stmt(Use::new(&self.args_import))
             .add(self.build_run_fn())
             .render()
