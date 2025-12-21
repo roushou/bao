@@ -62,6 +62,19 @@ pub enum Value {
         /// Variant name (e.g., "Wal").
         variant: String,
     },
+    /// Environment variable read.
+    ///
+    /// Rendered as `&std::env::var("NAME")?` in Rust, `process.env.NAME` in TS/JS.
+    EnvVar {
+        /// Environment variable name.
+        name: String,
+        /// Whether to pass by reference (Rust: `&`, others: no-op).
+        by_ref: bool,
+    },
+    /// Try expression (error propagation).
+    ///
+    /// Rendered as `expr?` in Rust, wrapped in try/catch in JS.
+    Try(Box<Value>),
     /// Nested builder specification.
     Builder(Box<BuilderSpec>),
     /// Nested block expression.
@@ -128,6 +141,35 @@ impl Value {
     pub fn block(block: Block) -> Self {
         Self::Block(Box::new(block))
     }
+
+    /// Create an environment variable read (by reference).
+    ///
+    /// In Rust: `&std::env::var("NAME")?`
+    /// In TypeScript: `process.env.NAME`
+    pub fn env_var(name: impl Into<String>) -> Self {
+        Self::EnvVar {
+            name: name.into(),
+            by_ref: true,
+        }
+    }
+
+    /// Create an environment variable read (by value).
+    ///
+    /// In Rust: `std::env::var("NAME")?`
+    /// In TypeScript: `process.env.NAME`
+    pub fn env_var_owned(name: impl Into<String>) -> Self {
+        Self::EnvVar {
+            name: name.into(),
+            by_ref: false,
+        }
+    }
+
+    /// Wrap a value in a try expression (error propagation).
+    ///
+    /// In Rust: `value?`
+    pub fn try_(value: Value) -> Self {
+        Self::Try(Box::new(value))
+    }
 }
 
 /// How to construct the builder's base expression.
@@ -137,6 +179,15 @@ pub enum Constructor {
     StaticNew {
         /// Full type path (e.g., "sqlx::pool::PoolOptions").
         type_path: String,
+    },
+    /// Static method call with arguments: `Type::method(args)`.
+    StaticMethod {
+        /// Full type path (e.g., "sqlx::sqlite::SqliteConnectOptions").
+        type_path: String,
+        /// Method name (e.g., "from_str").
+        method: String,
+        /// Arguments to the method.
+        args: Vec<Value>,
     },
     /// Class-style constructor: `new Type()`.
     ClassNew {
@@ -148,11 +199,6 @@ pub enum Constructor {
         /// Factory function name.
         name: String,
     },
-    /// Raw expression as the base.
-    Raw {
-        /// Raw expression string.
-        expr: String,
-    },
 }
 
 impl Constructor {
@@ -160,6 +206,29 @@ impl Constructor {
     pub fn static_new(type_path: impl Into<String>) -> Self {
         Self::StaticNew {
             type_path: type_path.into(),
+        }
+    }
+
+    /// Create a static method call with arguments: `Type::method(args)`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Produces: SqliteConnectOptions::from_str(env_var)
+    /// Constructor::static_method(
+    ///     "sqlx::sqlite::SqliteConnectOptions",
+    ///     "from_str",
+    ///     vec![Value::env_var("DATABASE_URL")],
+    /// )
+    /// ```
+    pub fn static_method(
+        type_path: impl Into<String>,
+        method: impl Into<String>,
+        args: Vec<Value>,
+    ) -> Self {
+        Self::StaticMethod {
+            type_path: type_path.into(),
+            method: method.into(),
+            args,
         }
     }
 
@@ -173,11 +242,6 @@ impl Constructor {
     /// Create a factory function constructor.
     pub fn factory(name: impl Into<String>) -> Self {
         Self::Factory { name: name.into() }
-    }
-
-    /// Create a raw expression constructor.
-    pub fn raw(expr: impl Into<String>) -> Self {
-        Self::Raw { expr: expr.into() }
     }
 }
 
@@ -585,6 +649,8 @@ impl fmt::Display for Value {
             Value::Ident(v) => write!(f, "{}", v),
             Value::Duration { millis } => write!(f, "{}ms", millis),
             Value::EnumVariant { path, variant } => write!(f, "{}::{}", path, variant),
+            Value::EnvVar { name, .. } => write!(f, "env({})", name),
+            Value::Try(inner) => write!(f, "try({})", inner),
             Value::Builder(_) => write!(f, "<builder>"),
             Value::Block(_) => write!(f, "<block>"),
         }
@@ -661,14 +727,18 @@ mod tests {
     #[test]
     fn test_constructor_variants() {
         let static_new = Constructor::static_new("sqlx::pool::PoolOptions");
+        let static_method = Constructor::static_method(
+            "sqlx::sqlite::SqliteConnectOptions",
+            "from_str",
+            vec![Value::env_var("DATABASE_URL")],
+        );
         let class_new = Constructor::class_new("PoolOptions");
         let factory = Constructor::factory("NewPoolOptions");
-        let raw = Constructor::raw("get_options()");
 
         assert!(matches!(static_new, Constructor::StaticNew { .. }));
+        assert!(matches!(static_method, Constructor::StaticMethod { .. }));
         assert!(matches!(class_new, Constructor::ClassNew { .. }));
         assert!(matches!(factory, Constructor::Factory { .. }));
-        assert!(matches!(raw, Constructor::Raw { .. }));
     }
 
     #[test]

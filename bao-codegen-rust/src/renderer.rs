@@ -77,6 +77,13 @@ impl Renderer for RustRenderer {
             Value::EnumVariant { path, variant } => {
                 format!("{}::{}", path, variant)
             }
+            Value::EnvVar { name, by_ref } => {
+                let prefix = if *by_ref { "&" } else { "" };
+                format!("{}std::env::var(\"{}\")?", prefix, name)
+            }
+            Value::Try(inner) => {
+                format!("{}?", self.render_value(inner, opts))
+            }
             Value::Builder(spec) => self.render_builder(spec, opts),
             Value::Block(block) => self.render_block(block, opts),
         }
@@ -167,6 +174,16 @@ impl Renderer for RustRenderer {
             Constructor::StaticNew { type_path } => {
                 format!("{}::new()", type_path)
             }
+            Constructor::StaticMethod {
+                type_path,
+                method,
+                args,
+            } => {
+                let opts = RenderOptions::inline();
+                let rendered_args: Vec<String> =
+                    args.iter().map(|a| self.render_value(a, &opts)).collect();
+                format!("{}::{}({})", type_path, method, rendered_args.join(", "))
+            }
             Constructor::ClassNew { type_name } => {
                 // Rust doesn't have class-style new, use static new
                 format!("{}::new()", type_name)
@@ -174,7 +191,6 @@ impl Renderer for RustRenderer {
             Constructor::Factory { name } => {
                 format!("{}()", name)
             }
-            Constructor::Raw { expr } => expr.clone(),
         }
     }
 
@@ -211,7 +227,6 @@ mod tests {
         assert_eq!(r.render_value(&Value::Bool(true), &opts), "true");
         assert_eq!(r.render_value(&Value::Int(-42), &opts), "-42");
         assert_eq!(r.render_value(&Value::UInt(100), &opts), "100");
-        assert_eq!(r.render_value(&Value::Float(3.14), &opts), "3.14");
         assert_eq!(
             r.render_value(&Value::String("hello".into()), &opts),
             "\"hello\""
@@ -347,16 +362,20 @@ mod tests {
             "Foo::Bar::new()"
         );
         assert_eq!(
+            r.render_constructor(&Constructor::static_method(
+                "sqlx::sqlite::SqliteConnectOptions",
+                "from_str",
+                vec![Value::env_var("DATABASE_URL")]
+            )),
+            "sqlx::sqlite::SqliteConnectOptions::from_str(&std::env::var(\"DATABASE_URL\")?)"
+        );
+        assert_eq!(
             r.render_constructor(&Constructor::class_new("Foo")),
             "Foo::new()"
         );
         assert_eq!(
             r.render_constructor(&Constructor::factory("create_foo")),
             "create_foo()"
-        );
-        assert_eq!(
-            r.render_constructor(&Constructor::raw("get_options()")),
-            "get_options()"
         );
     }
 

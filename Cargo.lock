@@ -113,10 +113,12 @@ name = "baobao-codegen"
 version = "0.4.3"
 dependencies = [
  "baobao-core",
+ "baobao-ir",
  "baobao-manifest",
  "eyre",
  "indexmap",
  "tempfile",
+ "toml",
 ]
 
 [[package]]
@@ -125,6 +127,7 @@ version = "0.4.3"
 dependencies = [
  "baobao-codegen",
  "baobao-core",
+ "baobao-ir",
  "baobao-manifest",
  "eyre",
  "insta",
@@ -138,6 +141,7 @@ version = "0.4.3"
 dependencies = [
  "baobao-codegen",
  "baobao-core",
+ "baobao-ir",
  "baobao-manifest",
  "eyre",
  "insta",
@@ -149,11 +153,16 @@ dependencies = [
 name = "baobao-core"
 version = "0.4.3"
 dependencies = [
+ "baobao-ir",
  "eyre",
  "serde",
  "tempfile",
  "toml",
 ]
+
+[[package]]
+name = "baobao-ir"
+version = "0.4.3"
 
 [[package]]
 name = "baobao-manifest"

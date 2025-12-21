@@ -27,6 +27,13 @@ impl CargoToml {
         self
     }
 
+    /// Set version from a string (e.g., "1.0.0").
+    /// Falls back to 0.1.0 if parsing fails.
+    pub fn with_version_str(mut self, version: &str) -> Self {
+        self.version = version.parse().unwrap_or_else(|_| Version::new(0, 1, 0));
+        self
+    }
+
     pub fn with_edition(mut self, edition: impl Into<String>) -> Self {
         self.edition = edition.into();
         self

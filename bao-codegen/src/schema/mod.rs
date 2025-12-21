@@ -11,8 +11,11 @@ mod commands;
 mod display;
 mod types;
 
+// Re-export IR types for convenience
+pub use baobao_ir::{PoolConfig, SqliteOptions};
 pub use commands::{CommandTree, FlatCommand};
 pub use display::{CommandTreeDisplay, CommandTreeExt, DisplayStyle};
 pub use types::{
-    CommandInfo, ContextFieldInfo, PoolConfigInfo, SqliteConfigInfo, collect_context_fields,
+    CommandInfo, ContextFieldInfo, collect_command_paths_from_ir, collect_commands_from_ir,
+    collect_context_fields, collect_context_fields_from_ir, ir_has_async,
 };

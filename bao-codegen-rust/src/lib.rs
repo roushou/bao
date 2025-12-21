@@ -40,6 +40,7 @@ mod naming;
 mod render;
 mod renderer;
 mod rust_file;
+mod structure_renderer;
 mod type_mapper;
 
 pub mod adapters;
@@ -47,11 +48,14 @@ pub mod ast;
 pub mod files;
 
 pub use adapters::{ClapAdapter, EyreAdapter, SqlxAdapter, TokioAdapter};
-pub use ast::{Arm, Enum, Field, Fn, Impl, Match, MethodChain, Param, Struct, Variant};
+pub use ast::{
+    ArgAttr, Arm, ClapAttr, Enum, Field, Fn, Impl, Match, MethodChain, Param, Struct, Variant,
+};
 pub use baobao_codegen::language::{GenerateResult, LanguageCodegen, PreviewFile};
 pub use generator::Generator;
 pub use naming::RUST_NAMING;
 pub use render::{RustFileBuilder, render_imports};
 pub use renderer::RustRenderer;
 pub use rust_file::{RawCode, RustFile, Use};
-pub use type_mapper::RustTypeMapper;
+pub use structure_renderer::RustStructureRenderer;
+pub use type_mapper::{RustCodeTypeMapper, RustTypeMapper};

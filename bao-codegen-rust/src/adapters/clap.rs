@@ -6,7 +6,7 @@ use baobao_codegen::{
 };
 use baobao_core::ArgType;
 
-use crate::{Arm, Enum, Field, Fn, Impl, Match, Param, Struct, Variant};
+use crate::{ArgAttr, Arm, ClapAttr, Enum, Field, Fn, Impl, Match, Param, Struct, Variant};
 
 /// Clap adapter for generating derive-based CLI code.
 #[derive(Debug, Clone, Default)]
@@ -37,12 +37,12 @@ impl CliAdapter for ClapAdapter {
         let mut s = Struct::new("Cli")
             .derive("Parser")
             .derive("Debug")
-            .attr(format!("command(name = \"{}\")", info.name))
-            .attr(format!("command(version = \"{}\")", info.version))
-            .field(Field::new("command", "Commands").attr("command(subcommand)"));
+            .clap_attr(ClapAttr::command_name(&info.name))
+            .clap_attr(ClapAttr::command_version(info.version.to_string()))
+            .field(Field::new("command", "Commands").clap_attr(ClapAttr::command_subcommand()));
 
         if let Some(desc) = &info.description {
-            s = s.attr(format!("command(about = \"{}\")", desc));
+            s = s.clap_attr(ClapAttr::command_about(desc));
         }
 
         fragments.push(CodeFragment::raw(s.build()));
@@ -126,12 +126,12 @@ impl CliAdapter for ClapAdapter {
 
         // Generate flags
         for flag in &info.flags {
-            let mut attrs = vec!["long".to_string()];
+            let mut arg_attr = ArgAttr::new().long();
             if let Some(short) = flag.short {
-                attrs.push(format!("short = '{}'", short));
+                arg_attr = arg_attr.short(short);
             }
             if let Some(default) = &flag.default {
-                attrs.push(format!("default_value = \"{}\"", default));
+                arg_attr = arg_attr.default_value(default);
             }
 
             let rust_type = self.map_arg_type(flag.flag_type);
@@ -144,7 +144,7 @@ impl CliAdapter for ClapAdapter {
             };
 
             let mut field =
-                Field::new(&flag.field_name, field_type).attr(format!("arg({})", attrs.join(", ")));
+                Field::new(&flag.field_name, field_type).clap_attr(ClapAttr::arg(arg_attr));
             if let Some(desc) = &flag.description {
                 field = field.doc(desc);
             }
@@ -164,7 +164,7 @@ impl CliAdapter for ClapAdapter {
             .derive("Debug")
             .field(
                 Field::new("command", format!("{}Commands", info.pascal_name))
-                    .attr("command(subcommand)"),
+                    .clap_attr(ClapAttr::command_subcommand()),
             );
 
         fragments.push(CodeFragment::raw(parent_struct.build()));

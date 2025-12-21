@@ -1,12 +1,10 @@
 //! Bun SQLite database adapter.
 
 use baobao_codegen::{
-    adapters::{DatabaseAdapter, DatabaseOptionsInfo, Dependency, ImportSpec, PoolInitInfo},
-    builder::CodeFragment,
+    adapters::{DatabaseAdapter, Dependency, ImportSpec, PoolInitInfo},
+    builder::Value,
 };
-use baobao_core::DatabaseType;
-
-use crate::ast::JsObject;
+use baobao_ir::DatabaseType;
 
 /// Bun SQLite adapter using bun:sqlite.
 #[derive(Debug, Clone, Default)]
@@ -36,9 +34,11 @@ impl DatabaseAdapter for BunSqliteAdapter {
         }
     }
 
-    fn generate_pool_init(&self, info: &PoolInitInfo) -> Vec<CodeFragment> {
+    fn pool_init(&self, info: &PoolInitInfo) -> Value {
         match info.db_type {
             DatabaseType::Sqlite => {
+                // For TypeScript, we use ident to generate `new Database(path)` pattern
+                // The path is either a literal string or process.env.VAR
                 let db_path = info
                     .sqlite_config
                     .as_ref()
@@ -46,35 +46,13 @@ impl DatabaseAdapter for BunSqliteAdapter {
                     .map(|p| format!("\"{}\"", p))
                     .unwrap_or_else(|| format!("process.env.{} ?? \":memory:\"", info.env_var));
 
-                let code = format!("const {} = new Database({});", info.field_name, db_path);
-
-                vec![CodeFragment::raw(code)]
+                // Return as raw expression for now - TypeScript renderer will handle it
+                Value::ident(format!("new Database({})", db_path))
             }
             _ => {
                 // Other databases not yet supported in Bun natively
-                vec![CodeFragment::raw(format!(
-                    "// TODO: {:?} database not yet supported",
-                    info.db_type
-                ))]
+                Value::ident(format!("undefined /* {:?} not supported */", info.db_type))
             }
-        }
-    }
-
-    fn generate_options(&self, info: &DatabaseOptionsInfo) -> Option<Vec<CodeFragment>> {
-        match info.db_type {
-            DatabaseType::Sqlite => {
-                if let Some(sqlite) = &info.sqlite {
-                    let opts = JsObject::new()
-                        .raw_if(sqlite.read_only == Some(true), "readonly", "true")
-                        .raw_if(sqlite.create_if_missing == Some(true), "create", "true");
-
-                    if !opts.is_empty() {
-                        return Some(vec![CodeFragment::raw(opts.build())]);
-                    }
-                }
-                None
-            }
-            _ => None,
         }
     }
 

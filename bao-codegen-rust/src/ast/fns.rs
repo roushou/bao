@@ -163,6 +163,9 @@ impl Fn {
         self
     }
 
+    /// Add an attribute to the function.
+    ///
+    /// Used for proc-macro attributes like `#[tokio::main]`, `#[test]`, etc.
     pub fn attr(mut self, attr: impl Into<String>) -> Self {
         self.attrs.push(attr.into());
         self

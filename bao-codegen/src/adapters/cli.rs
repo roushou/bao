@@ -4,8 +4,103 @@
 //! code generation (clap, argh, boune, commander, etc.).
 
 use baobao_core::{ArgType, Version};
+use baobao_ir::{DefaultValue, Input, InputKind, InputType};
 
 use crate::builder::CodeFragment;
+
+/// Convert IR InputType to core ArgType.
+///
+/// This is a convenience function for adapters that need to work with both
+/// IR types and legacy ArgType-based APIs.
+pub fn input_type_to_arg_type(input_type: InputType) -> ArgType {
+    match input_type {
+        InputType::String => ArgType::String,
+        InputType::Int => ArgType::Int,
+        InputType::Float => ArgType::Float,
+        InputType::Bool => ArgType::Bool,
+        InputType::Path => ArgType::Path,
+    }
+}
+
+/// IR-based argument metadata for code generation.
+///
+/// This provides a language-agnostic representation of command arguments
+/// built from IR types.
+#[derive(Debug, Clone)]
+pub struct IRArgMeta {
+    /// Argument name
+    pub name: String,
+    /// Snake case name for field
+    pub field_name: String,
+    /// Argument type
+    pub arg_type: ArgType,
+    /// Whether this argument is required
+    pub required: bool,
+    /// Default value (if any)
+    pub default: Option<DefaultValue>,
+    /// Argument description
+    pub description: Option<String>,
+    /// Allowed choices (if any)
+    pub choices: Option<Vec<String>>,
+}
+
+impl IRArgMeta {
+    /// Create from IR Input (for positional arguments).
+    pub fn from_input(input: &Input, field_name: impl Into<String>) -> Self {
+        Self {
+            name: input.name.clone(),
+            field_name: field_name.into(),
+            arg_type: input_type_to_arg_type(input.ty),
+            required: input.required,
+            default: input.default.clone(),
+            description: input.description.clone(),
+            choices: input.choices.clone(),
+        }
+    }
+}
+
+/// IR-based flag metadata for code generation.
+///
+/// This provides a language-agnostic representation of command flags
+/// built from IR types.
+#[derive(Debug, Clone)]
+pub struct IRFlagMeta {
+    /// Flag name (long form)
+    pub name: String,
+    /// Snake case name for field
+    pub field_name: String,
+    /// Short flag character
+    pub short: Option<char>,
+    /// Flag type
+    pub flag_type: ArgType,
+    /// Default value (if any)
+    pub default: Option<DefaultValue>,
+    /// Flag description
+    pub description: Option<String>,
+    /// Allowed choices (if any)
+    pub choices: Option<Vec<String>>,
+}
+
+impl IRFlagMeta {
+    /// Create from IR Input (for flags).
+    pub fn from_input(input: &Input, field_name: impl Into<String>) -> Self {
+        let short = if let InputKind::Flag { short } = &input.kind {
+            *short
+        } else {
+            None
+        };
+
+        Self {
+            name: input.name.clone(),
+            field_name: field_name.into(),
+            short,
+            flag_type: input_type_to_arg_type(input.ty),
+            default: input.default.clone(),
+            description: input.description.clone(),
+            choices: input.choices.clone(),
+        }
+    }
+}
 
 /// Dependency specification for an adapter.
 #[derive(Debug, Clone)]

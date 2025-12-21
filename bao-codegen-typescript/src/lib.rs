@@ -41,6 +41,8 @@ pub const BOUNE_VERSION: &str = "^0.9.0";
 mod code_file;
 mod generator;
 mod naming;
+mod renderer;
+mod structure_renderer;
 mod type_mapper;
 
 pub mod adapters;
@@ -53,4 +55,6 @@ pub use baobao_codegen::language::{GenerateResult, LanguageCodegen, PreviewFile}
 pub use code_file::{CodeFile, RawCode, Shebang};
 pub use generator::Generator;
 pub use naming::TS_NAMING;
-pub use type_mapper::TypeScriptTypeMapper;
+pub use renderer::TypeScriptRenderer;
+pub use structure_renderer::TypeScriptStructureRenderer;
+pub use type_mapper::{TypeScriptCodeTypeMapper, TypeScriptTypeMapper};

@@ -3,12 +3,15 @@
 use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
+    AppIR,
     generation::{FileEntry, FileRegistry, HandlerPaths, find_orphan_commands},
     language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
-    schema::{CommandInfo, CommandTree, collect_context_fields},
+    lower_manifest,
+    schema::{CommandInfo, collect_command_paths_from_ir, collect_context_fields_from_ir},
 };
-use baobao_core::{GeneratedFile, to_camel_case, to_kebab_case};
-use baobao_manifest::{Command, Manifest};
+use baobao_core::{GeneratedFile, to_camel_case, to_kebab_case, to_pascal_case};
+use baobao_ir::{CommandOp, InputKind, Operation};
+use baobao_manifest::Manifest;
 use eyre::Result;
 
 use crate::{
@@ -21,12 +24,12 @@ use crate::{
 };
 
 /// TypeScript code generator that produces boune-based CLI code for Bun.
-pub struct Generator<'a> {
-    schema: &'a Manifest,
+pub struct Generator {
+    ir: AppIR,
     cli_adapter: BouneAdapter,
 }
 
-impl LanguageCodegen for Generator<'_> {
+impl LanguageCodegen for Generator {
     fn language(&self) -> &'static str {
         "typescript"
     }
@@ -52,10 +55,16 @@ impl LanguageCodegen for Generator<'_> {
     }
 }
 
-impl<'a> Generator<'a> {
-    pub fn new(schema: &'a Manifest) -> Self {
+impl Generator {
+    /// Create a new TypeScript generator from a manifest.
+    pub fn new(manifest: &Manifest) -> Self {
+        Self::from_ir(lower_manifest(manifest))
+    }
+
+    /// Create a new TypeScript generator from an Application IR.
+    pub fn from_ir(ir: AppIR) -> Self {
         Self {
-            schema,
+            ir,
             cli_adapter: BouneAdapter::new(),
         }
     }
@@ -66,14 +75,14 @@ impl<'a> Generator<'a> {
     fn build_registry(&self) -> FileRegistry {
         let mut registry = FileRegistry::new();
 
-        // Collect context field info
-        let context_fields = collect_context_fields(&self.schema.context);
+        // Collect context field info from IR
+        let context_fields = collect_context_fields_from_ir(&self.ir);
 
         // Config files
         registry.register(FileEntry::config(
             "package.json",
-            PackageJson::new(&self.schema.cli.name)
-                .with_version(self.schema.cli.version.clone())
+            PackageJson::new(&self.ir.meta.name)
+                .with_version_str(&self.ir.meta.version)
                 .render(),
         ));
         registry.register(FileEntry::config("tsconfig.json", TsConfig.render()));
@@ -86,47 +95,46 @@ impl<'a> Generator<'a> {
             ContextTs::new(context_fields).render(),
         ));
 
-        // Generated files
+        // Collect commands from IR
         let commands: Vec<CommandInfo> = self
-            .schema
-            .commands
+            .ir
+            .operations
             .iter()
-            .map(|(name, cmd)| CommandInfo {
-                name: name.clone(),
-                description: cmd.description.clone(),
-                has_subcommands: cmd.has_subcommands(),
+            .map(|op| {
+                let Operation::Command(cmd) = op;
+                CommandInfo {
+                    name: cmd.name.clone(),
+                    description: cmd.description.clone(),
+                    has_subcommands: cmd.has_subcommands(),
+                }
             })
             .collect();
 
         registry.register(FileEntry::generated(
             "src/cli.ts",
             CliTs::new(
-                &self.schema.cli.name,
-                self.schema.cli.version.clone(),
-                self.schema.cli.description.clone(),
+                &self.ir.meta.name,
+                &self.ir.meta.version,
+                self.ir.meta.description.clone(),
                 commands,
             )
             .render(),
         ));
 
-        // Individual command files (recursively collect all commands)
-        for (name, command) in &self.schema.commands {
-            self.register_command_files(&mut registry, name, command, vec![name.clone()]);
+        // Individual command files from IR (recursively collect all commands)
+        for op in &self.ir.operations {
+            let Operation::Command(cmd) = op;
+            self.register_command_files_from_ir(&mut registry, cmd);
         }
 
         registry
     }
 
-    /// Recursively register command files in the registry.
-    fn register_command_files(
-        &self,
-        registry: &mut FileRegistry,
-        name: &str,
-        command: &Command,
-        path_segments: Vec<String>,
-    ) {
-        let content = self.generate_command_file(name, command, &path_segments);
-        let file_path = path_segments
+    /// Recursively register command files from IR.
+    fn register_command_files_from_ir(&self, registry: &mut FileRegistry, cmd: &CommandOp) {
+        let content = self.generate_command_file_from_ir(cmd);
+        let file_path = cmd
+            .path
             .iter()
             .map(|s| to_kebab_case(s))
             .collect::<Vec<_>>()
@@ -134,16 +142,12 @@ impl<'a> Generator<'a> {
 
         registry.register(FileEntry::generated(
             format!("src/commands/{}.ts", file_path),
-            CommandTs::nested(path_segments.clone(), content).render(),
+            CommandTs::nested(cmd.path.clone(), content).render(),
         ));
 
         // Recursively register subcommand files
-        if command.has_subcommands() {
-            for (sub_name, sub_command) in &command.commands {
-                let mut sub_path = path_segments.clone();
-                sub_path.push(sub_name.clone());
-                self.register_command_files(registry, sub_name, sub_command, sub_path);
-            }
+        for child in &cmd.children {
+            self.register_command_files_from_ir(registry, child);
         }
     }
 
@@ -173,31 +177,31 @@ impl<'a> Generator<'a> {
         Ok(result)
     }
 
-    fn generate_command_file(
-        &self,
-        name: &str,
-        command: &Command,
-        path_segments: &[String],
-    ) -> String {
-        if command.has_subcommands() {
-            self.generate_parent_command_file(name, command)
+    // ========================================================================
+    // IR-based command generation methods
+    // ========================================================================
+
+    /// Generate a command file from IR CommandOp.
+    fn generate_command_file_from_ir(&self, cmd: &CommandOp) -> String {
+        if cmd.has_subcommands() {
+            self.generate_parent_command_file_from_ir(cmd)
         } else {
-            self.generate_leaf_command_file(name, command, path_segments)
+            self.generate_leaf_command_file_from_ir(cmd)
         }
     }
 
-    /// Generate a parent command file that only routes to subcommands.
-    fn generate_parent_command_file(&self, name: &str, command: &Command) -> String {
+    /// Generate a parent command file from IR.
+    fn generate_parent_command_file_from_ir(&self, cmd: &CommandOp) -> String {
         use crate::code_file::{CodeFile, RawCode};
 
-        let camel_name = to_camel_case(name);
-        let kebab_name = to_kebab_case(name);
+        let camel_name = to_camel_case(&cmd.name);
+        let kebab_name = to_kebab_case(&cmd.name);
 
         // Build imports
         let mut imports = vec![Import::new("boune").named("defineCommand")];
-        for subcommand_name in command.commands.keys() {
-            let sub_camel = to_camel_case(subcommand_name);
-            let sub_kebab = to_kebab_case(subcommand_name);
+        for child in &cmd.children {
+            let sub_camel = to_camel_case(&child.name);
+            let sub_kebab = to_kebab_case(&child.name);
             imports.push(
                 Import::new(format!("./{}/{}.ts", kebab_name, sub_kebab))
                     .named(format!("{}Command", sub_camel)),
@@ -205,18 +209,15 @@ impl<'a> Generator<'a> {
         }
 
         // Build subcommands object
-        let subcommands = command
-            .commands
-            .keys()
-            .fold(JsObject::new(), |obj, sub_name| {
-                let sub_camel = to_camel_case(sub_name);
-                obj.raw(&sub_camel, format!("{}Command", sub_camel))
-            });
+        let subcommands = cmd.children.iter().fold(JsObject::new(), |obj, child| {
+            let sub_camel = to_camel_case(&child.name);
+            obj.raw(&sub_camel, format!("{}Command", sub_camel))
+        });
 
         // Build command schema
         let schema = JsObject::new()
-            .string("name", name)
-            .string("description", &command.description)
+            .string("name", &cmd.name)
+            .string("description", &cmd.description)
             .object("subcommands", subcommands);
 
         // Build the command definition string
@@ -233,37 +234,41 @@ impl<'a> Generator<'a> {
             .render()
     }
 
-    /// Generate a leaf command file that has an action handler.
-    fn generate_leaf_command_file(
-        &self,
-        name: &str,
-        command: &Command,
-        path_segments: &[String],
-    ) -> String {
-        use baobao_core::to_pascal_case;
-
+    /// Generate a leaf command file from IR.
+    fn generate_leaf_command_file_from_ir(&self, cmd: &CommandOp) -> String {
         use crate::code_file::{CodeFile, RawCode};
 
-        let camel_name = to_camel_case(name);
-        let pascal_name = to_pascal_case(name);
+        let camel_name = to_camel_case(&cmd.name);
+        let pascal_name = to_pascal_case(&cmd.name);
 
         // Build the handler path (kebab-case, joined by /)
-        let handler_path = path_segments
+        let handler_path = cmd
+            .path
             .iter()
             .map(|s| to_kebab_case(s))
             .collect::<Vec<_>>()
             .join("/");
 
         // Calculate relative path from command location
-        let depth = path_segments.len();
+        let depth = cmd.path.len();
         let up_path = "../".repeat(depth);
 
-        // Build imports - no longer need `argument` or `option` builders
+        // Check for args (positional) and options (flags)
+        let has_args = cmd
+            .inputs
+            .iter()
+            .any(|i| matches!(i.kind, InputKind::Positional));
+        let has_options = cmd
+            .inputs
+            .iter()
+            .any(|i| matches!(i.kind, InputKind::Flag { .. }));
+
+        // Build imports
         let mut boune_import = Import::new("boune").named("defineCommand");
-        if !command.args.is_empty() {
+        if has_args {
             boune_import = boune_import.named_type("InferArgs");
         }
-        if !command.flags.is_empty() {
+        if has_options {
             boune_import = boune_import.named_type("InferOpts");
         }
 
@@ -276,13 +281,14 @@ impl<'a> Generator<'a> {
         let mut body_parts: Vec<String> = Vec::new();
 
         // Arguments schema as const
-        if !command.args.is_empty() {
-            let arguments = command
-                .args
+        if has_args {
+            let arguments = cmd
+                .inputs
                 .iter()
-                .fold(JsObject::new(), |obj, (arg_name, arg)| {
-                    let camel = to_camel_case(arg_name);
-                    obj.object(&camel, self.build_argument_schema(arg))
+                .filter(|i| matches!(i.kind, InputKind::Positional))
+                .fold(JsObject::new(), |obj, input| {
+                    let camel = to_camel_case(&input.name);
+                    obj.object(&camel, self.build_argument_schema_from_ir(input))
                 });
 
             let args_obj = arguments.build();
@@ -290,13 +296,14 @@ impl<'a> Generator<'a> {
         }
 
         // Options schema as const
-        if !command.flags.is_empty() {
-            let options = command
-                .flags
+        if has_options {
+            let options = cmd
+                .inputs
                 .iter()
-                .fold(JsObject::new(), |obj, (flag_name, flag)| {
-                    let camel = to_camel_case(flag_name);
-                    obj.object(&camel, self.build_option_schema(flag))
+                .filter(|i| matches!(i.kind, InputKind::Flag { .. }))
+                .fold(JsObject::new(), |obj, input| {
+                    let camel = to_camel_case(&input.name);
+                    obj.object(&camel, self.build_option_schema_from_ir(input))
                 });
 
             let opts_obj = options.build();
@@ -304,18 +311,19 @@ impl<'a> Generator<'a> {
         }
 
         // Command definition
-        let command_def = self.build_command_definition(&camel_name, name, command);
+        let command_def =
+            self.build_command_definition_from_ir(&camel_name, cmd, has_args, has_options);
         body_parts.push(command_def);
 
         // Export inferred types
         let mut type_exports = Vec::new();
-        if !command.args.is_empty() {
+        if has_args {
             type_exports.push(format!(
                 "export type {}Args = InferArgs<typeof args>;",
                 pascal_name
             ));
         }
-        if !command.flags.is_empty() {
+        if has_options {
             type_exports.push(format!(
                 "export type {}Options = InferOpts<typeof options>;",
                 pascal_name
@@ -332,16 +340,22 @@ impl<'a> Generator<'a> {
         file.render()
     }
 
-    fn build_command_definition(&self, camel_name: &str, name: &str, command: &Command) -> String {
+    fn build_command_definition_from_ir(
+        &self,
+        camel_name: &str,
+        cmd: &CommandOp,
+        has_args: bool,
+        has_options: bool,
+    ) -> String {
         // Build action handler body
-        let action = self.build_action_handler(command);
+        let action = self.cli_adapter.build_action_handler(has_args, has_options);
 
         // Build command schema - reference extracted consts
         let schema = JsObject::new()
-            .string("name", name)
-            .string("description", &command.description)
-            .raw_if(!command.args.is_empty(), "arguments", "args")
-            .raw_if(!command.flags.is_empty(), "options", "options")
+            .string("name", &cmd.name)
+            .string("description", &cmd.description)
+            .raw_if(has_args, "arguments", "args")
+            .raw_if(has_options, "options", "options")
             .arrow_fn("action", action);
 
         let schema_obj = schema.build();
@@ -352,69 +366,36 @@ impl<'a> Generator<'a> {
         )
     }
 
-    fn build_argument_schema(&self, arg: &baobao_manifest::Arg) -> JsObject {
-        self.cli_adapter.build_argument_schema_manifest(
-            &arg.arg_type,
-            arg.required,
-            arg.default.as_ref(),
-            arg.description.as_deref(),
-            arg.choices.as_deref(),
-        )
+    fn build_argument_schema_from_ir(&self, input: &baobao_ir::Input) -> JsObject {
+        self.cli_adapter.build_argument_schema_ir(input)
     }
 
-    fn build_option_schema(&self, flag: &baobao_manifest::Flag) -> JsObject {
-        self.cli_adapter.build_option_schema_manifest(
-            &flag.flag_type,
-            flag.short_char(),
-            flag.default.as_ref(),
-            flag.description.as_deref(),
-            flag.choices.as_deref(),
-        )
-    }
-
-    fn build_action_handler(&self, command: &Command) -> crate::ast::ArrowFn {
-        self.cli_adapter
-            .build_action_handler(!command.args.is_empty(), !command.flags.is_empty())
+    fn build_option_schema_from_ir(&self, input: &baobao_ir::Input) -> JsObject {
+        self.cli_adapter.build_option_schema_ir(input)
     }
 
     /// Generate handlers directory with stub files for missing handlers.
     fn generate_handlers(&self, handlers_dir: &Path, _output_dir: &Path) -> Result<GenerateResult> {
-        use baobao_core::WriteResult;
-
         let mut created_handlers = Vec::new();
-        let tree = CommandTree::new(self.schema);
 
-        // Collect all expected handler paths (kebab-case for TypeScript file names)
-        let expected_handlers: HashSet<String> = tree
-            .iter()
-            .map(|cmd| cmd.path_transformed("/", to_kebab_case))
+        // Collect all expected handler paths from IR (kebab-case for TypeScript file names)
+        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
+            .into_iter()
+            .map(|path| {
+                path.split('/')
+                    .map(to_kebab_case)
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
             .collect();
 
         // Ensure handlers directory exists
         std::fs::create_dir_all(handlers_dir)?;
 
-        // Create directories for all parent commands (command groups)
-        for cmd in tree.parents() {
-            let dir = cmd.handler_dir(handlers_dir, to_kebab_case);
-            std::fs::create_dir_all(&dir)?;
-        }
-
-        // Create stub files for all leaf commands (actual handlers)
-        for cmd in tree.leaves() {
-            let dir = cmd.handler_dir(handlers_dir, to_kebab_case);
-            std::fs::create_dir_all(&dir)?;
-
-            let display_path = cmd.path_transformed("/", to_kebab_case);
-            let path_segments = cmd.path.iter().map(|s| s.to_string()).collect();
-            let has_args = !cmd.command.args.is_empty();
-            let has_options = !cmd.command.flags.is_empty();
-
-            let stub = HandlerTs::nested(cmd.name, path_segments, has_args, has_options);
-            let result = stub.write(&dir)?;
-
-            if matches!(result, WriteResult::Written) {
-                created_handlers.push(format!("{}.ts", display_path));
-            }
+        // Process commands recursively from IR
+        for op in &self.ir.operations {
+            let Operation::Command(cmd) = op;
+            self.generate_handlers_for_command(cmd, handlers_dir, &mut created_handlers)?;
         }
 
         // Find orphan handlers using shared utility
@@ -427,21 +408,80 @@ impl<'a> Generator<'a> {
         })
     }
 
+    /// Recursively generate handlers for a command and its children.
+    fn generate_handlers_for_command(
+        &self,
+        cmd: &CommandOp,
+        handlers_dir: &Path,
+        created_handlers: &mut Vec<String>,
+    ) -> Result<()> {
+        use baobao_core::WriteResult;
+
+        let handler_path: Vec<&str> = cmd.path.iter().map(|s| s.as_str()).collect();
+        let dir = handler_path
+            .iter()
+            .take(handler_path.len().saturating_sub(1))
+            .fold(handlers_dir.to_path_buf(), |acc, segment| {
+                acc.join(to_kebab_case(segment))
+            });
+
+        if cmd.has_subcommands() {
+            // Parent command - create directory
+            let cmd_dir = dir.join(to_kebab_case(&cmd.name));
+            std::fs::create_dir_all(&cmd_dir)?;
+
+            // Recursively process children
+            for child in &cmd.children {
+                self.generate_handlers_for_command(child, handlers_dir, created_handlers)?;
+            }
+        } else {
+            // Leaf command - create handler stub
+            std::fs::create_dir_all(&dir)?;
+
+            let display_path = cmd
+                .path
+                .iter()
+                .map(|s| to_kebab_case(s))
+                .collect::<Vec<_>>()
+                .join("/");
+            let path_segments = cmd.path.clone();
+            let has_args = cmd
+                .inputs
+                .iter()
+                .any(|i| matches!(i.kind, InputKind::Positional));
+            let has_options = cmd
+                .inputs
+                .iter()
+                .any(|i| matches!(i.kind, InputKind::Flag { .. }));
+
+            let stub = HandlerTs::nested(&cmd.name, path_segments, has_args, has_options);
+            let result = stub.write(&dir)?;
+
+            if matches!(result, WriteResult::Written) {
+                created_handlers.push(format!("{}.ts", display_path));
+            }
+        }
+
+        Ok(())
+    }
+
     /// Clean orphaned generated files.
     fn clean_files(&self, output_dir: &Path) -> Result<CleanResult> {
         let mut result = CleanResult::default();
 
-        // Collect expected command names (kebab-case for file names)
+        // Collect expected command names from IR (kebab-case for file names)
         let expected_commands: HashSet<String> = self
-            .schema
-            .commands
-            .keys()
-            .map(|name| to_kebab_case(name))
+            .ir
+            .operations
+            .iter()
+            .map(|op| {
+                let Operation::Command(cmd) = op;
+                to_kebab_case(&cmd.name)
+            })
             .collect();
 
-        // Collect expected handler paths (kebab-case)
-        let expected_handlers: HashSet<String> = CommandTree::new(self.schema)
-            .collect_paths()
+        // Collect expected handler paths from IR (kebab-case)
+        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
             .into_iter()
             .map(|path| {
                 path.split('/')
@@ -492,17 +532,19 @@ impl<'a> Generator<'a> {
     fn preview_clean_files(&self, output_dir: &Path) -> Result<CleanResult> {
         let mut result = CleanResult::default();
 
-        // Collect expected command names (kebab-case for file names)
+        // Collect expected command names from IR (kebab-case for file names)
         let expected_commands: HashSet<String> = self
-            .schema
-            .commands
-            .keys()
-            .map(|name| to_kebab_case(name))
+            .ir
+            .operations
+            .iter()
+            .map(|op| {
+                let Operation::Command(cmd) = op;
+                to_kebab_case(&cmd.name)
+            })
             .collect();
 
-        // Collect expected handler paths (kebab-case)
-        let expected_handlers: HashSet<String> = CommandTree::new(self.schema)
-            .collect_paths()
+        // Collect expected handler paths from IR (kebab-case)
+        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
             .into_iter()
             .map(|path| {
                 path.split('/')

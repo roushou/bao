@@ -2,6 +2,8 @@
 
 use baobao_codegen::builder::{CodeBuilder, CodeFragment, Renderable};
 
+use super::ClapAttr;
+
 /// A field in a Rust struct.
 #[derive(Debug, Clone)]
 pub struct Field {
@@ -28,8 +30,15 @@ impl Field {
         self
     }
 
+    /// Add a raw string attribute.
     pub fn attr(mut self, attr: impl Into<String>) -> Self {
         self.attrs.push(attr.into());
+        self
+    }
+
+    /// Add a typed Clap attribute.
+    pub fn clap_attr(mut self, attr: ClapAttr) -> Self {
+        self.attrs.push(attr.to_string());
         self
     }
 
@@ -72,8 +81,15 @@ impl Struct {
         self
     }
 
+    /// Add a raw string attribute.
     pub fn attr(mut self, attr: impl Into<String>) -> Self {
         self.attrs.push(attr.into());
+        self
+    }
+
+    /// Add a typed Clap attribute.
+    pub fn clap_attr(mut self, attr: ClapAttr) -> Self {
+        self.attrs.push(attr.to_string());
         self
     }
 
@@ -95,6 +111,15 @@ impl Struct {
     /// Conditionally add an attribute.
     pub fn attr_if(self, condition: bool, attr: impl Into<String>) -> Self {
         if condition { self.attr(attr) } else { self }
+    }
+
+    /// Conditionally add a typed Clap attribute.
+    pub fn clap_attr_if(self, condition: bool, attr: ClapAttr) -> Self {
+        if condition {
+            self.clap_attr(attr)
+        } else {
+            self
+        }
     }
 
     /// Render the struct to a CodeBuilder.
@@ -249,8 +274,8 @@ mod tests {
     fn test_struct_with_attrs() {
         let s = Struct::new("Cli")
             .derive("Parser")
-            .attr("command(name = \"mycli\")")
-            .attr("command(version = \"1.0\")")
+            .clap_attr(ClapAttr::command_name("mycli"))
+            .clap_attr(ClapAttr::command_version("1.0"))
             .build();
         assert!(s.contains("#[derive(Parser)]"));
         assert!(s.contains("#[command(name = \"mycli\")]"));
@@ -259,16 +284,18 @@ mod tests {
 
     #[test]
     fn test_field_with_attrs() {
+        use crate::ArgAttr;
+
         let s = Struct::new("Args")
             .derive("Args")
             .field(
                 Field::new("verbose", "bool")
                     .doc("Enable verbose output")
-                    .attr("arg(long, short)"),
+                    .clap_attr(ClapAttr::arg(ArgAttr::new().long().short('v'))),
             )
             .build();
         assert!(s.contains("/// Enable verbose output"));
-        assert!(s.contains("#[arg(long, short)]"));
+        assert!(s.contains("#[arg(long, short = 'v')]"));
         assert!(s.contains("pub verbose: bool,"));
     }
 }

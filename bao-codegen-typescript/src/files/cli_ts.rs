@@ -22,6 +22,24 @@ pub struct CliTs {
 impl CliTs {
     pub fn new(
         name: impl Into<String>,
+        version: impl Into<String>,
+        description: Option<String>,
+        commands: Vec<CommandInfo>,
+    ) -> Self {
+        let version_str = version.into();
+        Self {
+            name: name.into(),
+            version: version_str
+                .parse()
+                .unwrap_or_else(|_| Version::new(0, 1, 0)),
+            description,
+            commands,
+        }
+    }
+
+    /// Create with a parsed Version (for backwards compatibility).
+    pub fn with_version(
+        name: impl Into<String>,
         version: Version,
         description: Option<String>,
         commands: Vec<CommandInfo>,

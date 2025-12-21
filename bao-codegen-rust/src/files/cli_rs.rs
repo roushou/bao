@@ -4,7 +4,7 @@ use baobao_codegen::schema::CommandInfo;
 use baobao_core::{FileRules, GeneratedFile, Version, to_pascal_case, to_snake_case};
 
 use super::{GENERATED_HEADER, uses};
-use crate::{Arm, Enum, Field, Fn, Impl, Match, Param, RustFile, Struct, Use, Variant};
+use crate::{Arm, ClapAttr, Enum, Field, Fn, Impl, Match, Param, RustFile, Struct, Use, Variant};
 
 /// The cli.rs file containing the main CLI struct and dispatch logic
 pub struct CliRs {
@@ -17,6 +17,26 @@ pub struct CliRs {
 
 impl CliRs {
     pub fn new(
+        name: impl Into<String>,
+        version: impl Into<String>,
+        description: Option<String>,
+        commands: Vec<CommandInfo>,
+        is_async: bool,
+    ) -> Self {
+        let version_str = version.into();
+        Self {
+            name: name.into(),
+            version: version_str
+                .parse()
+                .unwrap_or_else(|_| Version::new(0, 1, 0)),
+            description,
+            commands,
+            is_async,
+        }
+    }
+
+    /// Create with a parsed Version (for backwards compatibility).
+    pub fn with_version(
         name: impl Into<String>,
         version: Version,
         description: Option<String>,
@@ -36,16 +56,13 @@ impl CliRs {
         Struct::new("Cli")
             .derive("Parser")
             .derive("Debug")
-            .attr(format!("command(name = \"{}\")", self.name))
-            .attr(format!("command(version = \"{}\")", self.version))
-            .attr_if(
+            .clap_attr(ClapAttr::command_name(&self.name))
+            .clap_attr(ClapAttr::command_version(self.version.to_string()))
+            .clap_attr_if(
                 self.description.is_some(),
-                format!(
-                    "command(about = \"{}\")",
-                    self.description.as_deref().unwrap_or("")
-                ),
+                ClapAttr::command_about(self.description.as_deref().unwrap_or("")),
             )
-            .field(Field::new("command", "Commands").attr("command(subcommand)"))
+            .field(Field::new("command", "Commands").clap_attr(ClapAttr::command_subcommand()))
     }
 
     fn build_dispatch_impl(&self) -> Impl {

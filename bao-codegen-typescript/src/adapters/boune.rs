@@ -1,10 +1,14 @@
 //! Boune CLI framework adapter for TypeScript/Bun.
 
 use baobao_codegen::{
-    adapters::{CliAdapter, CliInfo, CommandMeta, Dependency, DispatchInfo, ImportSpec},
+    adapters::{
+        CliAdapter, CliInfo, CommandMeta, Dependency, DispatchInfo, ImportSpec,
+        input_type_to_arg_type,
+    },
     builder::CodeFragment,
 };
 use baobao_core::ArgType;
+use baobao_ir::{Input, InputKind};
 use baobao_manifest::ArgType as ManifestArgType;
 
 use crate::{
@@ -22,7 +26,7 @@ impl BouneAdapter {
     }
 
     /// Convert manifest ArgType to core ArgType.
-    fn convert_arg_type(arg_type: &ManifestArgType) -> ArgType {
+    fn convert_manifest_arg_type(arg_type: &ManifestArgType) -> ArgType {
         match arg_type {
             ManifestArgType::String => ArgType::String,
             ManifestArgType::Int => ArgType::Int,
@@ -42,7 +46,7 @@ impl BouneAdapter {
         choices: Option<&[String]>,
     ) -> JsObject {
         self.build_argument_schema(
-            Self::convert_arg_type(arg_type),
+            Self::convert_manifest_arg_type(arg_type),
             required,
             default,
             description,
@@ -84,7 +88,7 @@ impl BouneAdapter {
         choices: Option<&[String]>,
     ) -> JsObject {
         self.build_option_schema(
-            Self::convert_arg_type(flag_type),
+            Self::convert_manifest_arg_type(flag_type),
             short,
             default,
             description,
@@ -118,7 +122,7 @@ impl BouneAdapter {
 
     /// Map manifest argument type to TypeScript boune type.
     pub fn map_manifest_arg_type(&self, arg_type: &ManifestArgType) -> &'static str {
-        self.map_arg_type(Self::convert_arg_type(arg_type))
+        self.map_arg_type(Self::convert_manifest_arg_type(arg_type))
     }
 
     /// Build action handler arrow function.
@@ -140,6 +144,55 @@ impl BouneAdapter {
         };
 
         ArrowFn::new(params).async_().body_line(run_call)
+    }
+
+    // ========================================================================
+    // IR-based methods
+    // ========================================================================
+
+    /// Build an argument object schema from IR Input.
+    pub fn build_argument_schema_ir(&self, input: &Input) -> JsObject {
+        let boune_type = self.map_arg_type(input_type_to_arg_type(input.ty));
+
+        JsObject::new()
+            .string("type", boune_type)
+            .raw_if(
+                input.required && input.default.is_none(),
+                "required",
+                "true",
+            )
+            .default_value_opt("default", input.default.as_ref())
+            .string_opt("description", input.description.as_deref())
+            .array_opt(
+                "choices",
+                input
+                    .choices
+                    .as_ref()
+                    .map(|c| JsArray::from_strings(c).as_const()),
+            )
+    }
+
+    /// Build an option object schema from IR Input.
+    pub fn build_option_schema_ir(&self, input: &Input) -> JsObject {
+        let boune_type = self.map_arg_type(input_type_to_arg_type(input.ty));
+        let short = if let InputKind::Flag { short } = &input.kind {
+            *short
+        } else {
+            None
+        };
+
+        JsObject::new()
+            .string("type", boune_type)
+            .string_opt("short", short.map(|c| c.to_string()))
+            .default_value_opt("default", input.default.as_ref())
+            .string_opt("description", input.description.as_deref())
+            .array_opt(
+                "choices",
+                input
+                    .choices
+                    .as_ref()
+                    .map(|c| JsArray::from_strings(c).as_const()),
+            )
     }
 }
 

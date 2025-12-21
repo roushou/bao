@@ -193,6 +193,28 @@ impl JsObject {
         }
     }
 
+    /// Add an IR DefaultValue property, quoting strings appropriately.
+    pub fn default_value(self, key: impl Into<String>, value: &baobao_ir::DefaultValue) -> Self {
+        match value {
+            baobao_ir::DefaultValue::String(s) => self.string(key, s),
+            baobao_ir::DefaultValue::Int(i) => self.raw(key, i.to_string()),
+            baobao_ir::DefaultValue::Float(f) => self.raw(key, f.to_string()),
+            baobao_ir::DefaultValue::Bool(b) => self.raw(key, b.to_string()),
+        }
+    }
+
+    /// Conditionally add an IR DefaultValue property.
+    pub fn default_value_opt(
+        self,
+        key: impl Into<String>,
+        value: Option<&baobao_ir::DefaultValue>,
+    ) -> Self {
+        match value {
+            Some(v) => self.default_value(key, v),
+            None => self,
+        }
+    }
+
     /// Add a shorthand property where key equals the variable name.
     pub fn shorthand(mut self, name: impl Into<String>) -> Self {
         self.properties.push(Property::shorthand(name));
@@ -227,6 +249,14 @@ impl JsObject {
             self.raw(key, value)
         } else {
             self
+        }
+    }
+
+    /// Conditionally add a raw property using an Option.
+    pub fn raw_opt(self, key: impl Into<String>, value: Option<impl Into<String>>) -> Self {
+        match value {
+            Some(v) => self.raw(key, v),
+            None => self,
         }
     }
 

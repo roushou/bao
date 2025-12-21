@@ -22,8 +22,8 @@ mod error;
 
 pub use async_runtime::{RuntimeAdapter, RuntimeInfo};
 pub use cli::{
-    ArgMeta, CliAdapter, CliInfo, CommandMeta, Dependency, DispatchInfo, FlagMeta, ImportSpec,
-    SubcommandMeta,
+    ArgMeta, CliAdapter, CliInfo, CommandMeta, Dependency, DispatchInfo, FlagMeta, IRArgMeta,
+    IRFlagMeta, ImportSpec, SubcommandMeta, input_type_to_arg_type,
 };
-pub use database::{DatabaseAdapter, DatabaseOptionsInfo, PoolConfig, PoolInitInfo, SqliteConfig};
+pub use database::{DatabaseAdapter, PoolConfig, PoolInitInfo, SqliteOptions};
 pub use error::ErrorAdapter;

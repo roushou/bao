@@ -2,6 +2,8 @@
 
 use baobao_codegen::builder::{CodeBuilder, CodeFragment, Renderable};
 
+use super::ClapAttr;
+
 /// A variant in a Rust enum.
 #[derive(Debug, Clone)]
 pub struct Variant {
@@ -32,9 +34,15 @@ impl Variant {
         self
     }
 
-    /// Add an attribute to the variant, e.g., `value(name = "foo")`.
+    /// Add a raw string attribute to the variant.
     pub fn attr(mut self, attr: impl Into<String>) -> Self {
         self.attrs.push(attr.into());
+        self
+    }
+
+    /// Add a typed Clap attribute to the variant.
+    pub fn clap_attr(mut self, attr: ClapAttr) -> Self {
+        self.attrs.push(attr.to_string());
         self
     }
 }
@@ -72,8 +80,15 @@ impl Enum {
         self
     }
 
+    /// Add a raw string attribute.
     pub fn attr(mut self, attr: impl Into<String>) -> Self {
         self.attrs.push(attr.into());
+        self
+    }
+
+    /// Add a typed Clap attribute.
+    pub fn clap_attr(mut self, attr: ClapAttr) -> Self {
+        self.attrs.push(attr.to_string());
         self
     }
 
@@ -95,6 +110,15 @@ impl Enum {
     /// Conditionally add an attribute.
     pub fn attr_if(self, condition: bool, attr: impl Into<String>) -> Self {
         if condition { self.attr(attr) } else { self }
+    }
+
+    /// Conditionally add a typed Clap attribute.
+    pub fn clap_attr_if(self, condition: bool, attr: ClapAttr) -> Self {
+        if condition {
+            self.clap_attr(attr)
+        } else {
+            self
+        }
     }
 
     /// Render the enum to a CodeBuilder.

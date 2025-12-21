@@ -2,20 +2,25 @@ use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
     adapters::{CliAdapter, DatabaseAdapter, ErrorAdapter, RuntimeAdapter},
-    builder::CodeBuilder,
+    builder::{
+        AttributeSpec, CodeBuilder, EnumSpec, FieldSpec, StructSpec, StructureRenderer, TypeRef,
+        VariantSpec, Visibility,
+    },
     generation::{FileEntry, FileRegistry, HandlerPaths, find_orphan_commands},
     language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
-    schema::{CommandInfo, CommandTree, collect_context_fields},
+    lower_manifest,
+    schema::{
+        CommandInfo, collect_command_paths_from_ir, collect_context_fields_from_ir, ir_has_async,
+    },
 };
-use baobao_core::{
-    DatabaseType, GeneratedFile, to_pascal_case, to_snake_case, toml_value_to_string,
-};
-use baobao_manifest::{ArgType, Command, Manifest};
+use baobao_core::{DatabaseType, GeneratedFile, to_pascal_case, to_snake_case};
+use baobao_ir::{AppIR, CommandOp, InputKind, InputType, Operation, Resource};
+use baobao_manifest::Manifest;
 use eyre::Result;
 
 use crate::{
-    Arm, ClapAdapter, Enum, EyreAdapter, Field, Fn, Impl, Match, Param, RustFile, SqlxAdapter,
-    Struct, TokioAdapter, Use, Variant,
+    Arm, ClapAdapter, ClapAttr, Enum, EyreAdapter, Field, Fn, Impl, Match, Param, RustFile,
+    RustStructureRenderer, SqlxAdapter, Struct, TokioAdapter, Use, Variant,
     files::{
         AppRs, CargoToml, CliRs, CommandRs, CommandsMod, ContextRs, GeneratedMod, HandlerStub,
         HandlersMod, MainRs, STUB_MARKER,
@@ -23,11 +28,11 @@ use crate::{
 };
 
 /// Rust code generator that produces clap-based CLI code
-pub struct Generator<'a> {
-    schema: &'a Manifest,
+pub struct Generator {
+    ir: AppIR,
 }
 
-impl LanguageCodegen for Generator<'_> {
+impl LanguageCodegen for Generator {
     fn language(&self) -> &'static str {
         "rust"
     }
@@ -53,9 +58,15 @@ impl LanguageCodegen for Generator<'_> {
     }
 }
 
-impl<'a> Generator<'a> {
-    pub fn new(schema: &'a Manifest) -> Self {
-        Self { schema }
+impl Generator {
+    /// Create a new Rust generator from a manifest.
+    pub fn new(manifest: &Manifest) -> Self {
+        Self::from_ir(lower_manifest(manifest))
+    }
+
+    /// Create a new Rust generator from an Application IR.
+    pub fn from_ir(ir: AppIR) -> Self {
+        Self { ir }
     }
 
     /// Build a file registry with all generated files.
@@ -66,17 +77,17 @@ impl<'a> Generator<'a> {
     fn build_registry(&self) -> FileRegistry {
         let mut registry = FileRegistry::new();
 
-        // Collect context field info
-        let context_fields = collect_context_fields(&self.schema.context);
+        // Collect context field info from IR
+        let context_fields = collect_context_fields_from_ir(&self.ir);
         // Async only if database context exists (HTTP is sync)
-        let is_async = self.schema.context.has_async();
+        let is_async = ir_has_async(&self.ir);
 
         // Config files
         let dependencies = self.collect_dependencies(is_async);
         registry.register(FileEntry::config(
             "Cargo.toml",
-            CargoToml::new(&self.schema.cli.name)
-                .with_version(self.schema.cli.version.clone())
+            CargoToml::new(&self.ir.meta.name)
+                .with_version_str(&self.ir.meta.version)
                 .with_dependencies(dependencies)
                 .render(),
         ));
@@ -101,23 +112,29 @@ impl<'a> Generator<'a> {
             GeneratedMod.render(),
         ));
 
+        // Collect commands from IR
         let commands: Vec<CommandInfo> = self
-            .schema
-            .commands
+            .ir
+            .operations
             .iter()
-            .map(|(name, cmd)| CommandInfo {
-                name: name.clone(),
-                description: cmd.description.clone(),
-                has_subcommands: cmd.has_subcommands(),
+            .map(|op| {
+                let Operation::Command(cmd) = op;
+                CommandInfo {
+                    name: cmd.name.clone(),
+                    description: cmd.description.clone(),
+                    has_subcommands: cmd.has_subcommands(),
+                }
             })
             .collect();
+
+        let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
 
         registry.register(FileEntry::generated(
             "src/generated/cli.rs",
             CliRs::new(
-                &self.schema.cli.name,
-                self.schema.cli.version.clone(),
-                self.schema.cli.description.clone(),
+                &self.ir.meta.name,
+                &self.ir.meta.version,
+                self.ir.meta.description.clone(),
                 commands,
                 is_async,
             )
@@ -126,16 +143,17 @@ impl<'a> Generator<'a> {
 
         registry.register(FileEntry::generated(
             "src/generated/commands/mod.rs",
-            CommandsMod::new(self.schema.commands.keys().cloned().collect()).render(),
+            CommandsMod::new(command_names).render(),
         ));
 
-        // Individual command files
-        for (name, command) in &self.schema.commands {
-            let content = self.generate_command_file(name, command, is_async);
-            let file_name = to_snake_case(name);
+        // Individual command files from IR
+        for op in &self.ir.operations {
+            let Operation::Command(cmd) = op;
+            let content = self.generate_command_file_from_ir(cmd, is_async);
+            let file_name = to_snake_case(&cmd.name);
             registry.register(FileEntry::generated(
                 format!("src/generated/commands/{}.rs", file_name),
-                CommandRs::new(name, content).render(),
+                CommandRs::new(&cmd.name, content).render(),
             ));
         }
 
@@ -157,7 +175,7 @@ impl<'a> Generator<'a> {
     /// Generate all files into the specified output directory
     fn generate_files(&self, output_dir: &Path) -> Result<GenerateResult> {
         let handlers_dir = output_dir.join("src/handlers");
-        let is_async = self.schema.context.has_async();
+        let is_async = ir_has_async(&self.ir);
 
         // Write all registered files using the registry
         let registry = self.build_registry();
@@ -173,17 +191,19 @@ impl<'a> Generator<'a> {
     fn clean_files(&self, output_dir: &Path) -> Result<CleanResult> {
         let mut result = CleanResult::default();
 
-        // Collect expected command names (snake_case for file names)
+        // Collect expected command names from IR (snake_case for file names)
         let expected_commands: HashSet<String> = self
-            .schema
-            .commands
-            .keys()
-            .map(|name| to_snake_case(name))
+            .ir
+            .operations
+            .iter()
+            .map(|op| {
+                let Operation::Command(cmd) = op;
+                to_snake_case(&cmd.name)
+            })
             .collect();
 
-        // Collect expected handler paths (snake_case)
-        let expected_handlers: HashSet<String> = CommandTree::new(self.schema)
-            .collect_paths()
+        // Collect expected handler paths from IR (snake_case)
+        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
             .into_iter()
             .map(|path| {
                 path.split('/')
@@ -234,17 +254,19 @@ impl<'a> Generator<'a> {
     fn preview_clean_files(&self, output_dir: &Path) -> Result<CleanResult> {
         let mut result = CleanResult::default();
 
-        // Collect expected command names (snake_case for file names)
+        // Collect expected command names from IR (snake_case for file names)
         let expected_commands: HashSet<String> = self
-            .schema
-            .commands
-            .keys()
-            .map(|name| to_snake_case(name))
+            .ir
+            .operations
+            .iter()
+            .map(|op| {
+                let Operation::Command(cmd) = op;
+                to_snake_case(&cmd.name)
+            })
             .collect();
 
-        // Collect expected handler paths (snake_case)
-        let expected_handlers: HashSet<String> = CommandTree::new(self.schema)
-            .collect_paths()
+        // Collect expected handler paths from IR (snake_case)
+        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
             .into_iter()
             .map(|path| {
                 path.split('/')
@@ -333,32 +355,27 @@ impl<'a> Generator<'a> {
             }
         }
 
-        // Add database dependencies based on context fields
-        use baobao_manifest::ContextField;
-
-        for (_, field) in self.schema.context.fields() {
-            // Get database dependencies from the adapter based on field type
-            let db_type = match field {
-                ContextField::Postgres(_) => Some(DatabaseType::Postgres),
-                ContextField::Mysql(_) => Some(DatabaseType::Mysql),
-                ContextField::Sqlite(_) => Some(DatabaseType::Sqlite),
-                ContextField::Http(_) => None,
-            };
-
-            if let Some(db_type) = db_type {
-                for dep in database.dependencies(db_type) {
-                    if seen.insert(dep.name.clone()) {
-                        dependencies.push((dep.name, dep.version));
+        // Add database and HTTP dependencies based on IR resources
+        for resource in &self.ir.resources {
+            match resource {
+                Resource::Database(db) => {
+                    let db_type = match db.db_type {
+                        baobao_ir::DatabaseType::Postgres => DatabaseType::Postgres,
+                        baobao_ir::DatabaseType::Mysql => DatabaseType::Mysql,
+                        baobao_ir::DatabaseType::Sqlite => DatabaseType::Sqlite,
+                    };
+                    for dep in database.dependencies(db_type) {
+                        if seen.insert(dep.name.clone()) {
+                            dependencies.push((dep.name, dep.version));
+                        }
                     }
                 }
-            }
-
-            // Also include any additional dependencies from the field itself
-            // (e.g., HTTP client reqwest)
-            for (dep_name, dep_version) in field.dependencies() {
-                if !seen.contains(dep_name) {
-                    seen.insert(dep_name.to_string());
-                    dependencies.push((dep_name.to_string(), dep_version.to_string()));
+                Resource::HttpClient(_) => {
+                    // Add reqwest for HTTP client
+                    let reqwest = ("reqwest".to_string(), "0.12".to_string());
+                    if seen.insert(reqwest.0.clone()) {
+                        dependencies.push(reqwest);
+                    }
                 }
             }
         }
@@ -366,198 +383,185 @@ impl<'a> Generator<'a> {
         dependencies
     }
 
-    fn generate_command_file(&self, name: &str, command: &Command, is_async: bool) -> String {
-        let pascal_name = to_pascal_case(name);
+    // ========================================================================
+    // IR-based command generation methods
+    // ========================================================================
+
+    /// Generate a command file from IR CommandOp.
+    fn generate_command_file_from_ir(&self, cmd: &CommandOp, is_async: bool) -> String {
+        let pascal_name = to_pascal_case(&cmd.name);
 
         let mut file = RustFile::new().use_stmt(Use::new("clap").symbol("Args"));
 
-        if command.has_subcommands() {
+        if cmd.has_subcommands() {
             file = file
                 .use_stmt(Use::new("clap").symbol("Subcommand"))
                 .use_stmt(Use::new("crate::context").symbol("Context"));
         }
 
-        let content = if command.has_subcommands() {
-            self.generate_subcommand_struct(name, &pascal_name, command, is_async)
+        let content = if cmd.has_subcommands() {
+            self.generate_subcommand_struct_from_ir(&cmd.name, &pascal_name, cmd, is_async)
         } else {
-            self.generate_args_struct(&pascal_name, command)
+            self.generate_args_struct_from_ir(&pascal_name, cmd)
         };
 
         file.add(crate::RawCode::new(content))
             .render_with_header("// Generated by Bao - DO NOT EDIT")
     }
 
-    fn generate_args_struct(&self, pascal_name: &str, command: &Command) -> String {
-        use baobao_codegen::builder::CodeBuilder;
-
+    /// Generate args struct from IR CommandOp using Code IR.
+    fn generate_args_struct_from_ir(&self, pascal_name: &str, cmd: &CommandOp) -> String {
+        let renderer = RustStructureRenderer::new();
         let mut builder = CodeBuilder::rust();
 
-        // First, generate choice enums for args and flags that have choices
-        for (arg_name, arg) in &command.args {
-            if let Some(choices) = &arg.choices {
-                let enum_name = format!("{}{}Choice", pascal_name, to_pascal_case(arg_name));
+        // First, generate choice enums for inputs that have choices
+        for input in &cmd.inputs {
+            if let Some(choices) = &input.choices {
+                let enum_name = format!("{}{}Choice", pascal_name, to_pascal_case(&input.name));
                 let choice_enum = Self::generate_choice_enum(&enum_name, choices);
                 builder.push_raw(&choice_enum);
                 builder.push_blank();
             }
         }
 
-        for (flag_name, flag) in &command.flags {
-            if let Some(choices) = &flag.choices {
-                let enum_name = format!("{}{}Choice", pascal_name, to_pascal_case(flag_name));
-                let choice_enum = Self::generate_choice_enum(&enum_name, choices);
-                builder.push_raw(&choice_enum);
-                builder.push_blank();
-            }
-        }
-
-        let mut s = Struct::new(format!("{}Args", pascal_name))
-            .doc(&command.description)
+        let mut spec = StructSpec::new(format!("{}Args", pascal_name))
+            .doc(&cmd.description)
             .derive("Args")
             .derive("Debug");
 
-        // Generate positional args
-        for (arg_name, arg) in &command.args {
-            // Determine the type - use enum if choices are present
-            let rust_type = if arg.choices.is_some() {
-                format!("{}{}Choice", pascal_name, to_pascal_case(arg_name))
+        // Generate fields for all inputs
+        for input in &cmd.inputs {
+            let rust_type = if input.choices.is_some() {
+                TypeRef::named(format!(
+                    "{}{}Choice",
+                    pascal_name,
+                    to_pascal_case(&input.name)
+                ))
             } else {
-                Self::map_arg_type(&arg.arg_type).to_string()
+                Self::map_input_type_ref(input.ty)
             };
 
-            let field_type = if arg.required && arg.default.is_none() {
+            let is_bool_flag = matches!(input.kind, InputKind::Flag { .. })
+                && input.ty == InputType::Bool
+                && input.choices.is_none();
+
+            let field_type = if is_bool_flag {
+                TypeRef::bool()
+            } else if (input.required && input.default.is_none()) || input.default.is_some() {
                 rust_type.clone()
             } else {
-                format!("Option<{}>", rust_type)
+                TypeRef::optional(rust_type)
             };
 
-            let mut field = Field::new(to_snake_case(arg_name), field_type);
-            if let Some(desc) = &arg.description {
+            let mut field = FieldSpec::new(to_snake_case(&input.name), field_type)
+                .visibility(Visibility::Public);
+
+            if let Some(desc) = &input.description {
                 field = field.doc(desc);
             }
-            s = s.field(field);
+
+            // Add clap attribute for flags
+            if let InputKind::Flag { short } = &input.kind {
+                let arg_attr = Self::build_clap_arg_attr(*short, input.default.as_ref());
+                field = field.attribute(arg_attr);
+            }
+
+            spec = spec.field(field);
         }
 
-        // Generate flags
-        for (flag_name, flag) in &command.flags {
-            let mut attrs = vec!["long".to_string()];
-            if let Some(short) = flag.short_char() {
-                attrs.push(format!("short = '{}'", short));
-            }
-            if let Some(default) = &flag.default {
-                attrs.push(format!(
-                    "default_value = \"{}\"",
-                    toml_value_to_string(default)
-                ));
-            }
-
-            // Determine the type - use enum if choices are present
-            let rust_type = if flag.choices.is_some() {
-                format!("{}{}Choice", pascal_name, to_pascal_case(flag_name))
-            } else {
-                Self::map_arg_type(&flag.flag_type).to_string()
-            };
-
-            let field_type = if flag.flag_type == ArgType::Bool && flag.choices.is_none() {
-                "bool".to_string()
-            } else if flag.default.is_some() {
-                rust_type.clone()
-            } else {
-                format!("Option<{}>", rust_type)
-            };
-
-            let mut field = Field::new(to_snake_case(flag_name), field_type)
-                .attr(format!("arg({})", attrs.join(", ")));
-            if let Some(desc) = &flag.description {
-                field = field.doc(desc);
-            }
-            s = s.field(field);
-        }
-
-        builder.push_raw(&s.build());
+        builder.push_raw(&renderer.render_struct(&spec));
         builder.build()
     }
 
-    /// Generate a clap ValueEnum for choices.
+    /// Build a clap arg attribute from flag parameters.
+    fn build_clap_arg_attr(
+        short: Option<char>,
+        default: Option<&baobao_ir::DefaultValue>,
+    ) -> AttributeSpec {
+        let mut attr = AttributeSpec::simple("arg").flag("long");
+
+        if let Some(c) = short {
+            attr = attr.named("short", format!("'{}'", c));
+        }
+
+        if let Some(default_val) = default {
+            attr = attr.named(
+                "default_value",
+                format!("\"{}\"", default_val.to_code_string()),
+            );
+        }
+
+        attr
+    }
+
+    /// Map IR InputType to TypeRef.
+    fn map_input_type_ref(input_type: InputType) -> TypeRef {
+        match input_type {
+            InputType::String => TypeRef::string(),
+            InputType::Int => TypeRef::int(),
+            InputType::Float => TypeRef::float(),
+            InputType::Bool => TypeRef::bool(),
+            InputType::Path => TypeRef::path(),
+        }
+    }
+
+    /// Generate a clap ValueEnum for choices using Code IR.
     fn generate_choice_enum(name: &str, choices: &[String]) -> String {
-        let mut e = Enum::new(name)
+        let renderer = RustStructureRenderer::new();
+
+        let mut spec = EnumSpec::new(name)
             .derive("Debug")
             .derive("Clone")
             .derive("clap::ValueEnum");
 
         for choice in choices {
             let variant_name = to_pascal_case(choice);
-            let variant = Variant::new(&variant_name).attr(format!("value(name = \"{}\")", choice));
-            e = e.variant(variant);
+            let attr = AttributeSpec::simple("clap").arg(format!("value(name = \"{}\")", choice));
+            let variant = VariantSpec::unit(&variant_name).attribute(attr);
+            spec = spec.variant(variant);
         }
 
-        e.build()
+        renderer.render_enum(&spec)
     }
 
-    /// Map manifest ArgType to Rust type string.
-    fn map_arg_type(arg_type: &ArgType) -> &'static str {
-        match arg_type {
-            ArgType::String => "String",
-            ArgType::Int => "i64",
-            ArgType::Float => "f64",
-            ArgType::Bool => "bool",
-            ArgType::Path => "std::path::PathBuf",
-        }
-    }
-
-    /// Generate handlers directory with mod.rs and stub files for missing handlers
+    /// Generate handlers directory with mod.rs and stub files for missing handlers.
     fn generate_handlers(
         &self,
         handlers_dir: &Path,
         output_dir: &Path,
         is_async: bool,
     ) -> Result<GenerateResult> {
-        use baobao_core::{File, WriteResult};
-
         let mut created_handlers = Vec::new();
-        let tree = CommandTree::new(self.schema);
 
-        // Collect all expected handler paths (snake_case for Rust file names)
-        let expected_handlers: HashSet<String> = tree
+        // Collect all expected handler paths from IR (snake_case for Rust file names)
+        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
+            .into_iter()
+            .map(|path| {
+                path.split('/')
+                    .map(to_snake_case)
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .collect();
+
+        // Collect top-level command names
+        let top_level_names: Vec<String> = self
+            .ir
+            .operations
             .iter()
-            .map(|cmd| cmd.path_transformed("/", to_snake_case))
+            .map(|op| {
+                let Operation::Command(cmd) = op;
+                cmd.name.clone()
+            })
             .collect();
 
         // Generate top-level handlers/mod.rs (always regenerated)
-        HandlersMod::new(self.schema.commands.keys().cloned().collect()).write(output_dir)?;
+        HandlersMod::new(top_level_names).write(output_dir)?;
 
-        // Create mod.rs files for all parent commands (command groups)
-        for cmd in tree.parents() {
-            let dir = cmd.handler_dir(handlers_dir, to_snake_case);
-            std::fs::create_dir_all(&dir)?;
-
-            // Collect subcommand names for mod.rs
-            let subcommand_names: Vec<String> = cmd.command.commands.keys().cloned().collect();
-            let handlers_mod = HandlersMod::new(subcommand_names);
-            File::new(dir.join("mod.rs"), handlers_mod.render()).write()?;
-        }
-
-        // Create stub files for all leaf commands (actual handlers)
-        for cmd in tree.leaves() {
-            let dir = cmd.handler_dir(handlers_dir, to_snake_case);
-            std::fs::create_dir_all(&dir)?;
-
-            let display_path = cmd.path_transformed("/", to_snake_case);
-            let pascal_name = to_pascal_case(cmd.name);
-
-            // Args types are in the top-level command module
-            let top_level_cmd = to_snake_case(cmd.path.first().unwrap_or(&cmd.name));
-            let args_import = format!(
-                "crate::generated::commands::{}::{}Args",
-                top_level_cmd, pascal_name
-            );
-
-            let stub = HandlerStub::new(cmd.name, &args_import, is_async);
-            let result = stub.write(&dir)?;
-
-            if matches!(result, WriteResult::Written) {
-                created_handlers.push(format!("{}.rs", display_path));
-            }
+        // Process commands recursively
+        for op in &self.ir.operations {
+            let Operation::Command(cmd) = op;
+            self.generate_handlers_for_command(cmd, handlers_dir, is_async, &mut created_handlers)?;
         }
 
         // Find orphan handlers using shared utility
@@ -570,23 +574,91 @@ impl<'a> Generator<'a> {
         })
     }
 
-    fn generate_subcommand_struct(
+    /// Recursively generate handlers for a command and its children.
+    fn generate_handlers_for_command(
+        &self,
+        cmd: &CommandOp,
+        handlers_dir: &Path,
+        is_async: bool,
+        created_handlers: &mut Vec<String>,
+    ) -> Result<()> {
+        use baobao_core::{File, WriteResult};
+
+        let handler_path: Vec<&str> = cmd.path.iter().map(|s| s.as_str()).collect();
+        let dir = handler_path
+            .iter()
+            .take(handler_path.len().saturating_sub(1))
+            .fold(handlers_dir.to_path_buf(), |acc, segment| {
+                acc.join(to_snake_case(segment))
+            });
+
+        if cmd.has_subcommands() {
+            // Parent command - create directory and mod.rs
+            let cmd_dir = dir.join(to_snake_case(&cmd.name));
+            std::fs::create_dir_all(&cmd_dir)?;
+
+            let subcommand_names: Vec<String> =
+                cmd.children.iter().map(|c| c.name.clone()).collect();
+            let handlers_mod = HandlersMod::new(subcommand_names);
+            File::new(cmd_dir.join("mod.rs"), handlers_mod.render()).write()?;
+
+            // Recursively process children
+            for child in &cmd.children {
+                self.generate_handlers_for_command(
+                    child,
+                    handlers_dir,
+                    is_async,
+                    created_handlers,
+                )?;
+            }
+        } else {
+            // Leaf command - create handler stub
+            std::fs::create_dir_all(&dir)?;
+
+            let display_path = cmd
+                .path
+                .iter()
+                .map(|s| to_snake_case(s))
+                .collect::<Vec<_>>()
+                .join("/");
+            let pascal_name = to_pascal_case(&cmd.name);
+
+            // Args types are in the top-level command module
+            let top_level_cmd = to_snake_case(cmd.path.first().unwrap_or(&cmd.name));
+            let args_import = format!(
+                "crate::generated::commands::{}::{}Args",
+                top_level_cmd, pascal_name
+            );
+
+            let stub = HandlerStub::new(&cmd.name, &args_import, is_async);
+            let result = stub.write(&dir)?;
+
+            if matches!(result, WriteResult::Written) {
+                created_handlers.push(format!("{}.rs", display_path));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Generate subcommand struct from IR CommandOp.
+    fn generate_subcommand_struct_from_ir(
         &self,
         handler_path: &str,
         pascal_name: &str,
-        command: &Command,
+        cmd: &CommandOp,
         is_async: bool,
     ) -> String {
         let await_suffix = if is_async { ".await" } else { "" };
 
         // Parent struct with subcommand field
         let parent_struct = Struct::new(pascal_name)
-            .doc(&command.description)
+            .doc(&cmd.description)
             .derive("Args")
             .derive("Debug")
             .field(
                 Field::new("command", format!("{}Commands", pascal_name))
-                    .attr("command(subcommand)"),
+                    .clap_attr(ClapAttr::command_subcommand()),
             );
 
         // Subcommands enum
@@ -594,38 +666,37 @@ impl<'a> Generator<'a> {
             .derive("Subcommand")
             .derive("Debug");
 
-        for (sub_name, sub_command) in &command.commands {
-            let sub_pascal = to_pascal_case(sub_name);
-            let data = if sub_command.has_subcommands() {
+        for child in &cmd.children {
+            let sub_pascal = to_pascal_case(&child.name);
+            let data = if child.has_subcommands() {
                 sub_pascal.clone()
             } else {
                 format!("{}Args", sub_pascal)
             };
             commands_enum = commands_enum.variant(
                 Variant::new(&sub_pascal)
-                    .doc(&sub_command.description)
+                    .doc(&child.description)
                     .tuple(data),
             );
         }
 
         // Dispatch impl
         let mut match_expr = Match::new("self.command");
-        for (sub_name, sub_command) in &command.commands {
-            let sub_pascal = to_pascal_case(sub_name);
-            let (pattern, body) = if sub_command.has_subcommands() {
+        for child in &cmd.children {
+            let sub_pascal = to_pascal_case(&child.name);
+            let (pattern, body) = if child.has_subcommands() {
                 (
                     format!("{}Commands::{}(cmd)", pascal_name, sub_pascal),
                     format!("cmd.dispatch(ctx){}", await_suffix),
                 )
             } else {
-                // Use snake_case for module paths (handles dashed names like "my-command" -> "my_command")
-                // handler_path uses :: as separator (e.g., "db::migrate"), convert each segment
+                // Use snake_case for module paths
                 let handler_module = handler_path
                     .split("::")
                     .map(to_snake_case)
                     .collect::<Vec<_>>()
                     .join("::");
-                let sub_module = to_snake_case(sub_name);
+                let sub_module = to_snake_case(&child.name);
                 (
                     format!("{}Commands::{}(args)", pascal_name, sub_pascal),
                     format!(
@@ -650,7 +721,7 @@ impl<'a> Generator<'a> {
 
         let dispatch_impl = Impl::new(pascal_name).method(dispatch);
 
-        // Combine all parts using mutable CodeBuilder
+        // Combine all parts
         let mut builder = CodeBuilder::rust();
         builder.emit(&parent_struct);
         builder.push_blank();
@@ -660,18 +731,18 @@ impl<'a> Generator<'a> {
         builder.push_blank();
 
         // Generate args structs for each subcommand
-        for (sub_name, sub_command) in &command.commands {
-            let sub_pascal = to_pascal_case(sub_name);
-            if sub_command.has_subcommands() {
-                let nested_path = format!("{}::{}", handler_path, sub_name);
-                builder.push_raw(&self.generate_subcommand_struct(
+        for child in &cmd.children {
+            let sub_pascal = to_pascal_case(&child.name);
+            if child.has_subcommands() {
+                let nested_path = format!("{}::{}", handler_path, child.name);
+                builder.push_raw(&self.generate_subcommand_struct_from_ir(
                     &nested_path,
                     &sub_pascal,
-                    sub_command,
+                    child,
                     is_async,
                 ));
             } else {
-                builder.push_raw(&self.generate_args_struct(&sub_pascal, sub_command));
+                builder.push_raw(&self.generate_args_struct_from_ir(&sub_pascal, child));
             }
         }
 

@@ -2,12 +2,16 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::schema::ContextFieldInfo;
+use baobao_codegen::{
+    builder::{FieldSpec, StructSpec, StructureRenderer, TypeRef},
+    schema::ContextFieldInfo,
+};
 use baobao_core::{ContextFieldType, DatabaseType, FileRules, GeneratedFile};
 
 use super::GENERATED_HEADER;
 use crate::{
-    ast::{Field, Import, ObjectType},
+    TypeScriptStructureRenderer,
+    ast::Import,
     code_file::{CodeFile, RawCode},
 };
 
@@ -38,20 +42,27 @@ impl ContextTs {
         imports
     }
 
-    fn build_context_type(&self) -> ObjectType {
-        let mut context = ObjectType::new("Context");
+    fn build_context_type(&self) -> String {
+        let renderer = TypeScriptStructureRenderer::new();
+
+        let mut spec = StructSpec::new("Context");
 
         for field in &self.fields {
-            let ts_type = match &field.field_type {
-                ContextFieldType::Database(DatabaseType::Sqlite) => "Database",
-                ContextFieldType::Database(DatabaseType::Postgres) => "unknown",
-                ContextFieldType::Database(DatabaseType::Mysql) => "unknown",
-                ContextFieldType::Http => "unknown",
-            };
-            context = context.field(Field::new(&field.name, ts_type));
+            let type_ref = Self::map_context_type_ref(&field.field_type);
+            spec = spec.field(FieldSpec::new(&field.name, type_ref));
         }
 
-        context
+        renderer.render_struct(&spec)
+    }
+
+    /// Map ContextFieldType to TypeRef.
+    fn map_context_type_ref(field_type: &ContextFieldType) -> TypeRef {
+        match field_type {
+            ContextFieldType::Database(DatabaseType::Sqlite) => TypeRef::named("Database"),
+            ContextFieldType::Database(DatabaseType::Postgres) => TypeRef::named("unknown"),
+            ContextFieldType::Database(DatabaseType::Mysql) => TypeRef::named("unknown"),
+            ContextFieldType::Http => TypeRef::named("unknown"),
+        }
     }
 }
 
@@ -68,7 +79,7 @@ impl GeneratedFile for ContextTs {
         CodeFile::new()
             .add(RawCode::new(GENERATED_HEADER))
             .imports(self.build_imports())
-            .add(self.build_context_type())
+            .add(RawCode::new(self.build_context_type()))
             .render()
     }
 }
