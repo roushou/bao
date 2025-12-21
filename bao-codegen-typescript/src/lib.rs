@@ -48,7 +48,7 @@ pub mod ast;
 pub mod files;
 
 pub use adapters::{BouneAdapter, BunSqliteAdapter};
-pub use ast::{ArrowFn, Import, JsObject, MethodChain};
+pub use ast::{ArrowFn, Import, JsObject};
 pub use baobao_codegen::language::{GenerateResult, LanguageCodegen, PreviewFile};
 pub use code_file::{CodeFile, RawCode, Shebang};
 pub use generator::Generator;

@@ -38,6 +38,7 @@
 mod generator;
 mod naming;
 mod render;
+mod renderer;
 mod rust_file;
 mod type_mapper;
 
@@ -51,5 +52,6 @@ pub use baobao_codegen::language::{GenerateResult, LanguageCodegen, PreviewFile}
 pub use generator::Generator;
 pub use naming::RUST_NAMING;
 pub use render::{RustFileBuilder, render_imports};
+pub use renderer::RustRenderer;
 pub use rust_file::{RawCode, RustFile, Use};
 pub use type_mapper::RustTypeMapper;

@@ -7,7 +7,6 @@
 #![allow(unused)]
 
 mod arrays;
-mod chain;
 mod consts;
 mod exports;
 mod fns;
@@ -17,7 +16,6 @@ mod objects;
 mod types;
 
 pub use arrays::JsArray;
-pub use chain::MethodChain;
 pub use consts::Const;
 pub use exports::Export;
 pub use fns::{Fn, Param};

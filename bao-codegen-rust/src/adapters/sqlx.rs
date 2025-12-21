@@ -3,10 +3,13 @@
 use baobao_codegen::{
     adapters::{
         DatabaseAdapter, DatabaseOptionsInfo, Dependency, ImportSpec, PoolConfig, PoolInitInfo,
+        SqliteConfig,
     },
-    builder::CodeFragment,
+    builder::{Block, BuilderSpec, CodeFragment, Constructor, RenderExt, RenderOptions, Value},
 };
 use baobao_core::DatabaseType;
+
+use crate::RustRenderer;
 
 /// SQLx adapter for database pool generation.
 #[derive(Debug, Clone, Default)]
@@ -63,37 +66,11 @@ impl DatabaseAdapter for SqlxAdapter {
             return None;
         }
 
-        let mut code = String::from("sqlx::sqlite::SqliteConnectOptions::new()");
-
-        if let Some(create) = sqlite.create_if_missing {
-            code.push_str(&format!("\n    .create_if_missing({})", create));
-        }
-        if let Some(read_only) = sqlite.read_only {
-            code.push_str(&format!("\n    .read_only({})", read_only));
-        }
-        if let Some(ref journal_mode) = sqlite.journal_mode {
-            code.push_str(&format!(
-                "\n    .journal_mode(sqlx::sqlite::SqliteJournalMode::{})",
-                journal_mode
-            ));
-        }
-        if let Some(ref synchronous) = sqlite.synchronous {
-            code.push_str(&format!(
-                "\n    .synchronous(sqlx::sqlite::SqliteSynchronous::{})",
-                synchronous
-            ));
-        }
-        if let Some(busy_timeout) = sqlite.busy_timeout {
-            code.push_str(&format!(
-                "\n    .busy_timeout(std::time::Duration::from_millis({}))",
-                busy_timeout
-            ));
-        }
-        if let Some(foreign_keys) = sqlite.foreign_keys {
-            code.push_str(&format!("\n    .foreign_keys({})", foreign_keys));
-        }
-
-        Some(vec![CodeFragment::raw(code)])
+        let spec = sqlite_connect_options_spec(sqlite);
+        let opts = RenderOptions::default().with_indent(1);
+        Some(vec![CodeFragment::raw(
+            spec.render_with(&RustRenderer, &opts),
+        )])
     }
 
     fn imports(&self, db_type: DatabaseType) -> Vec<ImportSpec> {
@@ -128,13 +105,12 @@ fn generate_sqlx_pool_init(info: &PoolInitInfo) -> String {
         );
     }
 
-    let mut code = String::from("sqlx::pool::PoolOptions::new()\n                ");
-    append_pool_options(&mut code, &info.pool_config);
-    code.push_str(&format!(
-        ".connect(&std::env::var(\"{}\")?).await?",
-        info.env_var
-    ));
-    code
+    let spec = pool_options_spec(&info.pool_config)
+        .call_arg("connect", env_var_expr(&info.env_var))
+        .async_()
+        .try_();
+
+    spec.render_with(&RustRenderer, &RenderOptions::default().with_indent(3))
 }
 
 fn generate_sqlite_init(info: &PoolInitInfo) -> String {
@@ -153,88 +129,98 @@ fn generate_sqlite_init(info: &PoolInitInfo) -> String {
         );
     }
 
-    let mut code = String::new();
-
-    // Build connection options - use path directly or from env var
-    if has_path {
+    // Build connection options spec
+    let options_spec = if has_path {
         let path = info.sqlite_config.as_ref().unwrap().path.as_ref().unwrap();
-        code.push_str(&format!(
-            "{{\n            let options = sqlx::sqlite::SqliteConnectOptions::new()\n                .filename(\"{}\")",
-            path
-        ));
+        let base = BuilderSpec::new("sqlx::sqlite::SqliteConnectOptions")
+            .call_arg("filename", Value::string(path));
+        match &info.sqlite_config {
+            Some(s) => apply_sqlite_config(base, s),
+            None => base,
+        }
     } else {
-        code.push_str(&format!(
-            "{{\n            let options = sqlx::sqlite::SqliteConnectOptions::from_str(&std::env::var(\"{}\")?)?",
+        let base = BuilderSpec::with_constructor(Constructor::raw(format!(
+            "sqlx::sqlite::SqliteConnectOptions::from_str(&std::env::var(\"{}\")?)?",
             info.env_var
-        ));
-    }
+        )));
+        match &info.sqlite_config {
+            Some(s) => apply_sqlite_config(base, s),
+            None => base,
+        }
+    };
 
-    if let Some(sqlite) = &info.sqlite_config {
-        if let Some(create) = sqlite.create_if_missing {
-            code.push_str(&format!("\n                .create_if_missing({})", create));
-        }
-        if let Some(read_only) = sqlite.read_only {
-            code.push_str(&format!("\n                .read_only({})", read_only));
-        }
-        if let Some(ref journal_mode) = sqlite.journal_mode {
-            code.push_str(&format!(
-                "\n                .journal_mode(sqlx::sqlite::SqliteJournalMode::{})",
-                journal_mode
-            ));
-        }
-        if let Some(ref synchronous) = sqlite.synchronous {
-            code.push_str(&format!(
-                "\n                .synchronous(sqlx::sqlite::SqliteSynchronous::{})",
-                synchronous
-            ));
-        }
-        if let Some(busy_timeout) = sqlite.busy_timeout {
-            code.push_str(&format!(
-                "\n                .busy_timeout(std::time::Duration::from_millis({}))",
-                busy_timeout
-            ));
-        }
-        if let Some(foreign_keys) = sqlite.foreign_keys {
-            code.push_str(&format!(
-                "\n                .foreign_keys({})",
-                foreign_keys
-            ));
-        }
-    }
+    // Build pool chain that uses the options
+    let pool_spec = pool_options_spec(&info.pool_config)
+        .call_arg("connect_with", Value::ident("options"))
+        .async_()
+        .try_();
 
-    code.push_str(";\n            ");
+    // Render as a block with let binding
+    let block =
+        Block::new(Value::builder(pool_spec)).binding("options", Value::builder(options_spec));
 
-    // Build pool options
-    code.push_str("sqlx::pool::PoolOptions::new()\n                ");
-    append_pool_options(&mut code, &info.pool_config);
-    code.push_str(".connect_with(options).await?\n        }");
-
-    code
+    block.render_with(&RustRenderer, &RenderOptions::default().with_indent(2))
 }
 
-fn append_pool_options(code: &mut String, pool: &PoolConfig) {
-    if let Some(max) = pool.max_connections {
-        code.push_str(&format!(".max_connections({})\n                ", max));
-    }
-    if let Some(min) = pool.min_connections {
-        code.push_str(&format!(".min_connections({})\n                ", min));
-    }
-    if let Some(timeout) = pool.acquire_timeout {
-        code.push_str(&format!(
-            ".acquire_timeout(std::time::Duration::from_secs({}))\n                ",
-            timeout
-        ));
-    }
-    if let Some(timeout) = pool.idle_timeout {
-        code.push_str(&format!(
-            ".idle_timeout(std::time::Duration::from_secs({}))\n                ",
-            timeout
-        ));
-    }
-    if let Some(lifetime) = pool.max_lifetime {
-        code.push_str(&format!(
-            ".max_lifetime(std::time::Duration::from_secs({}))\n                ",
-            lifetime
-        ));
-    }
+/// Build SQLx pool options spec.
+fn pool_options_spec(pool: &PoolConfig) -> BuilderSpec {
+    BuilderSpec::new("sqlx::pool::PoolOptions").apply_config([
+        (
+            "max_connections",
+            pool.max_connections.map(|v| Value::uint(v.into())),
+        ),
+        (
+            "min_connections",
+            pool.min_connections.map(|v| Value::uint(v.into())),
+        ),
+        (
+            "acquire_timeout",
+            pool.acquire_timeout.map(Value::duration_secs),
+        ),
+        ("idle_timeout", pool.idle_timeout.map(Value::duration_secs)),
+        ("max_lifetime", pool.max_lifetime.map(Value::duration_secs)),
+    ])
+}
+
+/// Build SQLite connection options spec.
+fn sqlite_connect_options_spec(sqlite: &SqliteConfig) -> BuilderSpec {
+    apply_sqlite_config(
+        BuilderSpec::new("sqlx::sqlite::SqliteConnectOptions"),
+        sqlite,
+    )
+}
+
+/// Apply SQLite configuration to a builder spec.
+fn apply_sqlite_config(spec: BuilderSpec, sqlite: &SqliteConfig) -> BuilderSpec {
+    spec.apply_config([
+        (
+            "create_if_missing",
+            sqlite.create_if_missing.map(Value::bool),
+        ),
+        ("read_only", sqlite.read_only.map(Value::bool)),
+        (
+            "journal_mode",
+            sqlite
+                .journal_mode
+                .as_ref()
+                .map(|m| Value::enum_variant("sqlx::sqlite::SqliteJournalMode", m)),
+        ),
+        (
+            "synchronous",
+            sqlite
+                .synchronous
+                .as_ref()
+                .map(|s| Value::enum_variant("sqlx::sqlite::SqliteSynchronous", s)),
+        ),
+        (
+            "busy_timeout",
+            sqlite.busy_timeout.map(Value::duration_millis),
+        ),
+        ("foreign_keys", sqlite.foreign_keys.map(Value::bool)),
+    ])
+}
+
+/// Create an expression for reading an environment variable.
+fn env_var_expr(name: &str) -> Value {
+    Value::ident(format!("&std::env::var(\"{}\")?", name))
 }
