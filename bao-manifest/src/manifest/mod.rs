@@ -22,7 +22,7 @@ pub use validate::ParseContext;
 use crate::{Command, Context};
 
 /// Root manifest for bao.toml
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Manifest {
     /// CLI metadata
     pub cli: CliConfig,

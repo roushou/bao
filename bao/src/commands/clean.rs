@@ -1,8 +1,12 @@
 use std::path::PathBuf;
 
-use baobao_codegen::language::LanguageCodegen;
-use baobao_codegen_rust::Generator;
-use baobao_manifest::BaoToml;
+use baobao_codegen::{
+    language::LanguageCodegen,
+    pipeline::{Pipeline, Severity},
+};
+use baobao_codegen_rust::Generator as RustGenerator;
+use baobao_codegen_typescript::Generator as TypeScriptGenerator;
+use baobao_manifest::{BaoToml, Language};
 use clap::Args;
 use eyre::{Context, Result};
 
@@ -27,16 +31,44 @@ impl CleanCommand {
     pub fn run(&self) -> Result<()> {
         let bao_toml = BaoToml::open(&self.config).unwrap_or_exit();
         let schema = bao_toml.schema();
-        let generator = Generator::new(schema);
+        let language = schema.cli.language;
 
-        let result = if self.dry_run {
-            generator
-                .preview_clean(&self.output)
-                .wrap_err("Failed to preview clean")?
-        } else {
-            generator
-                .clean(&self.output)
-                .wrap_err("Failed to clean orphaned files")?
+        // Run the pipeline to validate, lower, and analyze
+        let pipeline = Pipeline::new();
+        let ctx = pipeline.run(schema.clone()).wrap_err("Pipeline failed")?;
+
+        // Print any warnings
+        for diag in &ctx.diagnostics {
+            if matches!(diag.severity, Severity::Warning) {
+                eprintln!("warning: {}", diag.message);
+            }
+        }
+
+        let result = match language {
+            Language::Rust => {
+                let generator = RustGenerator::from_context(ctx);
+                if self.dry_run {
+                    generator
+                        .preview_clean(&self.output)
+                        .wrap_err("Failed to preview clean")?
+                } else {
+                    generator
+                        .clean(&self.output)
+                        .wrap_err("Failed to clean orphaned files")?
+                }
+            }
+            Language::TypeScript => {
+                let generator = TypeScriptGenerator::from_context(ctx);
+                if self.dry_run {
+                    generator
+                        .preview_clean(&self.output)
+                        .wrap_err("Failed to preview clean")?
+                } else {
+                    generator
+                        .clean(&self.output)
+                        .wrap_err("Failed to clean orphaned files")?
+                }
+            }
         };
 
         let has_deletions =

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use toml::Spanned;
 
 /// A CLI command or subcommand
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Command {
     /// Command description for help text
     pub description: String,
@@ -40,7 +40,7 @@ impl Command {
 }
 
 /// A positional argument
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Arg {
     /// Argument type
     #[serde(rename = "type")]
@@ -66,7 +66,7 @@ pub(crate) fn default_true() -> bool {
 }
 
 /// A flag (optional named argument)
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Flag {
     /// Flag type
     #[serde(rename = "type", default)]

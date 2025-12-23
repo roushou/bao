@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::{generation::BaoToml, language::LanguageCodegen};
+use baobao_codegen::{generation::BaoToml, language::LanguageCodegen, pipeline::Pipeline};
 use baobao_codegen_rust::{
     Generator as RustGenerator,
     files::{CargoToml, GitIgnore as RustGitIgnore, MainRs},
@@ -129,7 +129,9 @@ pub fn run(_ctx: &Context, args: HelloArgs) -> eyre::Result<()> {
             }
         };
 
-        let generator = RustGenerator::new(&schema);
+        let pipeline = Pipeline::new();
+        let ctx = pipeline.run(schema).wrap_err("Pipeline failed")?;
+        let generator = RustGenerator::from_context(ctx);
         let _ = generator
             .generate(output_dir)
             .wrap_err("Failed to generate code")?;
@@ -192,7 +194,9 @@ export async function run(ctx: Context, args: HelloArgs): Promise<void> {
             }
         };
 
-        let generator = TypeScriptGenerator::new(&schema);
+        let pipeline = Pipeline::new();
+        let ctx = pipeline.run(schema).wrap_err("Pipeline failed")?;
+        let generator = TypeScriptGenerator::from_context(ctx);
         let _ = generator
             .generate(output_dir)
             .wrap_err("Failed to generate code")?;

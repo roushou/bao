@@ -8,14 +8,11 @@ use baobao_codegen::{
     },
     generation::{FileEntry, FileRegistry, HandlerPaths, find_orphan_commands},
     language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
-    lower_manifest,
-    schema::{
-        CommandInfo, collect_command_paths_from_ir, collect_context_fields_from_ir, ir_has_async,
-    },
+    pipeline::CompilationContext,
+    schema::{CommandInfo, ComputedData},
 };
 use baobao_core::{DatabaseType, GeneratedFile, to_pascal_case, to_snake_case};
 use baobao_ir::{AppIR, CommandOp, InputKind, InputType, Operation, Resource};
-use baobao_manifest::Manifest;
 use eyre::Result;
 
 use crate::{
@@ -30,6 +27,7 @@ use crate::{
 /// Rust code generator that produces clap-based CLI code
 pub struct Generator {
     ir: AppIR,
+    computed: ComputedData,
 }
 
 impl LanguageCodegen for Generator {
@@ -59,14 +57,19 @@ impl LanguageCodegen for Generator {
 }
 
 impl Generator {
-    /// Create a new Rust generator from a manifest.
-    pub fn new(manifest: &Manifest) -> Self {
-        Self::from_ir(lower_manifest(manifest))
-    }
-
-    /// Create a new Rust generator from an Application IR.
-    pub fn from_ir(ir: AppIR) -> Self {
-        Self { ir }
+    /// Create a generator from a compilation context.
+    ///
+    /// Use `Pipeline::run()` to create the context, then pass it here.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the context doesn't have IR or computed data
+    /// (i.e., if the pipeline didn't run successfully).
+    pub fn from_context(mut ctx: CompilationContext) -> Self {
+        Self {
+            ir: ctx.take_ir(),
+            computed: ctx.take_computed(),
+        }
     }
 
     /// Build a file registry with all generated files.
@@ -77,10 +80,9 @@ impl Generator {
     fn build_registry(&self) -> FileRegistry {
         let mut registry = FileRegistry::new();
 
-        // Collect context field info from IR
-        let context_fields = collect_context_fields_from_ir(&self.ir);
-        // Async only if database context exists (HTTP is sync)
-        let is_async = ir_has_async(&self.ir);
+        // Use pre-computed data from pipeline
+        let context_fields = self.computed.context_fields.clone();
+        let is_async = self.computed.is_async;
 
         // Config files
         let dependencies = self.collect_dependencies(is_async);
@@ -175,7 +177,7 @@ impl Generator {
     /// Generate all files into the specified output directory
     fn generate_files(&self, output_dir: &Path) -> Result<GenerateResult> {
         let handlers_dir = output_dir.join("src/handlers");
-        let is_async = ir_has_async(&self.ir);
+        let is_async = self.computed.is_async;
 
         // Write all registered files using the registry
         let registry = self.build_registry();
@@ -202,9 +204,11 @@ impl Generator {
             })
             .collect();
 
-        // Collect expected handler paths from IR (snake_case)
-        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
-            .into_iter()
+        // Collect expected handler paths from computed data (convert to snake_case)
+        let expected_handlers: HashSet<String> = self
+            .computed
+            .command_paths
+            .iter()
             .map(|path| {
                 path.split('/')
                     .map(to_snake_case)
@@ -265,9 +269,11 @@ impl Generator {
             })
             .collect();
 
-        // Collect expected handler paths from IR (snake_case)
-        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
-            .into_iter()
+        // Collect expected handler paths from computed data (convert to snake_case)
+        let expected_handlers: HashSet<String> = self
+            .computed
+            .command_paths
+            .iter()
             .map(|path| {
                 path.split('/')
                     .map(to_snake_case)
@@ -533,9 +539,11 @@ impl Generator {
     ) -> Result<GenerateResult> {
         let mut created_handlers = Vec::new();
 
-        // Collect all expected handler paths from IR (snake_case for Rust file names)
-        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
-            .into_iter()
+        // Collect all expected handler paths from computed data (snake_case for Rust file names)
+        let expected_handlers: HashSet<String> = self
+            .computed
+            .command_paths
+            .iter()
             .map(|path| {
                 path.split('/')
                     .map(to_snake_case)

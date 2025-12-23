@@ -5,13 +5,16 @@
 
 use std::str::FromStr;
 
+use baobao_codegen::pipeline::Pipeline;
 use baobao_codegen_typescript::{Generator, LanguageCodegen};
 use baobao_manifest::Manifest;
 
 /// Generate code from a schema and return files sorted by path for deterministic snapshots.
 fn generate_files(schema_toml: &str) -> Vec<(String, String)> {
     let manifest = Manifest::from_str(schema_toml).expect("Failed to parse schema");
-    let generator = Generator::new(&manifest);
+    let pipeline = Pipeline::new();
+    let ctx = pipeline.run(manifest).expect("Pipeline failed");
+    let generator = Generator::from_context(ctx);
     let files = generator.preview();
 
     let mut result: Vec<(String, String)> =

@@ -5,10 +5,17 @@
 
 use std::str::FromStr;
 
-use baobao_codegen::language::LanguageCodegen;
+use baobao_codegen::{language::LanguageCodegen, pipeline::Pipeline};
 use baobao_codegen_typescript::Generator;
 use baobao_manifest::Manifest;
 use tempfile::TempDir;
+
+/// Create a generator from a manifest using the Pipeline.
+fn create_generator(manifest: Manifest) -> Generator {
+    let pipeline = Pipeline::new();
+    let ctx = pipeline.run(manifest).expect("Pipeline failed");
+    Generator::from_context(ctx)
+}
 
 /// Verify that generating code does not overwrite an existing bao.toml file.
 ///
@@ -40,7 +47,7 @@ fn test_bao_toml_not_overwritten_during_generation() {
     "#;
 
     let schema = Manifest::from_str(schema_toml).expect("Failed to parse schema");
-    let generator = Generator::new(&schema);
+    let generator = create_generator(schema);
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let output_dir = temp_dir.path();
@@ -104,7 +111,7 @@ fn test_bao_toml_not_created_during_generation() {
     "#;
 
     let schema = Manifest::from_str(schema_toml).expect("Failed to parse schema");
-    let generator = Generator::new(&schema);
+    let generator = create_generator(schema);
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let output_dir = temp_dir.path();

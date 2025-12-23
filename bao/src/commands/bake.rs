@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use baobao_codegen::{
     language::LanguageCodegen,
+    pipeline::{Pipeline, Severity},
     schema::{CommandTree, CommandTreeExt, DisplayStyle},
 };
 use baobao_codegen_rust::Generator as RustGenerator;
@@ -40,9 +41,20 @@ impl BakeCommand {
         // Use CLI flag if provided, otherwise use manifest setting
         let language = self.language.unwrap_or(schema.cli.language);
 
+        // Run the pipeline to validate, lower, and analyze
+        let pipeline = Pipeline::new();
+        let ctx = pipeline.run(schema.clone()).wrap_err("Pipeline failed")?;
+
+        // Print any warnings
+        for diag in &ctx.diagnostics {
+            if matches!(diag.severity, Severity::Warning) {
+                eprintln!("warning: {}", diag.message);
+            }
+        }
+
         match language {
             Language::Rust => {
-                let generator = RustGenerator::new(schema);
+                let generator = RustGenerator::from_context(ctx);
                 if self.dry_run {
                     self.run_preview(&generator)
                 } else {
@@ -50,7 +62,7 @@ impl BakeCommand {
                 }
             }
             Language::TypeScript => {
-                let generator = TypeScriptGenerator::new(schema);
+                let generator = TypeScriptGenerator::from_context(ctx);
                 if self.dry_run {
                     self.run_preview(&generator)
                 } else {

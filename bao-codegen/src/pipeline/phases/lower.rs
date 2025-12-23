@@ -1,4 +1,4 @@
-//! Lowering from Manifest to Application IR.
+//! Lower phase - transforms manifest to Application IR.
 //!
 //! This module transforms the parsed manifest into the unified Application IR
 //! that generators consume.
@@ -10,9 +10,28 @@ use baobao_ir::{
     Input, InputKind, InputType, Operation, PoolConfig, Resource, SqliteOptions,
 };
 use baobao_manifest::{ArgType, Command, ContextField, Flag, Manifest};
+use eyre::Result;
+
+use crate::pipeline::{CompilationContext, Phase};
+
+/// Phase that transforms the manifest into Application IR.
+///
+/// This phase converts the parsed manifest into the unified IR that generators consume.
+pub struct LowerPhase;
+
+impl Phase for LowerPhase {
+    fn name(&self) -> &'static str {
+        "lower"
+    }
+
+    fn run(&self, ctx: &mut CompilationContext) -> Result<()> {
+        ctx.ir = Some(lower_manifest(&ctx.manifest));
+        Ok(())
+    }
+}
 
 /// Lower a manifest into an Application IR.
-pub fn lower_manifest(manifest: &Manifest) -> AppIR {
+fn lower_manifest(manifest: &Manifest) -> AppIR {
     AppIR {
         meta: lower_meta(manifest),
         resources: lower_resources(manifest),
@@ -226,7 +245,41 @@ fn lower_default_value(value: &toml::Value) -> Option<DefaultValue> {
 
 #[cfg(test)]
 mod tests {
+    use baobao_manifest::Manifest;
+
     use super::*;
+
+    fn parse_manifest(content: &str) -> Manifest {
+        toml::from_str(content).expect("Failed to parse test manifest")
+    }
+
+    fn make_test_manifest() -> Manifest {
+        parse_manifest(
+            r#"
+            [cli]
+            name = "test"
+            version = "1.0.0"
+            description = "Test CLI"
+            language = "rust"
+        "#,
+        )
+    }
+
+    #[test]
+    fn test_lower_phase() {
+        let manifest = make_test_manifest();
+        let mut ctx = CompilationContext::new(manifest);
+
+        assert!(ctx.ir.is_none());
+
+        LowerPhase.run(&mut ctx).expect("lower should succeed");
+
+        assert!(ctx.ir.is_some());
+
+        let ir = ctx.ir.as_ref().unwrap();
+        assert_eq!(ir.meta.name, "test");
+        assert_eq!(ir.meta.version, "1.0.0");
+    }
 
     #[test]
     fn test_lower_arg_type() {

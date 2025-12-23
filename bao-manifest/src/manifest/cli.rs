@@ -4,7 +4,7 @@ use serde::Deserialize;
 use super::Language;
 
 /// CLI metadata configuration
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct CliConfig {
     /// Name of the CLI binary
     pub name: String,

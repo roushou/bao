@@ -10,19 +10,18 @@
 //! - [`schema`] - Schema traversal and info types (CommandTree, CommandInfo, etc.)
 //! - [`generation`] - Output management (HandlerPaths, ImportCollector, etc.)
 //! - [`language`] - Language-specific abstractions (LanguageCodegen, TypeMapper, etc.)
-//! - [`lower`] - Manifest to Application IR lowering
+//! - [`pipeline`] - Compilation pipeline orchestrator
 //! - [`testing`] - Test utilities (feature-gated)
 
 pub mod adapters;
 pub mod builder;
 pub mod generation;
 pub mod language;
-mod lower;
+pub mod pipeline;
 pub mod schema;
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 
-// Re-export lowering function and AppIR type
+// Re-export AppIR type
 pub use baobao_ir::AppIR;
-pub use lower::lower_manifest;

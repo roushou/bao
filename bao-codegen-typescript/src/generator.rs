@@ -6,12 +6,11 @@ use baobao_codegen::{
     AppIR,
     generation::{FileEntry, FileRegistry, HandlerPaths, find_orphan_commands},
     language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
-    lower_manifest,
-    schema::{CommandInfo, collect_command_paths_from_ir, collect_context_fields_from_ir},
+    pipeline::CompilationContext,
+    schema::{CommandInfo, ComputedData},
 };
 use baobao_core::{GeneratedFile, to_camel_case, to_kebab_case, to_pascal_case};
 use baobao_ir::{CommandOp, InputKind, Operation};
-use baobao_manifest::Manifest;
 use eyre::Result;
 
 use crate::{
@@ -26,6 +25,7 @@ use crate::{
 /// TypeScript code generator that produces boune-based CLI code for Bun.
 pub struct Generator {
     ir: AppIR,
+    computed: ComputedData,
     cli_adapter: BouneAdapter,
 }
 
@@ -56,15 +56,18 @@ impl LanguageCodegen for Generator {
 }
 
 impl Generator {
-    /// Create a new TypeScript generator from a manifest.
-    pub fn new(manifest: &Manifest) -> Self {
-        Self::from_ir(lower_manifest(manifest))
-    }
-
-    /// Create a new TypeScript generator from an Application IR.
-    pub fn from_ir(ir: AppIR) -> Self {
+    /// Create a generator from a compilation context.
+    ///
+    /// Use `Pipeline::run()` to create the context, then pass it here.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the context doesn't have IR or computed data
+    /// (i.e., if the pipeline didn't run successfully).
+    pub fn from_context(mut ctx: CompilationContext) -> Self {
         Self {
-            ir,
+            ir: ctx.take_ir(),
+            computed: ctx.take_computed(),
             cli_adapter: BouneAdapter::new(),
         }
     }
@@ -75,8 +78,8 @@ impl Generator {
     fn build_registry(&self) -> FileRegistry {
         let mut registry = FileRegistry::new();
 
-        // Collect context field info from IR
-        let context_fields = collect_context_fields_from_ir(&self.ir);
+        // Use pre-computed data from pipeline
+        let context_fields = self.computed.context_fields.clone();
 
         // Config files
         registry.register(FileEntry::config(
@@ -378,9 +381,11 @@ impl Generator {
     fn generate_handlers(&self, handlers_dir: &Path, _output_dir: &Path) -> Result<GenerateResult> {
         let mut created_handlers = Vec::new();
 
-        // Collect all expected handler paths from IR (kebab-case for TypeScript file names)
-        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
-            .into_iter()
+        // Collect all expected handler paths from computed data (kebab-case for TypeScript file names)
+        let expected_handlers: HashSet<String> = self
+            .computed
+            .command_paths
+            .iter()
             .map(|path| {
                 path.split('/')
                     .map(to_kebab_case)
@@ -480,9 +485,11 @@ impl Generator {
             })
             .collect();
 
-        // Collect expected handler paths from IR (kebab-case)
-        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
-            .into_iter()
+        // Collect expected handler paths from computed data (kebab-case)
+        let expected_handlers: HashSet<String> = self
+            .computed
+            .command_paths
+            .iter()
             .map(|path| {
                 path.split('/')
                     .map(to_kebab_case)
@@ -543,9 +550,11 @@ impl Generator {
             })
             .collect();
 
-        // Collect expected handler paths from IR (kebab-case)
-        let expected_handlers: HashSet<String> = collect_command_paths_from_ir(&self.ir)
-            .into_iter()
+        // Collect expected handler paths from computed data (kebab-case)
+        let expected_handlers: HashSet<String> = self
+            .computed
+            .command_paths
+            .iter()
             .map(|path| {
                 path.split('/')
                     .map(to_kebab_case)

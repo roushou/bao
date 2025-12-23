@@ -5,6 +5,7 @@
 
 use std::{path::Path, process::Command, str::FromStr, sync::Mutex};
 
+use baobao_codegen::pipeline::Pipeline;
 use baobao_codegen_rust::{Generator, LanguageCodegen};
 use baobao_manifest::Manifest;
 use tempfile::TempDir;
@@ -22,7 +23,9 @@ static CARGO_LOCK: Mutex<()> = Mutex::new(());
 /// Generate code from a schema and verify it compiles with `cargo check`
 fn assert_generated_code_compiles(schema_toml: &str) {
     let schema = Manifest::from_str(schema_toml).expect("Failed to parse schema");
-    let generator = Generator::new(&schema);
+    let pipeline = Pipeline::new();
+    let ctx = pipeline.run(schema).expect("Pipeline failed");
+    let generator = Generator::from_context(ctx);
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let output_dir = temp_dir.path();
