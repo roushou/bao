@@ -9,7 +9,7 @@ use baobao_codegen::{
     generation::{FileEntry, FileRegistry, HandlerPaths, find_orphan_commands},
     language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
     pipeline::CompilationContext,
-    schema::{CommandInfo, ComputedData},
+    schema::ComputedData,
 };
 use baobao_core::{DatabaseType, GeneratedFile, to_pascal_case, to_snake_case};
 use baobao_ir::{AppIR, CommandOp, InputKind, InputType, Operation, Resource};
@@ -115,20 +115,7 @@ impl Generator {
         ));
 
         // Collect commands from IR
-        let commands: Vec<CommandInfo> = self
-            .ir
-            .operations
-            .iter()
-            .map(|op| {
-                let Operation::Command(cmd) = op;
-                CommandInfo {
-                    name: cmd.name.clone(),
-                    description: cmd.description.clone(),
-                    has_subcommands: cmd.has_subcommands(),
-                }
-            })
-            .collect();
-
+        let commands: Vec<CommandOp> = self.ir.commands().cloned().collect();
         let command_names: Vec<String> = commands.iter().map(|c| c.name.clone()).collect();
 
         registry.register(FileEntry::generated(

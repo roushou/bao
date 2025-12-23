@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use baobao_codegen::schema::{CommandTree, CommandTreeExt, DisplayStyle};
+use baobao_codegen::schema::{CommandTree, DisplayStyle};
 use baobao_manifest::{BaoToml, Command, ContextField};
 use clap::Args;
 use eyre::Result;

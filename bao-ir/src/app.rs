@@ -10,7 +10,7 @@
 //! bao.toml → Manifest (parsing) → AppIR (lowering) → Generator (codegen)
 //! ```
 
-use crate::{DatabaseType, PoolConfig, SqliteOptions};
+use crate::{ContextFieldInfo, ContextFieldType, DatabaseType, PoolConfig, SqliteOptions};
 
 /// Application IR - unified representation for code generation.
 #[derive(Debug, Clone)]
@@ -21,6 +21,91 @@ pub struct AppIR {
     pub resources: Vec<Resource>,
     /// Operations (commands for CLI, routes for HTTP).
     pub operations: Vec<Operation>,
+}
+
+impl AppIR {
+    /// Returns true if any resource requires async initialization.
+    pub fn has_async(&self) -> bool {
+        self.resources
+            .iter()
+            .any(|r| matches!(r, Resource::Database(_)))
+    }
+
+    /// Returns true if a database resource is configured.
+    pub fn has_database(&self) -> bool {
+        self.resources
+            .iter()
+            .any(|r| matches!(r, Resource::Database(_)))
+    }
+
+    /// Returns true if an HTTP client resource is configured.
+    pub fn has_http(&self) -> bool {
+        self.resources
+            .iter()
+            .any(|r| matches!(r, Resource::HttpClient(_)))
+    }
+
+    /// Iterate over all commands.
+    pub fn commands(&self) -> impl Iterator<Item = &CommandOp> {
+        self.operations.iter().map(|op| {
+            let Operation::Command(cmd) = op;
+            cmd
+        })
+    }
+
+    /// Collect all handler paths from commands (for orphan detection).
+    pub fn handler_paths(&self) -> Vec<String> {
+        fn collect(cmd: &CommandOp, paths: &mut Vec<String>) {
+            paths.push(cmd.handler_path());
+            for child in &cmd.children {
+                collect(child, paths);
+            }
+        }
+
+        let mut paths = Vec::new();
+        for cmd in self.commands() {
+            collect(cmd, &mut paths);
+        }
+        paths
+    }
+
+    /// Count total number of leaf commands (commands without subcommands).
+    pub fn command_count(&self) -> usize {
+        fn count(cmd: &CommandOp) -> usize {
+            if cmd.children.is_empty() {
+                1
+            } else {
+                cmd.children.iter().map(count).sum()
+            }
+        }
+
+        self.commands().map(count).sum()
+    }
+
+    /// Collect context fields from resources.
+    pub fn context_fields(&self) -> Vec<ContextFieldInfo> {
+        self.resources
+            .iter()
+            .map(|resource| match resource {
+                Resource::Database(db) => ContextFieldInfo {
+                    name: db.name.clone(),
+                    field_type: ContextFieldType::Database(db.db_type),
+                    env_var: db.env_var.clone(),
+                    is_async: true, // Database operations are always async
+                    pool: db.pool.clone(),
+                    sqlite: db.sqlite.clone(),
+                },
+                Resource::HttpClient(http) => ContextFieldInfo {
+                    name: http.name.clone(),
+                    field_type: ContextFieldType::Http,
+                    env_var: String::new(), // HTTP client doesn't need env var
+                    is_async: false,        // HTTP client creation is sync
+                    pool: PoolConfig::default(),
+                    sqlite: None,
+                },
+            })
+            .collect()
+    }
 }
 
 /// Application metadata.

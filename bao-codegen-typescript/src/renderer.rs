@@ -196,8 +196,6 @@ impl Renderer for TypeScriptRenderer {
 
 #[cfg(test)]
 mod tests {
-    use baobao_codegen::builder::RenderExt;
-
     use super::*;
 
     #[test]

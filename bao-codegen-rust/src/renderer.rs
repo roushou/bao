@@ -14,7 +14,7 @@ use baobao_codegen::builder::{
 /// # Examples
 ///
 /// ```
-/// use baobao_codegen::builder::{BuilderSpec, Value, RenderExt};
+/// use baobao_codegen::builder::{BuilderSpec, Value};
 /// use baobao_codegen_rust::RustRenderer;
 ///
 /// let spec = BuilderSpec::new("sqlx::pool::PoolOptions")
@@ -215,8 +215,6 @@ impl Renderer for RustRenderer {
 
 #[cfg(test)]
 mod tests {
-    use baobao_codegen::builder::RenderExt;
-
     use super::*;
 
     #[test]

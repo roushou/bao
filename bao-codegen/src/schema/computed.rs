@@ -6,12 +6,7 @@
 
 use std::collections::HashSet;
 
-use baobao_ir::{AppIR, Operation, Resource};
-
-use super::{
-    ContextFieldInfo, collect_command_paths_from_ir, collect_commands_from_ir,
-    collect_context_fields_from_ir,
-};
+use baobao_ir::{AppIR, ContextFieldInfo};
 
 /// Pre-computed data from IR analysis.
 ///
@@ -38,53 +33,25 @@ pub struct ComputedData {
 impl ComputedData {
     /// Compute all data from an Application IR.
     pub fn from_ir(ir: &AppIR) -> Self {
-        let context_fields = collect_context_fields_from_ir(ir);
-        let command_paths: HashSet<String> =
-            collect_command_paths_from_ir(ir).into_iter().collect();
-
-        let is_async = ir
-            .resources
-            .iter()
-            .any(|r| matches!(r, Resource::Database(_)));
-
-        let has_database = ir
-            .resources
-            .iter()
-            .any(|r| matches!(r, Resource::Database(_)));
-
-        let has_http = ir
-            .resources
-            .iter()
-            .any(|r| matches!(r, Resource::HttpClient(_)));
-
-        let command_count = ir
-            .operations
-            .iter()
-            .filter(|op| matches!(op, Operation::Command(_)))
-            .count();
-
+        let context_fields = ir.context_fields();
+        let command_paths: HashSet<String> = ir.handler_paths().into_iter().collect();
         let handler_count = command_paths.len();
 
         Self {
             context_fields,
             command_paths,
-            is_async,
-            has_database,
-            has_http,
-            command_count,
+            is_async: ir.has_async(),
+            has_database: ir.has_database(),
+            has_http: ir.has_http(),
+            command_count: ir.commands().count(),
             handler_count,
         }
-    }
-
-    /// Get command info for all top-level commands.
-    pub fn commands(&self, ir: &AppIR) -> Vec<super::CommandInfo> {
-        collect_commands_from_ir(ir)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use baobao_ir::{AppMeta, DatabaseResource, DatabaseType, PoolConfig};
+    use baobao_ir::{AppMeta, DatabaseResource, DatabaseType, PoolConfig, Resource};
 
     use super::*;
 

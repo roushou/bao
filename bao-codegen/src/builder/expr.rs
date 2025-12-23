@@ -170,6 +170,21 @@ impl Value {
     pub fn try_(value: Value) -> Self {
         Self::Try(Box::new(value))
     }
+
+    /// Render using the given renderer with default options.
+    pub fn render(&self, renderer: &dyn Renderer) -> String {
+        renderer.render_value(self, &RenderOptions::default())
+    }
+
+    /// Render inline using the given renderer.
+    pub fn render_inline(&self, renderer: &dyn Renderer) -> String {
+        renderer.render_value(self, &RenderOptions::inline())
+    }
+
+    /// Render with custom options.
+    pub fn render_with(&self, renderer: &dyn Renderer, opts: &RenderOptions) -> String {
+        renderer.render_value(self, opts)
+    }
 }
 
 /// How to construct the builder's base expression.
@@ -433,6 +448,21 @@ impl BuilderSpec {
         }
         self
     }
+
+    /// Render using the given renderer with default options.
+    pub fn render(&self, renderer: &dyn Renderer) -> String {
+        renderer.render_builder(self, &RenderOptions::default())
+    }
+
+    /// Render inline using the given renderer.
+    pub fn render_inline(&self, renderer: &dyn Renderer) -> String {
+        renderer.render_builder(self, &RenderOptions::inline())
+    }
+
+    /// Render with custom options.
+    pub fn render_with(&self, renderer: &dyn Renderer, opts: &RenderOptions) -> String {
+        renderer.render_builder(self, opts)
+    }
 }
 
 /// A binding in a block (let/const/var).
@@ -497,6 +527,21 @@ impl Block {
     pub fn binding_mut(mut self, name: impl Into<String>, value: Value) -> Self {
         self.bindings.push(Binding::new_mut(name, value));
         self
+    }
+
+    /// Render using the given renderer with default options.
+    pub fn render(&self, renderer: &dyn Renderer) -> String {
+        renderer.render_block(self, &RenderOptions::default())
+    }
+
+    /// Render inline using the given renderer.
+    pub fn render_inline(&self, renderer: &dyn Renderer) -> String {
+        renderer.render_block(self, &RenderOptions::inline())
+    }
+
+    /// Render with custom options.
+    pub fn render_with(&self, renderer: &dyn Renderer, opts: &RenderOptions) -> String {
+        renderer.render_block(self, opts)
     }
 }
 
@@ -581,60 +626,6 @@ pub trait Renderer {
 
     /// Render terminal operations (await, try, build method).
     fn render_terminal(&self, terminal: &Terminal) -> String;
-}
-
-/// Extension trait for convenient rendering.
-pub trait RenderExt {
-    /// Render using the given renderer with default options.
-    fn render(&self, renderer: &dyn Renderer) -> String;
-
-    /// Render inline using the given renderer.
-    fn render_inline(&self, renderer: &dyn Renderer) -> String;
-
-    /// Render with custom options.
-    fn render_with(&self, renderer: &dyn Renderer, opts: &RenderOptions) -> String;
-}
-
-impl RenderExt for Value {
-    fn render(&self, renderer: &dyn Renderer) -> String {
-        renderer.render_value(self, &RenderOptions::default())
-    }
-
-    fn render_inline(&self, renderer: &dyn Renderer) -> String {
-        renderer.render_value(self, &RenderOptions::inline())
-    }
-
-    fn render_with(&self, renderer: &dyn Renderer, opts: &RenderOptions) -> String {
-        renderer.render_value(self, opts)
-    }
-}
-
-impl RenderExt for BuilderSpec {
-    fn render(&self, renderer: &dyn Renderer) -> String {
-        renderer.render_builder(self, &RenderOptions::default())
-    }
-
-    fn render_inline(&self, renderer: &dyn Renderer) -> String {
-        renderer.render_builder(self, &RenderOptions::inline())
-    }
-
-    fn render_with(&self, renderer: &dyn Renderer, opts: &RenderOptions) -> String {
-        renderer.render_builder(self, opts)
-    }
-}
-
-impl RenderExt for Block {
-    fn render(&self, renderer: &dyn Renderer) -> String {
-        renderer.render_block(self, &RenderOptions::default())
-    }
-
-    fn render_inline(&self, renderer: &dyn Renderer) -> String {
-        renderer.render_block(self, &RenderOptions::inline())
-    }
-
-    fn render_with(&self, renderer: &dyn Renderer, opts: &RenderOptions) -> String {
-        renderer.render_block(self, opts)
-    }
 }
 
 impl fmt::Display for Value {

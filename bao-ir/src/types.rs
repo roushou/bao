@@ -1,5 +1,7 @@
 //! Core type definitions.
 
+use crate::{PoolConfig, SqliteOptions};
+
 /// Database type for context fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DatabaseType {
@@ -33,6 +35,23 @@ impl ContextFieldType {
     pub fn is_async(&self) -> bool {
         matches!(self, ContextFieldType::Database(_))
     }
+}
+
+/// Info about a context field for code generation.
+#[derive(Debug, Clone)]
+pub struct ContextFieldInfo {
+    /// Field name in the context struct.
+    pub name: String,
+    /// Language-agnostic field type.
+    pub field_type: ContextFieldType,
+    /// Environment variable for configuration.
+    pub env_var: String,
+    /// Whether initialization is async.
+    pub is_async: bool,
+    /// Connection pool configuration.
+    pub pool: PoolConfig,
+    /// SQLite-specific options.
+    pub sqlite: Option<SqliteOptions>,
 }
 
 #[cfg(test)]

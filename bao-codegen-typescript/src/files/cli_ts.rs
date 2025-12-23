@@ -2,8 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::schema::CommandInfo;
 use baobao_core::{FileRules, GeneratedFile, Version, to_camel_case, to_kebab_case};
+use baobao_ir::CommandOp;
 
 use super::GENERATED_HEADER;
 use crate::{
@@ -16,7 +16,7 @@ pub struct CliTs {
     pub name: String,
     pub version: Version,
     pub description: Option<String>,
-    pub commands: Vec<CommandInfo>,
+    pub commands: Vec<CommandOp>,
 }
 
 impl CliTs {
@@ -24,7 +24,7 @@ impl CliTs {
         name: impl Into<String>,
         version: impl Into<String>,
         description: Option<String>,
-        commands: Vec<CommandInfo>,
+        commands: Vec<CommandOp>,
     ) -> Self {
         let version_str = version.into();
         Self {
@@ -42,7 +42,7 @@ impl CliTs {
         name: impl Into<String>,
         version: Version,
         description: Option<String>,
-        commands: Vec<CommandInfo>,
+        commands: Vec<CommandOp>,
     ) -> Self {
         Self {
             name: name.into(),

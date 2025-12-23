@@ -7,7 +7,7 @@
 //!
 //! - [`adapters`] - Framework adapter abstractions (CliAdapter, DatabaseAdapter, etc.)
 //! - [`builder`] - Code generation building blocks (CodeBuilder, CodeFragment, etc.)
-//! - [`schema`] - Schema traversal and info types (CommandTree, CommandInfo, etc.)
+//! - [`schema`] - Schema traversal and info types (CommandTree, ContextFieldInfo, etc.)
 //! - [`generation`] - Output management (HandlerPaths, ImportCollector, etc.)
 //! - [`language`] - Language-specific abstractions (LanguageCodegen, TypeMapper, etc.)
 //! - [`pipeline`] - Compilation pipeline orchestrator

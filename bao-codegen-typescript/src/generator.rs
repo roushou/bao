@@ -3,14 +3,13 @@
 use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
-    AppIR,
     generation::{FileEntry, FileRegistry, HandlerPaths, find_orphan_commands},
     language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
     pipeline::CompilationContext,
-    schema::{CommandInfo, ComputedData},
+    schema::ComputedData,
 };
 use baobao_core::{GeneratedFile, to_camel_case, to_kebab_case, to_pascal_case};
-use baobao_ir::{CommandOp, InputKind, Operation};
+use baobao_ir::{AppIR, CommandOp, InputKind, Operation};
 use eyre::Result;
 
 use crate::{
@@ -99,19 +98,7 @@ impl Generator {
         ));
 
         // Collect commands from IR
-        let commands: Vec<CommandInfo> = self
-            .ir
-            .operations
-            .iter()
-            .map(|op| {
-                let Operation::Command(cmd) = op;
-                CommandInfo {
-                    name: cmd.name.clone(),
-                    description: cmd.description.clone(),
-                    has_subcommands: cmd.has_subcommands(),
-                }
-            })
-            .collect();
+        let commands: Vec<CommandOp> = self.ir.commands().cloned().collect();
 
         registry.register(FileEntry::generated(
             "src/cli.ts",

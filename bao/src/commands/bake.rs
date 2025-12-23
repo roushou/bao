@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use baobao_codegen::{
     language::LanguageCodegen,
     pipeline::{Pipeline, Severity},
-    schema::{CommandTree, CommandTreeExt, DisplayStyle},
+    schema::{CommandTree, DisplayStyle},
 };
 use baobao_codegen_rust::Generator as RustGenerator;
 use baobao_codegen_typescript::Generator as TypeScriptGenerator;

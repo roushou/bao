@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use baobao_codegen::{
     adapters::{DatabaseAdapter, PoolInitInfo},
-    builder::{FieldSpec, RenderExt, RenderOptions, StructSpec, StructureRenderer, TypeRef},
+    builder::{FieldSpec, RenderOptions, StructSpec, StructureRenderer, TypeRef},
     schema::ContextFieldInfo,
 };
 use baobao_core::{FileRules, GeneratedFile};

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use baobao_codegen::schema::CommandInfo;
 use baobao_core::{FileRules, GeneratedFile, Version, to_pascal_case, to_snake_case};
+use baobao_ir::CommandOp;
 
 use super::{GENERATED_HEADER, uses};
 use crate::{Arm, ClapAttr, Enum, Field, Fn, Impl, Match, Param, RustFile, Struct, Use, Variant};
@@ -11,7 +11,7 @@ pub struct CliRs {
     pub name: String,
     pub version: Version,
     pub description: Option<String>,
-    pub commands: Vec<CommandInfo>,
+    pub commands: Vec<CommandOp>,
     pub is_async: bool,
 }
 
@@ -20,7 +20,7 @@ impl CliRs {
         name: impl Into<String>,
         version: impl Into<String>,
         description: Option<String>,
-        commands: Vec<CommandInfo>,
+        commands: Vec<CommandOp>,
         is_async: bool,
     ) -> Self {
         let version_str = version.into();
@@ -40,7 +40,7 @@ impl CliRs {
         name: impl Into<String>,
         version: Version,
         description: Option<String>,
-        commands: Vec<CommandInfo>,
+        commands: Vec<CommandOp>,
         is_async: bool,
     ) -> Self {
         Self {
@@ -71,7 +71,7 @@ impl CliRs {
         let mut match_expr = Match::new("self.command");
         for cmd in &self.commands {
             let pascal = to_pascal_case(&cmd.name);
-            let (pattern, body) = if cmd.has_subcommands {
+            let (pattern, body) = if cmd.has_subcommands() {
                 (
                     format!("Commands::{}(cmd)", pascal),
                     format!("cmd.dispatch(ctx){}", await_suffix),
@@ -105,7 +105,7 @@ impl CliRs {
 
         for cmd in &self.commands {
             let pascal = to_pascal_case(&cmd.name);
-            let data = if cmd.has_subcommands {
+            let data = if cmd.has_subcommands() {
                 pascal.clone()
             } else {
                 format!("{}Args", pascal)

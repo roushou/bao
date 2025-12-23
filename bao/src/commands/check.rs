@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use baobao_codegen::{
     pipeline::{Pipeline, Severity},
-    schema::{CommandTree, CommandTreeExt, DisplayStyle},
+    schema::{CommandTree, DisplayStyle},
 };
 use baobao_manifest::BaoToml;
 use clap::Args;

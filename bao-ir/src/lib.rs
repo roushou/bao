@@ -24,4 +24,4 @@ pub use app::{
     InputKind, InputType, Operation, Resource,
 };
 pub use resource::{JournalMode, PoolConfig, SqliteOptions, SynchronousMode};
-pub use types::{ContextFieldType, DatabaseType};
+pub use types::{ContextFieldInfo, ContextFieldType, DatabaseType};

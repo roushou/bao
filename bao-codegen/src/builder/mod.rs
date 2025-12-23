@@ -32,8 +32,7 @@ mod types;
 
 pub use code_builder::CodeBuilder;
 pub use expr::{
-    Binding, Block, BuilderSpec, Constructor, MethodCall, RenderExt, RenderOptions, Renderer,
-    Terminal, Value,
+    Binding, Block, BuilderSpec, Constructor, MethodCall, RenderOptions, Renderer, Terminal, Value,
 };
 pub use file_builder::FileBuilder;
 pub use function::{

@@ -326,25 +326,6 @@ impl fmt::Display for CommandTreeDisplay<'_> {
     }
 }
 
-/// Extension trait to add display methods to CommandTree.
-pub trait CommandTreeExt<'a> {
-    /// Create a display formatter with default settings.
-    fn display(&'a self) -> CommandTreeDisplay<'a>;
-
-    /// Create a display formatter with a specific style.
-    fn display_style(&'a self, style: DisplayStyle) -> CommandTreeDisplay<'a>;
-}
-
-impl<'a> CommandTreeExt<'a> for CommandTree<'a> {
-    fn display(&'a self) -> CommandTreeDisplay<'a> {
-        CommandTreeDisplay::new(self)
-    }
-
-    fn display_style(&'a self, style: DisplayStyle) -> CommandTreeDisplay<'a> {
-        CommandTreeDisplay::new(self).style(style)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

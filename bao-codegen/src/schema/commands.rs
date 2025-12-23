@@ -28,6 +28,8 @@
 
 use baobao_manifest::{Command, Manifest};
 
+use super::display::{CommandTreeDisplay, DisplayStyle};
+
 /// A traversable view of the command tree in a schema.
 ///
 /// `CommandTree` provides a unified API for iterating over commands,
@@ -127,6 +129,16 @@ impl<'a> CommandTree<'a> {
     /// These are the paths that correspond to actual handler files.
     pub fn collect_leaf_paths(&self) -> std::collections::HashSet<String> {
         self.leaves().map(|cmd| cmd.path_str("/")).collect()
+    }
+
+    /// Create a display formatter with default settings.
+    pub fn display(&'a self) -> CommandTreeDisplay<'a> {
+        CommandTreeDisplay::new(self)
+    }
+
+    /// Create a display formatter with a specific style.
+    pub fn display_style(&'a self, style: DisplayStyle) -> CommandTreeDisplay<'a> {
+        CommandTreeDisplay::new(self).style(style)
     }
 }
 
