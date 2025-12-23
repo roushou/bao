@@ -1,9 +1,6 @@
 use std::path::PathBuf;
 
-use baobao_codegen::{
-    pipeline::{Pipeline, Severity},
-    schema::{CommandTree, DisplayStyle},
-};
+use baobao_codegen::pipeline::{Pipeline, Severity};
 use baobao_manifest::BaoToml;
 use clap::Args;
 use eyre::{Context, Result};
@@ -64,40 +61,6 @@ impl CheckCommand {
         }
 
         println!("✓ {} is valid\n", self.config.display());
-
-        // CLI info
-        println!("  {} v{}", schema.cli.name, schema.cli.version);
-        if let Some(desc) = &schema.cli.description {
-            println!("  {}\n", desc);
-        } else {
-            println!();
-        }
-
-        // Commands
-        let tree = CommandTree::new(schema);
-        let cmd_count = tree.leaf_count();
-        println!(
-            "  {} command{}:",
-            cmd_count,
-            if cmd_count == 1 { "" } else { "s" }
-        );
-        println!(
-            "{}",
-            tree.display_style(DisplayStyle::Simple).indent("    ")
-        );
-
-        // Context
-        if !schema.context.is_empty() {
-            let ctx_count = schema.context.len();
-            println!(
-                "\n  {} context field{}:",
-                ctx_count,
-                if ctx_count == 1 { "" } else { "s" }
-            );
-            for (name, field) in schema.context.fields() {
-                println!("    {} ({})", name, field.type_name());
-            }
-        }
 
         Ok(())
     }

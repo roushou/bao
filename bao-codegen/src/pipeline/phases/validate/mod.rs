@@ -1,18 +1,13 @@
 //! Validate phase - runs lints on the manifest.
 
-use baobao_manifest::Manifest;
+mod lint;
+pub mod lints;
+
 use eyre::{Result, bail};
+pub use lint::Lint;
+pub use lints::{CommandNamingLint, DuplicateCommandLint, EmptyDescriptionLint};
 
-use crate::pipeline::{CompilationContext, Diagnostic, Phase};
-
-/// A lint that checks the manifest for issues.
-pub trait Lint: Send + Sync {
-    /// The name of this lint.
-    fn name(&self) -> &'static str;
-
-    /// Check the manifest and add any diagnostics.
-    fn check(&self, manifest: &Manifest, diagnostics: &mut Vec<Diagnostic>);
-}
+use crate::pipeline::{CompilationContext, Phase};
 
 /// Phase that validates the manifest using configurable lints.
 pub struct ValidatePhase {
@@ -24,8 +19,9 @@ impl ValidatePhase {
     pub fn new() -> Self {
         Self {
             lints: vec![
+                Box::new(CommandNamingLint),
+                Box::new(DuplicateCommandLint),
                 Box::new(EmptyDescriptionLint),
-                // Add more built-in lints here
             ],
         }
     }
@@ -68,56 +64,12 @@ impl Phase for ValidatePhase {
     }
 }
 
-// ============================================================================
-// Built-in lints
-// ============================================================================
-
-/// Lint that warns about commands missing descriptions.
-pub struct EmptyDescriptionLint;
-
-impl Lint for EmptyDescriptionLint {
-    fn name(&self) -> &'static str {
-        "empty-description"
-    }
-
-    fn check(&self, manifest: &Manifest, diagnostics: &mut Vec<Diagnostic>) {
-        for (name, cmd) in &manifest.commands {
-            if cmd.description.is_empty() {
-                diagnostics.push(
-                    Diagnostic::warning(
-                        "validate",
-                        format!("command '{}' has no description", name),
-                    )
-                    .at(format!("commands.{}", name)),
-                );
-            }
-
-            // Check subcommands recursively
-            check_subcommand_descriptions(name, cmd, diagnostics);
-        }
-    }
-}
-
-fn check_subcommand_descriptions(
-    parent_path: &str,
-    cmd: &baobao_manifest::Command,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    for (name, subcmd) in &cmd.commands {
-        let path = format!("{}.{}", parent_path, name);
-        if subcmd.description.is_empty() {
-            diagnostics.push(
-                Diagnostic::warning("validate", format!("command '{}' has no description", path))
-                    .at(format!("commands.{}", path)),
-            );
-        }
-        check_subcommand_descriptions(&path, subcmd, diagnostics);
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use baobao_manifest::Manifest;
+
     use super::*;
+    use crate::pipeline::Diagnostic;
 
     fn parse_manifest(content: &str) -> Manifest {
         toml::from_str(content).expect("Failed to parse test manifest")
@@ -134,28 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_description_lint() {
-        let manifest = parse_manifest(
-            r#"
-            [cli]
-            name = "test"
-            language = "rust"
-
-            [commands.deploy]
-            description = ""
-        "#,
-        );
-
-        let mut diagnostics = Vec::new();
-        EmptyDescriptionLint.check(&manifest, &mut diagnostics);
-
-        assert_eq!(diagnostics.len(), 1);
-        assert!(diagnostics[0].message.contains("deploy"));
-        assert!(diagnostics[0].severity.is_warning());
-    }
-
-    #[test]
-    fn test_validate_phase_with_errors() {
+    fn test_with_errors() {
         struct AlwaysErrorLint;
         impl Lint for AlwaysErrorLint {
             fn name(&self) -> &'static str {
@@ -177,7 +108,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_phase_warnings_allowed() {
+    fn test_warnings_allowed() {
         let manifest = parse_manifest(
             r#"
             [cli]
@@ -191,7 +122,8 @@ mod tests {
 
         let mut ctx = CompilationContext::new(manifest);
 
-        let phase = ValidatePhase::new();
+        // Only use EmptyDescriptionLint which produces warnings
+        let phase = ValidatePhase::empty().with_lint(EmptyDescriptionLint);
         let result = phase.run(&mut ctx);
 
         // Warnings don't cause failure

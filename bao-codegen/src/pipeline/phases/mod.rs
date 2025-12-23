@@ -12,4 +12,6 @@ mod validate;
 
 pub use analyze::AnalyzePhase;
 pub use lower::LowerPhase;
-pub use validate::{Lint, ValidatePhase};
+pub use validate::{
+    CommandNamingLint, DuplicateCommandLint, EmptyDescriptionLint, Lint, ValidatePhase,
+};
