@@ -1,8 +1,14 @@
-## [0.4.3] - 2025-12-19
+## [0.5.0] - 2025-12-24
 
 ### 🚀 Features
 
 - *(codegen)* Add choices/enum support for args and flags
+- Add snapshot testing
+- *(codegen)* Add language-agnostic expression builders
+- *(codegen)* Add Application IR layer between manifest and generators
+- *(codegen)* Add Pipeline orchestrator for compilation phases
+- *(codegen)* Add validation lints and modularize validate phase
+- Add pipeline introspection and visualization support
 
 ### 🚜 Refactor
 
@@ -12,10 +18,23 @@
 - *(codegen)* Consolidate stub marker constants
 - *(codegen-typescript)* Migrate boune API from builder chains to object schema
 - *(codegen-typescript)* Centralize `boune` version into a constant
+- *(codegen-typescript)* Make boune adapter schema builders declarative
+- *(adapters)* Use `JsObject` to make `bun_sqlite` adapter more declarative
+- Make `tempfile` a workspace dependency
+- *(codegen-rust)* Use declarative `MethodChain` for fluent API declaration
+- *(codegen-rust)* Add conditional helpers to AST builders
+- *(codegen)* Add `FileRules` conveniences and centralize `GENERATED_HEADER`
+- Replace extension traits with native methods and consolidate IR types
+- *(cli)* Declarative architecture with reports, output, and ops
+
+### 📚 Documentation
+
+- Update landing page footer
 
 ### ⚙️ Miscellaneous Tasks
 
 - Release `v0.4.3`
+- Release `v0.5.0`
 ## [0.4.2] - 2025-12-17
 
 ### 🚀 Features
