@@ -7,12 +7,13 @@
 use std::collections::HashSet;
 
 use baobao_ir::{AppIR, ContextFieldInfo};
+use serde::Serialize;
 
 /// Pre-computed data from IR analysis.
 ///
 /// This struct aggregates commonly-needed analysis results that would otherwise
 /// be computed multiple times by different generators and phases.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize)]
 pub struct ComputedData {
     /// Context fields (database pools, HTTP clients, etc.)
     pub context_fields: Vec<ContextFieldInfo>,

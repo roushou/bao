@@ -117,6 +117,8 @@ dependencies = [
  "baobao-manifest",
  "eyre",
  "indexmap",
+ "serde",
+ "serde_json",
  "tempfile",
  "toml",
 ]
@@ -163,6 +165,9 @@ dependencies = [
 [[package]]
 name = "baobao-ir"
 version = "0.4.3"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "baobao-manifest"

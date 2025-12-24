@@ -3,8 +3,10 @@
 //! This module provides types for collecting errors, warnings, and informational
 //! messages during compilation phases.
 
+use serde::Serialize;
+
 /// Severity level for a diagnostic message.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum Severity {
     /// A fatal error that prevents further processing.
     Error,
@@ -37,7 +39,7 @@ impl std::fmt::Display for Severity {
 }
 
 /// A diagnostic message from a compilation phase.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Diagnostic {
     /// The severity level of this diagnostic.
     pub severity: Severity,

@@ -33,9 +33,12 @@ mod phase;
 pub mod phases;
 mod plugin;
 mod runner;
+mod snapshot;
 
 pub use context::CompilationContext;
 pub use diagnostic::{Diagnostic, Severity};
-pub use phase::Phase;
+pub use phase::{Phase, PhaseInfo};
+pub use phases::LintInfo;
 pub use plugin::Plugin;
 pub use runner::Pipeline;
+pub use snapshot::{PhaseSnapshot, SnapshotPlugin};

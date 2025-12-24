@@ -13,6 +13,10 @@ impl Lint for EmptyDescriptionLint {
         "empty-description"
     }
 
+    fn description(&self) -> &'static str {
+        "Warn about commands missing descriptions"
+    }
+
     fn check(&self, manifest: &Manifest, diagnostics: &mut Vec<Diagnostic>) {
         for (name, cmd) in &manifest.commands {
             if cmd.description.is_empty() {

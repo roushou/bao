@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use baobao_codegen::{
     language::LanguageCodegen,
-    pipeline::{Pipeline, Severity},
+    pipeline::{Pipeline, Severity, SnapshotPlugin},
     schema::{CommandTree, DisplayStyle},
 };
 use baobao_codegen_rust::Generator as RustGenerator;
@@ -30,6 +30,10 @@ pub struct BakeCommand {
     /// Target language (overrides bao.toml setting)
     #[arg(short, long)]
     pub language: Option<Language>,
+
+    /// Output intermediate representations for debugging
+    #[arg(long)]
+    pub visualize: bool,
 }
 
 impl BakeCommand {
@@ -41,9 +45,26 @@ impl BakeCommand {
         // Use CLI flag if provided, otherwise use manifest setting
         let language = self.language.unwrap_or(schema.cli.language);
 
+        // Set up the pipeline with optional visualization
+        let debug_dir = self.output.join(".bao/debug");
+        let snapshot_plugin = if self.visualize {
+            Some(SnapshotPlugin::with_output_dir(&debug_dir))
+        } else {
+            None
+        };
+
         // Run the pipeline to validate, lower, and analyze
-        let pipeline = Pipeline::new();
+        let mut pipeline = Pipeline::new();
+        if let Some(plugin) = snapshot_plugin {
+            pipeline = pipeline.plugin(plugin);
+        }
         let ctx = pipeline.run(schema.clone()).wrap_err("Pipeline failed")?;
+
+        // Print visualization info if enabled
+        if self.visualize {
+            println!("Pipeline snapshots written to: {}", debug_dir.display());
+            println!();
+        }
 
         // Print any warnings
         for diag in &ctx.diagnostics {

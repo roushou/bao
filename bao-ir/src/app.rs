@@ -10,10 +10,12 @@
 //! bao.toml → Manifest (parsing) → AppIR (lowering) → Generator (codegen)
 //! ```
 
+use serde::Serialize;
+
 use crate::{ContextFieldInfo, ContextFieldType, DatabaseType, PoolConfig, SqliteOptions};
 
 /// Application IR - unified representation for code generation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AppIR {
     /// Application metadata.
     pub meta: AppMeta,
@@ -109,7 +111,7 @@ impl AppIR {
 }
 
 /// Application metadata.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AppMeta {
     /// Application name.
     pub name: String,
@@ -122,7 +124,7 @@ pub struct AppMeta {
 }
 
 /// A shared resource in the application context.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Resource {
     /// Database connection pool.
     Database(DatabaseResource),
@@ -131,7 +133,7 @@ pub enum Resource {
 }
 
 /// Database resource configuration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DatabaseResource {
     /// Field name in the context struct.
     pub name: String,
@@ -146,14 +148,14 @@ pub struct DatabaseResource {
 }
 
 /// HTTP client resource configuration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct HttpClientResource {
     /// Field name in the context struct.
     pub name: String,
 }
 
 /// An operation in the application.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Operation {
     /// CLI command.
     Command(CommandOp),
@@ -161,7 +163,7 @@ pub enum Operation {
 }
 
 /// A CLI command operation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CommandOp {
     /// Command name.
     pub name: String,
@@ -188,7 +190,7 @@ impl CommandOp {
 }
 
 /// An input parameter for a command.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Input {
     /// Parameter name.
     pub name: String,
@@ -207,7 +209,7 @@ pub struct Input {
 }
 
 /// Input parameter type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum InputType {
     String,
     Int,
@@ -217,7 +219,7 @@ pub enum InputType {
 }
 
 /// Input parameter kind.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum InputKind {
     /// Positional argument.
     Positional,
@@ -229,7 +231,7 @@ pub enum InputKind {
 }
 
 /// A default value for an input.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum DefaultValue {
     String(String),
     Int(i64),

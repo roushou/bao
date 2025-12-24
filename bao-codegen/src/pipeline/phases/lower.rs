@@ -24,6 +24,10 @@ impl Phase for LowerPhase {
         "lower"
     }
 
+    fn description(&self) -> &'static str {
+        "Transform Manifest to Application IR"
+    }
+
     fn run(&self, ctx: &mut CompilationContext) -> Result<()> {
         ctx.ir = Some(lower_manifest(&ctx.manifest));
         Ok(())

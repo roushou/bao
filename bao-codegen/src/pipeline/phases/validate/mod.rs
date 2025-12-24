@@ -4,7 +4,7 @@ mod lint;
 pub mod lints;
 
 use eyre::{Result, bail};
-pub use lint::Lint;
+pub use lint::{Lint, LintInfo};
 pub use lints::{CommandNamingLint, DuplicateCommandLint, EmptyDescriptionLint};
 
 use crate::pipeline::{CompilationContext, Phase};
@@ -44,9 +44,25 @@ impl Default for ValidatePhase {
     }
 }
 
+impl ValidatePhase {
+    /// Get the names of all lints that will be run.
+    pub fn lint_names(&self) -> Vec<&'static str> {
+        self.lints.iter().map(|l| l.name()).collect()
+    }
+
+    /// Get information about all lints that will be run.
+    pub fn lint_info(&self) -> Vec<LintInfo> {
+        self.lints.iter().map(|l| l.info()).collect()
+    }
+}
+
 impl Phase for ValidatePhase {
     fn name(&self) -> &'static str {
         "validate"
+    }
+
+    fn description(&self) -> &'static str {
+        "Check manifest integrity and collect diagnostics"
     }
 
     fn run(&self, ctx: &mut CompilationContext) -> Result<()> {
@@ -91,6 +107,9 @@ mod tests {
         impl Lint for AlwaysErrorLint {
             fn name(&self) -> &'static str {
                 "always-error"
+            }
+            fn description(&self) -> &'static str {
+                "Always produces an error"
             }
             fn check(&self, _manifest: &Manifest, diagnostics: &mut Vec<Diagnostic>) {
                 diagnostics.push(Diagnostic::error("test", "forced error"));

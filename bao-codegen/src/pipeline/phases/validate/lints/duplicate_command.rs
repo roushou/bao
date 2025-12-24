@@ -15,6 +15,10 @@ impl Lint for DuplicateCommandLint {
         "duplicate-command"
     }
 
+    fn description(&self) -> &'static str {
+        "Detect duplicate command names and paths"
+    }
+
     fn check(&self, manifest: &Manifest, diagnostics: &mut Vec<Diagnostic>) {
         let mut seen: HashMap<String, String> = HashMap::new();
 

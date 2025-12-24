@@ -6,21 +6,28 @@
 
 use std::time::Duration;
 
+use serde::Serialize;
+
+use crate::serde_helpers::serialize_option_duration;
+
 /// Connection pool configuration.
 ///
 /// This is the unified type for pool configuration, replacing the duplicate
 /// `PoolConfigInfo` (bao-codegen) and `PoolConfig` (bao-codegen adapters).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct PoolConfig {
     /// Maximum number of connections in the pool.
     pub max_connections: Option<u32>,
     /// Minimum number of connections to maintain.
     pub min_connections: Option<u32>,
-    /// Timeout for acquiring a connection from the pool.
+    /// Timeout for acquiring a connection from the pool (milliseconds).
+    #[serde(serialize_with = "serialize_option_duration")]
     pub acquire_timeout: Option<Duration>,
-    /// Maximum time a connection can remain idle before being closed.
+    /// Maximum time a connection can remain idle before being closed (milliseconds).
+    #[serde(serialize_with = "serialize_option_duration")]
     pub idle_timeout: Option<Duration>,
-    /// Maximum lifetime of a connection.
+    /// Maximum lifetime of a connection (milliseconds).
+    #[serde(serialize_with = "serialize_option_duration")]
     pub max_lifetime: Option<Duration>,
 }
 
@@ -39,7 +46,7 @@ impl PoolConfig {
 ///
 /// This is the unified type for SQLite configuration, replacing the duplicate
 /// `SqliteConfigInfo` (bao-codegen) and `SqliteConfig` (bao-codegen adapters).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct SqliteOptions {
     /// Direct file path to the SQLite database.
     pub path: Option<String>,
@@ -51,7 +58,8 @@ pub struct SqliteOptions {
     pub journal_mode: Option<JournalMode>,
     /// Synchronous mode.
     pub synchronous: Option<SynchronousMode>,
-    /// Busy timeout.
+    /// Busy timeout (milliseconds).
+    #[serde(serialize_with = "serialize_option_duration")]
     pub busy_timeout: Option<Duration>,
     /// Enable foreign key constraints.
     pub foreign_keys: Option<bool>,
@@ -70,7 +78,7 @@ impl SqliteOptions {
 }
 
 /// SQLite journal mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize)]
 pub enum JournalMode {
     #[default]
     Wal,
@@ -96,7 +104,7 @@ impl JournalMode {
 }
 
 /// SQLite synchronous mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize)]
 pub enum SynchronousMode {
     Off,
     Normal,

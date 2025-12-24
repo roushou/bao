@@ -1,9 +1,11 @@
 //! Core type definitions.
 
+use serde::Serialize;
+
 use crate::{PoolConfig, SqliteOptions};
 
 /// Database type for context fields.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum DatabaseType {
     Postgres,
     Mysql,
@@ -22,7 +24,7 @@ impl DatabaseType {
 }
 
 /// Context field type - language-agnostic representation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ContextFieldType {
     /// Database connection pool.
     Database(DatabaseType),
@@ -38,7 +40,7 @@ impl ContextFieldType {
 }
 
 /// Info about a context field for code generation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ContextFieldInfo {
     /// Field name in the context struct.
     pub name: String,

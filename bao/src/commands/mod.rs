@@ -3,6 +3,7 @@ mod bake;
 mod check;
 mod clean;
 mod completions;
+mod explain;
 mod fmt;
 mod info;
 mod init;
@@ -17,6 +18,7 @@ use check::CheckCommand;
 use clap::{Parser, Subcommand};
 use clean::CleanCommand;
 use completions::CompletionsCommand;
+use explain::ExplainCommand;
 use eyre::Result;
 use fmt::FmtCommand;
 use info::InfoCommand;
@@ -59,6 +61,7 @@ impl Cli {
             Commands::Bake(cmd) => cmd.run(),
             Commands::Check(cmd) => cmd.run(),
             Commands::Clean(cmd) => cmd.run(),
+            Commands::Explain(cmd) => cmd.run(),
             Commands::Fmt(cmd) => cmd.run(),
             Commands::Info(cmd) => cmd.run(),
             Commands::Add(cmd) => cmd.run(),
@@ -84,6 +87,9 @@ enum Commands {
 
     /// Remove orphaned generated files
     Clean(CleanCommand),
+
+    /// Explain what the pipeline will do
+    Explain(ExplainCommand),
 
     /// Format bao.toml
     Fmt(FmtCommand),

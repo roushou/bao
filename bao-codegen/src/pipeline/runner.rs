@@ -5,6 +5,7 @@ use eyre::Result;
 
 use super::{
     CompilationContext, Phase, Plugin,
+    phase::PhaseInfo,
     phases::{AnalyzePhase, LowerPhase, ValidatePhase},
 };
 
@@ -24,7 +25,8 @@ use super::{
 /// let ctx = pipeline.run(manifest)?;
 /// ```
 pub struct Pipeline {
-    phases: Vec<Box<dyn Phase>>,
+    builtin_phases: Vec<Box<dyn Phase>>,
+    user_phases: Vec<Box<dyn Phase>>,
     plugins: Vec<Box<dyn Plugin>>,
 }
 
@@ -32,14 +34,19 @@ impl Pipeline {
     /// Create a new pipeline with default built-in phases.
     pub fn new() -> Self {
         Self {
-            phases: Vec::new(),
+            builtin_phases: vec![
+                Box::new(ValidatePhase::new()),
+                Box::new(LowerPhase),
+                Box::new(AnalyzePhase),
+            ],
+            user_phases: Vec::new(),
             plugins: Vec::new(),
         }
     }
 
     /// Add a phase to run after the built-in phases.
     pub fn phase(mut self, phase: impl Phase + 'static) -> Self {
-        self.phases.push(Box::new(phase));
+        self.user_phases.push(Box::new(phase));
         self
     }
 
@@ -47,6 +54,21 @@ impl Pipeline {
     pub fn plugin(mut self, plugin: impl Plugin + 'static) -> Self {
         self.plugins.push(Box::new(plugin));
         self
+    }
+
+    /// Iterate over all phases (builtin + user).
+    fn all_phases(&self) -> impl Iterator<Item = &Box<dyn Phase>> {
+        self.builtin_phases.iter().chain(self.user_phases.iter())
+    }
+
+    /// Get the names of all phases that will be executed.
+    pub fn phase_names(&self) -> Vec<&'static str> {
+        self.all_phases().map(|p| p.name()).collect()
+    }
+
+    /// Get information about all phases that will be executed.
+    pub fn phase_info(&self) -> Vec<PhaseInfo> {
+        self.all_phases().map(|p| p.info()).collect()
     }
 
     /// Run the pipeline on a manifest.
@@ -65,15 +87,7 @@ impl Pipeline {
     pub fn run(&self, manifest: Manifest) -> Result<CompilationContext> {
         let mut ctx = CompilationContext::new(manifest);
 
-        // Built-in phases in execution order
-        let builtin_phases: Vec<Box<dyn Phase>> = vec![
-            Box::new(ValidatePhase::new()),
-            Box::new(LowerPhase),
-            Box::new(AnalyzePhase),
-        ];
-
-        // Run built-in phases, then user phases
-        for phase in builtin_phases.iter().chain(self.phases.iter()) {
+        for phase in self.all_phases() {
             self.run_phase(phase.as_ref(), &mut ctx)?;
         }
 

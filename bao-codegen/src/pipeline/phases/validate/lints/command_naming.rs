@@ -16,6 +16,10 @@ impl Lint for CommandNamingLint {
         "command-naming"
     }
 
+    fn description(&self) -> &'static str {
+        "Check command names follow kebab-case conventions"
+    }
+
     fn check(&self, manifest: &Manifest, diagnostics: &mut Vec<Diagnostic>) {
         for (name, cmd) in &manifest.commands {
             check_command_name(name, name, diagnostics);

@@ -13,10 +13,11 @@
 //! The IR types are designed to be:
 //! - Language-agnostic (no Rust/TypeScript-specific concerns)
 //! - Application-type agnostic (CLI, HTTP server, etc.)
-//! - Self-contained (no external dependencies beyond std)
+//! - Serializable for debugging and visualization
 
 mod app;
 mod resource;
+mod serde_helpers;
 mod types;
 
 pub use app::{

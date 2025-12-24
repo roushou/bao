@@ -19,6 +19,10 @@ impl Phase for AnalyzePhase {
         "analyze"
     }
 
+    fn description(&self) -> &'static str {
+        "Compute shared data from IR"
+    }
+
     fn run(&self, ctx: &mut CompilationContext) -> Result<()> {
         let ir = ctx
             .ir

@@ -16,6 +16,8 @@ baobao-ir = { workspace = true }
 baobao-manifest = { workspace = true }
 eyre.workspace = true
 indexmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 toml = { workspace = true }
 
 [dependencies.tempfile]
