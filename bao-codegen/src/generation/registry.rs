@@ -24,7 +24,7 @@
 
 use std::path::{Path, PathBuf};
 
-use baobao_core::{FileRules, Overwrite, WriteResult};
+use baobao_core::{FileRules, GeneratedFile, Overwrite, WriteResult};
 use eyre::Result;
 
 /// Category of generated file, determining generation order and behavior.
@@ -100,6 +100,15 @@ impl FileEntry {
     /// Create a handler stub file (only if missing).
     pub fn handler(path: impl Into<String>, content: impl Into<String>) -> Self {
         Self::new(path, content, FileCategory::Handler)
+    }
+
+    /// Create from a GeneratedFile, respecting its rules.
+    pub fn from_generated<F: GeneratedFile>(
+        path: impl Into<String>,
+        file: &F,
+        category: FileCategory,
+    ) -> Self {
+        Self::new(path, file.render(), category).with_overwrite(file.rules().overwrite)
     }
 
     /// Override the default overwrite behavior.

@@ -3,7 +3,7 @@
 use std::{collections::HashSet, path::Path};
 
 use baobao_codegen::{
-    generation::{FileEntry, FileRegistry, HandlerPaths, find_orphan_commands},
+    generation::{FileCategory, FileEntry, FileRegistry, HandlerPaths, find_orphan_commands},
     language::{CleanResult, GenerateResult, LanguageCodegen, PreviewFile},
     pipeline::CompilationContext,
     schema::ComputedData,
@@ -80,15 +80,24 @@ impl Generator {
         // Use pre-computed data from pipeline
         let context_fields = self.computed.context_fields.clone();
 
-        // Config files
-        registry.register(FileEntry::config(
+        // Config files (respecting create_once rules)
+        let package_json = PackageJson::new(&self.ir.meta.name)
+            .with_version_str(&self.ir.meta.version);
+        registry.register(FileEntry::from_generated(
             "package.json",
-            PackageJson::new(&self.ir.meta.name)
-                .with_version_str(&self.ir.meta.version)
-                .render(),
+            &package_json,
+            FileCategory::Config,
         ));
-        registry.register(FileEntry::config("tsconfig.json", TsConfig.render()));
-        registry.register(FileEntry::config(".gitignore", GitIgnore.render()));
+        registry.register(FileEntry::from_generated(
+            "tsconfig.json",
+            &TsConfig,
+            FileCategory::Config,
+        ));
+        registry.register(FileEntry::from_generated(
+            ".gitignore",
+            &GitIgnore,
+            FileCategory::Config,
+        ));
 
         // Infrastructure files
         registry.register(FileEntry::infrastructure("src/index.ts", IndexTs.render()));
