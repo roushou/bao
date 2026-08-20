@@ -42,7 +42,7 @@ jobs:
         run: cargo shear
 
       - name: Check markdown formatting
-        uses: dprint/check@v3
+        uses: dprint/check@v2.3
 
   deny:
     name: cargo-deny
