@@ -1,0 +1,15 @@
+/target
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Profiling / coverage
+*.profraw
+*.profdata

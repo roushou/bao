@@ -1,0 +1,627 @@
+//! The [`Session`]: one live session process + its event log.
+
+use super::log::{LOG_CAP, output_snippet, persist_event};
+use super::store::{LoadedLog, RestoredIdentity, StoredMeta};
+use super::*;
+
+pub struct Session {
+    pub id: SessionId,
+    pub(crate) name: Mutex<Option<String>>,
+    /// The exact argv the session runs with.
+    pub command: Command,
+    /// The isolated working copy the session runs in. Mutated when the launch
+    /// saga materializes the workspace (provisional → real); everything else
+    /// reads it through [`Session::workspace`].
+    workspace: Mutex<Workspace>,
+    pub created: u64,
+    status: Mutex<Status>,
+    /// (seq, kind), newest at the back. This is the replay source for attach.
+    log: Mutex<VecDeque<(u64, EventKind)>>,
+    tx: broadcast::Sender<SessionEvent>,
+    /// `None` for restored sessions (no live process).
+    master: Mutex<Option<Box<dyn MasterPty + Send>>>,
+    writer: Mutex<Option<Box<dyn Write + Send>>>,
+    child: Mutex<Option<Box<dyn Child + Send + Sync>>>,
+    data_dir: PathBuf,
+    /// The store this session persists to and was loaded from.
+    store: SessionStore,
+    seq: AtomicU64,
+    /// Epoch ms of the last session output (0 = none yet). Drives the honest
+    /// "idle" signal.
+    last_activity: Mutex<u64>,
+    /// Cached "what it last said" — the newest output chunk, ANSI-stripped
+    /// and one-lined. Updated on append so `meta()` never scans the log.
+    last_output: Mutex<String>,
+    /// The terminal's current state (the screen), always fed — the daemon
+    /// holds it so clients can attach without replaying history.
+    pub(crate) screen: Mutex<vt100::Parser>,
+    /// Machine this session lives on.
+    host: Hostname,
+    /// Time source for this session's derivations.
+    clock: Clock,
+    /// Honest "is the session waiting for the human?" — set only by the
+    /// daemon's harness poll; `None` = we cannot tell. Cleared when the
+    /// session stops.
+    waiting: Mutex<Option<bool>>,
+    /// The latest derived picture of this session. Stateless views subscribe
+    /// here — every value is the complete current state, so a view holds
+    /// nothing else. `watch` coalesces: bursts of output never flood clients.
+    state_tx: watch::Sender<SessionMeta>,
+    /// Last picture we actually pushed, so `publish_state` only sends on
+    /// change.
+    last_state: Mutex<Option<SessionMeta>>,
+}
+
+impl Session {
+    /// Register a session (identity + a provisional workspace) at `Preparing` —
+    /// no process yet. The launch saga materializes the workspace and spawns.
+    pub(crate) fn register(spec: &SessionSpec, store: &SessionStore) -> Result<Arc<Self>, Error> {
+        if spec.command.is_empty() {
+            return Err(Error::EmptyCommand);
+        }
+        let data_dir = store.dir().join(spec.id.as_str());
+        std::fs::create_dir_all(&data_dir).ok();
+        let clock = spec.clock;
+        let created = clock.now_ms();
+        let initial = SessionMeta {
+            id: spec.id.clone(),
+            name: spec.name.clone(),
+            harness: spec.command.display(),
+            args: spec.command.clone(),
+            cwd: spec.workspace.path.clone(),
+            workspace: spec.workspace.clone(),
+            created,
+            host: Hostname::local(),
+            status: Status::Preparing,
+            last_activity: created,
+            last_output: String::new(),
+            alert: None,
+            waiting_for_input: None,
+            idle_secs: 0,
+            age_secs: 0,
+        };
+        let (state_tx, _) = watch::channel(initial.clone());
+
+        let sess = Arc::new(Session {
+            id: spec.id.clone(),
+            name: Mutex::new(spec.name.clone()),
+            command: spec.command.clone(),
+            workspace: Mutex::new(spec.workspace.clone()),
+            created,
+            status: Mutex::new(Status::Preparing),
+            log: Mutex::new(VecDeque::new()),
+            tx: broadcast::channel(4096).0,
+            master: Mutex::new(None),
+            writer: Mutex::new(None),
+            child: Mutex::new(None),
+            data_dir,
+            store: store.clone(),
+            seq: AtomicU64::new(0),
+            last_activity: Mutex::new(created),
+            last_output: Mutex::new(String::new()),
+            screen: Mutex::new(vt_screen::parser(spec.size.rows, spec.size.cols)),
+            host: initial.host.clone(),
+            clock,
+            waiting: Mutex::new(None),
+            state_tx,
+            last_state: Mutex::new(Some(initial)),
+        });
+        sess.persist_meta();
+        Ok(sess)
+    }
+
+    /// Register + spawn in one step (the synchronous launch path, used by
+    /// tests).
+    #[cfg(test)]
+    pub(crate) fn spawn(spec: &SessionSpec, store: &SessionStore) -> Result<Arc<Self>, Error> {
+        let sess = Self::register(spec, store)?;
+        sess.start_process(&spec.command, spec.size)?;
+        Ok(sess)
+    }
+
+    /// Rename this session (`None` clears the name). Persisted, and the new
+    /// picture is pushed to every watcher via the state bus.
+    pub fn rename(&self, name: Option<String>) {
+        *self.name.lock().unwrap() = name;
+        self.persist_meta();
+        self.publish_state();
+    }
+
+    /// Relaunch the session for a session whose process was lost — same env,
+    /// same session, same log. Continues the event-log sequence numbers.
+    pub fn resume(self: &Arc<Self>, command: &Command, size: TerminalSize) -> Result<(), Error> {
+        if self.status() != Status::Interrupted {
+            return Err(Error::ResumeNotInterrupted(self.status()));
+        }
+        self.start_process(command, size)?;
+        // The PTY was opened at `size`; bring the snapshot parser to the same
+        // size so screen snapshots and the PTY window never disagree.
+        self.screen.lock().unwrap().set_size(size.rows, size.cols);
+        Ok(())
+    }
+
+    /// Spawn the session process in a PTY inside the environment's working
+    /// copy, then pump its output into the log. Shared by `spawn` and
+    /// `resume`.
+    pub(crate) fn start_process(
+        self: &Arc<Self>,
+        command: &Command,
+        size: TerminalSize,
+    ) -> Result<(), Error> {
+        if self.child.lock().unwrap().is_some() {
+            return Err(Error::AlreadyRunning);
+        }
+        let cwd = self.workspace().path;
+        let pty_system = native_pty_system();
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: size.rows,
+                cols: size.cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|e| Error::Pty(e.to_string()))?;
+        let args = command.as_args();
+        let mut cmd = CommandBuilder::new(&args[0]);
+        for a in &args[1..] {
+            cmd.arg(a);
+        }
+        cmd.cwd(&cwd);
+        cmd.env("TERM", "xterm-256color");
+        let child = pair.slave.spawn_command(cmd).map_err(|e| {
+            Error::Spawn(format!(
+                "failed to spawn the harness (is it installed?): {e}"
+            ))
+        })?;
+        drop(pair.slave);
+        let mut reader = pair
+            .master
+            .try_clone_reader()
+            .map_err(|e| Error::Pty(e.to_string()))?;
+        let writer = pair
+            .master
+            .take_writer()
+            .map_err(|e| Error::Pty(e.to_string()))?;
+
+        *self.master.lock().unwrap() = Some(pair.master);
+        *self.writer.lock().unwrap() = Some(writer);
+        *self.child.lock().unwrap() = Some(child);
+        // The process is up — Preparing → Starting on launch, Interrupted →
+        // Starting on resume. Emitted before the pump starts so the first
+        // output sees `Starting` and flips it to `Running`.
+        self.transition(LifecycleEvent::Spawned)?;
+
+        // Pump the PTY master (blocking std Read) into a tokio channel.
+        let (chunk_tx, mut chunk_rx) = tokio::sync::mpsc::channel::<Option<Vec<u8>>>(256);
+        std::thread::spawn(move || {
+            let mut buf = vec![0u8; 4096];
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if chunk_tx.blocking_send(Some(buf[..n].to_vec())).is_err() {
+                            return;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+            let _ = chunk_tx.blocking_send(None);
+        });
+
+        let s2 = self.clone();
+        tokio::spawn(async move {
+            while let Some(Some(chunk)) = chunk_rx.recv().await {
+                s2.append(EventKind::Output(chunk));
+            }
+            // EOF on the master: wait for the child and record its exit.
+            let code = {
+                let child = s2.child.lock().unwrap().take();
+                match child {
+                    Some(mut ch) => match tokio::task::spawn_blocking(move || ch.wait()).await {
+                        Ok(Ok(st)) => Some(st.exit_code() as i32),
+                        _ => None,
+                    },
+                    None => None,
+                }
+            };
+            let _ = s2.transition(LifecycleEvent::Exited(code));
+        });
+        Ok(())
+    }
+
+    /// Append an event: log it (ring buffer), persist it, broadcast it.
+    fn append(&self, kind: EventKind) {
+        // First output flips a booting session to running — the boot-complete
+        // fact — before the output itself is recorded, so the log orders
+        // `Status(Running)` ahead of the first `Output`.
+        if matches!(kind, EventKind::Output(_)) && self.status() == Status::Starting {
+            let _ = self.transition(LifecycleEvent::Output);
+        }
+
+        let ts = self.clock.now_ms();
+        // Output: the sequence number and the screen update happen together
+        // under the screen lock, so `attach_point` can capture a consistent
+        // (seq, snapshot) pair — the snapshot always reflects exactly the
+        // output with seq <= the returned value.
+        let seq = match &kind {
+            EventKind::Output(bytes) => {
+                let mut screen = self.screen.lock().unwrap();
+                let seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
+                screen.process(bytes);
+                seq
+            }
+            EventKind::Status(_) => self.seq.fetch_add(1, Ordering::SeqCst) + 1,
+        };
+        if let EventKind::Output(bytes) = &kind {
+            *self.last_activity.lock().unwrap() = ts;
+            *self.last_output.lock().unwrap() = output_snippet(bytes);
+        }
+        {
+            let mut log = self.log.lock().unwrap();
+            if log.len() >= LOG_CAP {
+                log.pop_front();
+            }
+            log.push_back((seq, kind.clone()));
+        }
+        let _ = self.tx.send(SessionEvent {
+            session: self.id.clone(),
+            seq,
+            ts,
+            kind: kind.clone(),
+        });
+        persist_event(&self.data_dir, seq, ts, &kind);
+        self.publish_state();
+    }
+
+    /// Drive the session's lifecycle one event forward — the only write path
+    /// for status. Records the change as a persisted event; `meta.json` is not
+    /// updated (the log is the source of truth for state).
+    fn transition(&self, event: LifecycleEvent) -> Result<(), Error> {
+        let next = self.status().apply(&event)?;
+        if next == self.status() {
+            return Ok(());
+        }
+        *self.status.lock().unwrap() = next;
+        if next != Status::Running {
+            // A stopped session is never "waiting for you".
+            *self.waiting.lock().unwrap() = None;
+        }
+        self.append(EventKind::Status(next));
+        Ok(())
+    }
+
+    pub fn status(&self) -> Status {
+        *self.status.lock().unwrap()
+    }
+
+    /// The session's current workspace (a clone — the working copy may change
+    /// as the launch saga materializes it).
+    pub fn workspace(&self) -> Workspace {
+        self.workspace.lock().unwrap().clone()
+    }
+
+    /// Replace the workspace — the launch saga's step 1 materializes the real
+    /// working copy over the provisional one, then re-persists and publishes.
+    pub fn set_workspace(&self, workspace: Workspace) {
+        {
+            let mut cur = self.workspace.lock().unwrap();
+            *cur = workspace;
+        }
+        self.persist_meta();
+        self.publish_state();
+    }
+
+    /// A consistent (log sequence, screen snapshot) pair for attach: the
+    /// snapshot reflects exactly the output with `seq <=` the returned value,
+    /// so replaying the log from that sequence reproduces everything the
+    /// snapshot doesn't already show — no loss, no duplication. Captured
+    /// under the screen lock, matching the lock `append` holds when it
+    /// advances the sequence for output.
+    pub fn attach_point(&self) -> (u64, Vec<u8>) {
+        let screen = self.screen.lock().unwrap();
+        let seq = self.seq.load(Ordering::SeqCst);
+        (seq, vt_screen::repaint(&screen))
+    }
+
+    /// Write bytes to the session's terminal (stdin).
+    pub fn input(&self, bytes: &[u8]) -> Result<(), Error> {
+        let mut guard = self.writer.lock().unwrap();
+        let w = guard.as_mut().ok_or(Error::NotRunning)?;
+        w.write_all(bytes)?;
+        w.flush()?;
+        Ok(())
+    }
+
+    pub fn resize(&self, size: TerminalSize) -> Result<(), Error> {
+        // Lock order: screen, then master. The PTY window and the snapshot
+        // parser change together to the same size — the single size-mutation
+        // point for a running session. `append` takes only `screen`, so this
+        // order cannot deadlock with it.
+        let mut screen = self.screen.lock().unwrap();
+        let mut master = self.master.lock().unwrap();
+        let m = master.as_mut().ok_or(Error::NotRunning)?;
+        m.resize(PtySize {
+            rows: size.rows,
+            cols: size.cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| Error::Pty(e.to_string()))?;
+        screen.set_size(size.rows, size.cols);
+        Ok(())
+    }
+
+    pub fn kill(&self) -> Result<(), Error> {
+        if let Some(c) = self.child.lock().unwrap().as_mut() {
+            c.kill().map_err(|e| Error::Pty(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<SessionEvent> {
+        self.tx.subscribe()
+    }
+
+    /// Snapshot the log entries with seq > `after`, plus the latest seq,
+    /// under one lock so attach-replay cannot race with new appends.
+    pub fn snapshot_and_last(&self, after: u64) -> (Vec<SessionEvent>, u64) {
+        let log = self.log.lock().unwrap();
+        let mut out = Vec::new();
+        for (seq, kind) in log.iter() {
+            if *seq > after {
+                out.push(SessionEvent {
+                    session: self.id.clone(),
+                    seq: *seq,
+                    ts: 0,
+                    kind: kind.clone(),
+                });
+            }
+        }
+        let last = log.back().map(|(s, _)| *s).unwrap_or(0);
+        (out, last)
+    }
+
+    /// Seconds since the session last produced output — the daemon's time
+    /// fact, stamped with the injected clock.
+    pub fn idle_secs(&self) -> u64 {
+        idle_secs(*self.last_activity.lock().unwrap(), self.clock.now_ms())
+    }
+
+    /// Does this session need a human right now, and why? Derived from the
+    /// session's own facts — status and the daemon's idle measurement.
+    pub fn alert(&self) -> Option<Alert> {
+        AlertInput {
+            status: self.status(),
+            idle_secs: self.idle_secs(),
+        }
+        .alert()
+    }
+
+    /// The typed, complete snapshot of this session — identity plus the
+    /// server-derived facts (alert, waiting-for-input, time). The daemon
+    /// is the only place this is computed; views render it as-is.
+    pub fn meta(&self) -> SessionMeta {
+        let now = self.clock.now_ms();
+        let last_activity = *self.last_activity.lock().unwrap();
+        let status = self.status();
+        let workspace = self.workspace();
+        SessionMeta {
+            id: self.id.clone(),
+            name: self.name.lock().unwrap().clone(),
+            harness: self.command.display(),
+            args: self.command.clone(),
+            cwd: workspace.path.clone(),
+            workspace,
+            created: self.created,
+            host: self.host.clone(),
+            status,
+            last_activity,
+            last_output: self.last_output.lock().unwrap().clone(),
+            alert: self.alert(),
+            waiting_for_input: *self.waiting.lock().unwrap(),
+            idle_secs: idle_secs(last_activity, now),
+            age_secs: now.saturating_sub(self.created) / 1000,
+        }
+    }
+
+    /// Store the harness's honest answer to "is it waiting for the human?"
+    /// and publish it (only when it actually changed). Called by the daemon's
+    /// ticker via the adapter — core never guesses; it only stores.
+    pub fn set_waiting(&self, waiting: Option<bool>) {
+        let mut cur = self.waiting.lock().unwrap();
+        if *cur != waiting {
+            *cur = waiting;
+            drop(cur);
+            self.publish_state();
+        }
+    }
+
+    /// Re-derive the current picture and push it to state subscribers — but
+    /// only when something actually changed. Called on every session event
+    /// and by the daemon's idle ticker, so time-based signals (idle) arrive
+    /// without any client polling.
+    pub fn publish_state(&self) {
+        let m = self.meta();
+        let mut last = self.last_state.lock().unwrap();
+        if last.as_ref() != Some(&m) {
+            *last = Some(m.clone());
+            let _ = self.state_tx.send(m);
+        }
+    }
+
+    /// Watch channel of the latest complete picture. A stateless view holds
+    /// nothing else: every value is the whole current state, and
+    /// `changed()` coalesces bursts of output into the newest value.
+    pub fn state_subscribe(&self) -> watch::Receiver<SessionMeta> {
+        self.state_tx.subscribe()
+    }
+
+    fn persist_meta(&self) {
+        let _ = self
+            .store
+            .write_meta(&self.id, &StoredMeta::from_session(self));
+    }
+
+    /// Rebuild sessions from on-disk state after a daemon restart. A session
+    /// whose meta says `exited` stays exited; anything else that was running
+    /// is honestly marked [`Status::Interrupted`]. A session whose
+    /// `meta.json` can't be read (corrupt, or from a newer Bao) is salvaged
+    /// as [`Status::Damaged`] — its log is kept, so history stays viewable
+    /// and it can be removed. Only directories with *no* `meta.json` are
+    /// skipped (not a session dir).
+    pub(crate) fn restore_all(store: &SessionStore) -> Result<Vec<Arc<Self>>, Error> {
+        let mut out = Vec::new();
+        let entries = match std::fs::read_dir(store.dir()) {
+            Ok(e) => e,
+            Err(_) => return Ok(out),
+        };
+        for entry in entries.flatten() {
+            let data_dir = entry.path();
+            if !data_dir.is_dir() {
+                continue;
+            }
+            let Some(id) = data_dir.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let id = SessionId::from_str(id).unwrap_or_default();
+            let loaded = store.load_log(&id);
+            match store.read_meta(&id) {
+                Ok(Some(stored)) => {
+                    let cwd = stored.cwd.unwrap_or_default();
+                    let command = if stored.args.is_empty() {
+                        Command::parse(&stored.harness).unwrap_or_default()
+                    } else {
+                        Command::from_args(stored.args)
+                    };
+                    let workspace = stored.workspace.unwrap_or(Workspace {
+                        kind: SandboxKind::InPlace,
+                        repo: None,
+                        branch: None,
+                        path: cwd.clone(),
+                    });
+                    let status = fold_status(&loaded.log, stored.status, stored.exit_code);
+                    out.push(Self::build_restored(
+                        store,
+                        data_dir,
+                        id,
+                        RestoredIdentity {
+                            name: stored.name,
+                            command,
+                            workspace,
+                            created: stored.created,
+                            status,
+                        },
+                        loaded,
+                    ));
+                }
+                // No meta.json: not a session dir.
+                Ok(None) => {}
+                // Unreadable meta: salvage — keep the log, surface honestly.
+                Err(_) => {
+                    let workspace = Workspace {
+                        kind: SandboxKind::InPlace,
+                        repo: None,
+                        branch: None,
+                        path: data_dir.clone(),
+                    };
+                    out.push(Self::build_restored(
+                        store,
+                        data_dir,
+                        id,
+                        RestoredIdentity {
+                            name: None,
+                            command: Command::default(),
+                            workspace,
+                            created: if loaded.first_ts > 0 {
+                                loaded.first_ts
+                            } else {
+                                now_ms()
+                            },
+                            status: Status::Damaged,
+                        },
+                        loaded,
+                    ));
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Build a restored session from a parsed identity + log. Shared by the
+    /// normal and salvaged (`Damaged`) paths.
+    fn build_restored(
+        store: &SessionStore,
+        data_dir: PathBuf,
+        id: SessionId,
+        identity: RestoredIdentity,
+        loaded: LoadedLog,
+    ) -> Arc<Self> {
+        let RestoredIdentity {
+            name,
+            command,
+            workspace,
+            created,
+            status,
+        } = identity;
+        let snippet = loaded
+            .last_output
+            .as_deref()
+            .map(output_snippet)
+            .unwrap_or_default();
+        // Reconstruct the screen from the log (once, at restore) so an
+        // interrupted session attaches to its real last state.
+        let mut restored_screen = vt_screen::parser(40, 120);
+        for (_, kind) in loaded.log.iter() {
+            if let EventKind::Output(bytes) = kind {
+                restored_screen.process(bytes);
+            }
+        }
+        let initial = SessionMeta {
+            id: id.clone(),
+            name: name.clone(),
+            harness: command.display(),
+            args: command.clone(),
+            cwd: workspace.path.clone(),
+            workspace: workspace.clone(),
+            created,
+            host: Hostname::local(),
+            status,
+            last_activity: loaded.last_ts,
+            last_output: snippet.clone(),
+            alert: AlertInput {
+                status,
+                idle_secs: idle_secs(loaded.last_ts, now_ms()),
+            }
+            .alert(),
+            waiting_for_input: None,
+            idle_secs: idle_secs(loaded.last_ts, now_ms()),
+            age_secs: now_ms().saturating_sub(created) / 1000,
+        };
+        let (state_tx, _) = watch::channel(initial.clone());
+        Arc::new(Session {
+            id,
+            name: Mutex::new(name),
+            command,
+            workspace: Mutex::new(workspace),
+            created,
+            status: Mutex::new(status),
+            log: Mutex::new(loaded.log),
+            tx: broadcast::channel(4096).0,
+            master: Mutex::new(None),
+            writer: Mutex::new(None),
+            child: Mutex::new(None),
+            data_dir,
+            store: store.clone(),
+            seq: AtomicU64::new(loaded.last_seq),
+            last_activity: Mutex::new(loaded.last_ts),
+            last_output: Mutex::new(snippet),
+            screen: Mutex::new(restored_screen),
+            host: initial.host.clone(),
+            clock: Clock::system(),
+            waiting: Mutex::new(None),
+            state_tx,
+            last_state: Mutex::new(Some(initial)),
+        })
+    }
+}
