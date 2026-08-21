@@ -37,8 +37,23 @@ pub enum HostMsg {
 pub struct Conn {
     writer: ConnWriter,
     events: mpsc::UnboundedReceiver<HostMsg>,
+    /// Clone shared with every channel reader task, so frames from dedicated
+    /// watch/attach channels merge into the one event stream.
+    events_tx: mpsc::UnboundedSender<HostMsg>,
     /// What the daemon said about itself in the connect handshake.
     info: DaemonInfo,
+    /// Where the daemon lives — new channels dial the same address.
+    addr: Addr,
+}
+
+/// A freshly opened channel: the handshake reply plus the two halves. The
+/// write half is held by the channel's reader task so the server keeps the
+/// channel alive — watch/attach are server-push, the client never writes
+/// after the Hello.
+struct Channel {
+    reader: FrameReader<tokio::net::tcp::OwnedReadHalf, FromHost>,
+    writer: FrameWriter<tokio::net::tcp::OwnedWriteHalf, FromHost>,
+    reply: FromHost,
 }
 
 pub struct ConnWriter {
@@ -68,6 +83,7 @@ impl Conn {
         >::new()));
 
         let r = replies.clone();
+        let reader_events_tx = events_tx.clone();
         tokio::spawn(async move {
             let mut reader = FrameReader::<_, FromHost>::new(read);
             loop {
@@ -83,16 +99,16 @@ impl Conn {
                         }
                     }
                     Ok(Some(f)) => {
-                        if events_tx.send(HostMsg::Frame(f)).is_err() {
+                        if reader_events_tx.send(HostMsg::Frame(f)).is_err() {
                             break;
                         }
                     }
                     Ok(None) => {
-                        let _ = events_tx.send(HostMsg::Disconnected);
+                        let _ = reader_events_tx.send(HostMsg::Disconnected);
                         break;
                     }
                     Err(_) => {
-                        let _ = events_tx.send(HostMsg::Disconnected);
+                        let _ = reader_events_tx.send(HostMsg::Disconnected);
                         break;
                     }
                 }
@@ -107,12 +123,14 @@ impl Conn {
                 replies,
                 next_id: 1,
             },
+            events_tx,
             events,
             info: DaemonInfo {
                 host: Hostname::local(),
                 protocol_version: 0,
                 isolation_backends: Vec::new(),
             },
+            addr: addr.clone(),
         };
         match conn
             .call(Rpc::Hello {
@@ -155,14 +173,21 @@ impl Conn {
         }
     }
 
-    /// Subscribe to the daemon-wide state stream: the daemon pushes every
-    /// session's derived picture (current + changes) onto this connection's
-    /// event stream. The overview — no byte streams, ever.
+    /// Subscribe to the daemon-wide state stream on its own channel: the
+    /// daemon pushes every session's derived picture (current + changes). The
+    /// overview — no byte streams, ever. Frames arrive on the shared event
+    /// stream.
     pub async fn watch(&mut self) -> Result<(), Error> {
-        match self.call(Rpc::Watch).await? {
-            Reply::Ok => Ok(()),
-            _ => Err(Error::UnexpectedReply),
+        let chan = self.dial(ChannelKind::Watch).await?;
+        match chan.reply {
+            FromHost::Reply {
+                reply: Reply::Ok, ..
+            } => {}
+            FromHost::Err { error, .. } => return Err(Error::Rpc(error)),
+            _ => return Err(Error::UnexpectedReply),
         }
+        self.spawn_channel_reader(chan);
+        Ok(())
     }
 
     pub async fn launch(&mut self, request: LaunchRequest) -> Result<SessionMeta, Error> {
@@ -172,23 +197,33 @@ impl Conn {
         }
     }
 
+    /// Attach to a session's terminal on its own channel: returns the
+    /// consistent (seq, screen) snapshot; live bytes arrive on the shared
+    /// event stream.
     pub async fn attach(
         &mut self,
         session: &SessionId,
     ) -> Result<(SessionMeta, u64, Vec<u8>), Error> {
-        match self
-            .call(Rpc::Attach {
+        let chan = self
+            .dial(ChannelKind::Attach {
                 session: session.clone(),
             })
-            .await?
-        {
-            Reply::Attach {
-                session,
-                seq,
-                screen,
-            } => Ok((session, seq, screen.to_vec())),
-            _ => Err(Error::UnexpectedReply),
-        }
+            .await?;
+        let payload = match &chan.reply {
+            FromHost::Reply {
+                reply:
+                    Reply::Attach {
+                        session,
+                        seq,
+                        screen,
+                    },
+                ..
+            } => (session.clone(), *seq, screen.to_vec()),
+            FromHost::Err { error, .. } => return Err(Error::Rpc(error.clone())),
+            _ => return Err(Error::UnexpectedReply),
+        };
+        self.spawn_channel_reader(chan);
+        Ok(payload)
     }
 
     pub async fn input(
@@ -284,6 +319,69 @@ impl Conn {
     /// Next event pushed by the host (or disconnect notice).
     pub async fn next_event(&mut self) -> Option<HostMsg> {
         self.events.recv().await
+    }
+
+    /// Open a dedicated channel to the daemon: dial the same address, name
+    /// the channel in the Hello handshake, and read the single reply.
+    async fn dial(&self, kind: ChannelKind) -> Result<Channel, Error> {
+        let stream = match &self.addr {
+            Addr::Tcp { host, port } => {
+                TcpStream::connect((*host, *port))
+                    .await
+                    .map_err(|source| Error::Unreachable {
+                        addr: self.addr.clone(),
+                        source,
+                    })?
+            }
+            Addr::Unix(_) => return Err(Error::TransportUnsupported("unix socket")),
+        };
+        let (read, write) = stream.into_split();
+        // Hello: name the channel, then re-bind the write half for FromHost
+        // frames (the client never writes again on push-only channels).
+        let mut w = FrameWriter::<_, Request>::new(write);
+        w.write(&Request {
+            id: 0,
+            rpc: Rpc::Hello { kind },
+        })
+        .await?;
+        let write = w.into_inner();
+
+        let mut reader = FrameReader::<_, FromHost>::new(read);
+        let reply = reader.read().await?.ok_or(Error::LostConnection)?;
+        Ok(Channel {
+            reader,
+            writer: FrameWriter::new(write),
+            reply,
+        })
+    }
+
+    /// Stream one channel's frames into the shared event stream. The write
+    /// half is held for the task's lifetime so the server keeps the channel
+    /// open; EOF or a send failure ends it (and closes the socket).
+    fn spawn_channel_reader(&self, chan: Channel) {
+        let events_tx = self.events_tx.clone();
+        tokio::spawn(async move {
+            // Held: the server sees EOF only when we actually drop it.
+            let _keep_write_half_open = chan.writer;
+            let mut reader = chan.reader;
+            loop {
+                match reader.read().await {
+                    Ok(Some(frame)) => {
+                        if events_tx.send(HostMsg::Frame(frame)).is_err() {
+                            return;
+                        }
+                    }
+                    Ok(None) => {
+                        let _ = events_tx.send(HostMsg::Disconnected);
+                        return;
+                    }
+                    Err(_) => {
+                        let _ = events_tx.send(HostMsg::Disconnected);
+                        return;
+                    }
+                }
+            }
+        });
     }
 }
 

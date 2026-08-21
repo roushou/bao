@@ -187,9 +187,19 @@ impl Connection {
     }
 
     /// The attach channel: reply with a consistent (seq, screen) snapshot,
-    /// then stream the live session until the peer closes.
+    /// then stream the live session until the peer closes. An unresolvable
+    /// session gets a typed error, not a silent close.
     async fn run_attach(&mut self, hello_id: u32, session: SessionId) -> Result<(), Error> {
-        let sess = self.resolve(session)?;
+        let sess = match self.resolve(session) {
+            Ok(s) => s,
+            Err(e) => {
+                let _ = self.out_tx.send(FromHost::Err {
+                    id: hello_id,
+                    error: e.into(),
+                });
+                return Ok(());
+            }
+        };
         let meta = sess.meta();
         // One consistent (seq, screen) pair: the snapshot reflects exactly
         // the output up to `seq`, so replaying from `seq` delivers the rest

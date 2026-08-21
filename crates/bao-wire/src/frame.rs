@@ -55,6 +55,12 @@ impl<W: tokio::io::AsyncWrite + Unpin, M: Serialize> FrameWriter<W, M> {
     pub async fn write(&mut self, msg: &M) -> Result<(), Error> {
         write_frame(&mut self.stream, &encode(msg)?).await
     }
+
+    /// Recover the underlying stream (e.g. to re-bind it as another message
+    /// type after the channel handshake).
+    pub fn into_inner(self) -> W {
+        self.stream
+    }
 }
 
 /// One frame: a u32 big-endian length, then the bytes. Flushes per frame.
