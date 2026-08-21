@@ -101,7 +101,9 @@ The skeleton is fixed; all growth is additive and points inward.
 - `bao-core` grows by data only: new `Status` variants, new `LifecycleEvent`s
   (`Forked`, `Moved`), new alert kinds, new types. It stays pure forever.
 - `bao-wire` grows by verbs and transports, always versioned: new `Rpc`/`Reply`/
-  `FromHost` variants, and a `Transport` trait (`Tcp` now, `WebSocket` later).
+  `FromHost` variants. The transport seam itself is pinned in `channels.md` —
+  an `Addr` enum (`Tcp | Unix`), socket-per-channel, and handlers generic over
+  `AsyncRead`/`AsyncWrite`; remote (QUIC) is deferred but anticipated.
 - `bao-daemon` is the growth home: new sagas (fork, move), new sandbox backends
   (`Bubblewrap`, `Landlock`, `Seatbelt`), new harnesses (`ClaudeCode`, `Codex`),
   later `machine/` and `peers/` modules. It grows by adapter modules, never by
