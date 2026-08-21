@@ -33,6 +33,12 @@ impl<R: tokio::io::AsyncRead + Unpin, M: DeserializeOwned> FrameReader<R, M> {
             None => Ok(None),
         }
     }
+
+    /// Recover the underlying stream (e.g. to re-bind it after the channel
+    /// handshake).
+    pub fn into_inner(self) -> R {
+        self.stream
+    }
 }
 
 /// The other direction of the wire: encodes `M` as JSON, frames it, and

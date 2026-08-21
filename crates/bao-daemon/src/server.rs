@@ -7,7 +7,7 @@ use bao_core::{
     error::Error,
     protocol::{ChannelKind, FromHost, PROTOCOL_VERSION, Reply, Request, Rpc, WireError},
     sandbox::SandboxKind,
-    types::{Addr, Command, DaemonInfo, Hostname, SessionId, SessionMeta, Status, now_ms},
+    types::{Addr, Command, DaemonInfo, Hostname, SessionId, Status, WireBytes, now_ms},
 };
 use bao_wire::frame::{FrameReader, FrameWriter};
 use tokio::{
@@ -64,160 +64,281 @@ pub async fn serve(
         while let Ok((stream, _)) = listener.accept().await {
             let m = mgr.clone();
             tokio::spawn(async move {
-                let _ = Connection::accept(stream, m).await;
+                let _ = accept(stream, m).await;
             });
         }
     });
     Ok((actual, handle))
 }
 
-/// One client connection: reads requests, replies through a single writer
-/// task, and keeps the event-stream tasks for attached sessions. The read
-/// half is a `FrameReader<Request>`; outgoing messages travel as typed
-/// `FromHost` over a channel to a `FrameWriter<FromHost>` task — callers
-/// never touch frames or JSON.
+/// Bounded capacity of a control channel's outbound queue: replies and
+/// subscribed session streams share it. Every send is awaited, so a slow
+/// reader backs up here and never buffers without bound.
+const CONTROL_OUT_CAP: usize = 4096;
+
+/// Accept one connection: read its channel handshake and serve only that
+/// channel until the peer closes. Cancellation is the socket closing — no
+/// per-channel bookkeeping on the daemon side.
+async fn accept(stream: TcpStream, manager: Arc<Manager>) -> Result<(), Error> {
+    let (read, write) = stream.into_split();
+    let mut reader = FrameReader::<_, Request>::new(read);
+    // A channel must introduce itself as the first frame. Anything else
+    // is a protocol violation — drop the connection.
+    let Some(Request {
+        id,
+        rpc: Rpc::Hello { kind },
+    }) = reader.read().await.ok().flatten()
+    else {
+        eprintln!("bao daemon: connection without a Hello handshake");
+        return Ok(());
+    };
+    let read = reader.into_inner();
+    match kind {
+        ChannelKind::Control => run_control(read, write, manager, id).await,
+        ChannelKind::Watch => {
+            run_watch(FrameReader::new(read), FrameWriter::new(write), manager, id).await
+        }
+        ChannelKind::Attach { session } => run_attach(read, write, manager, id, session).await,
+    }
+}
+
+/// The RPC channel: a bounded outbound queue behind one writer task (the
+/// channel carries replies plus subscribed session streams), served until the
+/// peer closes. Awaited sends are the backpressure — a slow reader blocks its
+/// own channel and nothing else.
+async fn run_control(
+    read: tokio::net::tcp::OwnedReadHalf,
+    write: tokio::net::tcp::OwnedWriteHalf,
+    manager: Arc<Manager>,
+    hello_id: u32,
+) -> Result<(), Error> {
+    let (out_tx, mut out_rx) = mpsc::channel::<FromHost>(CONTROL_OUT_CAP);
+    let writer = tokio::spawn(async move {
+        let mut writer = FrameWriter::new(write);
+        while let Some(msg) = out_rx.recv().await {
+            if writer.write(&msg).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let mut ctrl = Connection {
+        reader: FrameReader::new(read),
+        out_tx,
+        subs: Vec::new(),
+        manager,
+    };
+    ctrl.reply(hello_id, Reply::Ok).await?;
+    let _ = ctrl.run().await;
+
+    drop(ctrl.out_tx);
+    for s in ctrl.subs {
+        s.abort();
+    }
+    let _ = writer.await;
+    Ok(())
+}
+
+/// The watch channel: writes directly to the socket — no intermediate queue,
+/// TCP backpressure is the flow control — pushing the current picture of
+/// every session, then following the state bus until the peer closes.
+/// Push-only: stray frames are ignored.
+async fn run_watch(
+    mut reader: FrameReader<tokio::net::tcp::OwnedReadHalf, Request>,
+    mut writer: FrameWriter<tokio::net::tcp::OwnedWriteHalf, FromHost>,
+    manager: Arc<Manager>,
+    hello_id: u32,
+) -> Result<(), Error> {
+    writer
+        .write(&FromHost::Reply {
+            id: hello_id,
+            reply: Reply::Ok,
+        })
+        .await?;
+    for s in manager.list() {
+        let m = s.meta();
+        writer
+            .write(&FromHost::State {
+                ts: now_ms(),
+                meta: m,
+            })
+            .await?;
+    }
+    let mut bus_rx = manager.subscribe_state();
+    loop {
+        tokio::select! {
+            ev = bus_rx.recv() => match ev {
+                Ok(StateEvent::Snapshot(meta)) => {
+                    if writer.write(&FromHost::State { ts: now_ms(), meta }).await.is_err() {
+                        return Ok(());
+                    }
+                }
+                Ok(StateEvent::Gone { session, reason }) => {
+                    if writer.write(&FromHost::Gone { session, reason }).await.is_err() {
+                        return Ok(());
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    // Missed the bus tail; the manager's list is the truth.
+                    for s in manager.list() {
+                        let m = s.meta();
+                        if writer
+                            .write(&FromHost::State { ts: now_ms(), meta: m })
+                            .await
+                            .is_err()
+                        {
+                            return Ok(());
+                        }
+                    }
+                }
+                Err(_) => return Ok(()),
+            },
+            req = reader.read() => match req {
+                Ok(None) | Err(_) => return Ok(()),
+                Ok(Some(_)) => {}
+            },
+        }
+    }
+}
+
+/// The attach channel: reply with a consistent (seq, screen) snapshot, then
+/// stream the session's live events directly to the socket until the peer
+/// closes. An unresolvable session gets a typed error, not a silent close.
+async fn run_attach(
+    read: tokio::net::tcp::OwnedReadHalf,
+    write: tokio::net::tcp::OwnedWriteHalf,
+    manager: Arc<Manager>,
+    hello_id: u32,
+    session: SessionId,
+) -> Result<(), Error> {
+    let mut reader = FrameReader::new(read);
+    let mut writer = FrameWriter::new(write);
+    let sess = match manager.resolve(session.as_str()) {
+        Ok(s) => s,
+        Err(e) => {
+            writer
+                .write(&FromHost::Err {
+                    id: hello_id,
+                    error: e.into(),
+                })
+                .await?;
+            return Ok(());
+        }
+    };
+    let meta = sess.meta();
+    // One consistent (seq, screen) pair: the snapshot reflects exactly the
+    // output up to `seq`, so replaying from `seq` delivers the rest with no
+    // loss or duplication.
+    let (seq, screen) = sess.attach_point();
+    writer
+        .write(&FromHost::Reply {
+            id: hello_id,
+            reply: Reply::Attach {
+                session: meta,
+                seq,
+                screen: WireBytes(screen),
+            },
+        })
+        .await?;
+    stream_session(&mut writer, &mut reader, &sess, &manager, seq).await
+}
+
+/// Stream one session to an attached channel: replay the log from `after`,
+/// then follow the live broadcast, the session's state channel, and the
+/// removal bus — writing directly to the socket. Backpressure is TCP's; a
+/// lagged broadcast re-syncs from the log.
+async fn stream_session(
+    writer: &mut FrameWriter<tokio::net::tcp::OwnedWriteHalf, FromHost>,
+    reader: &mut FrameReader<tokio::net::tcp::OwnedReadHalf, Request>,
+    sess: &Arc<Session>,
+    manager: &Arc<Manager>,
+    after: u64,
+) -> Result<(), Error> {
+    let mut state_rx = sess.state_subscribe();
+    let mut rx = sess.subscribe();
+    let mut bus_rx = manager.subscribe_state();
+    let sid = sess.id.clone();
+
+    let (snapshot, mut last) = sess.snapshot_and_last(after);
+    for ev in snapshot {
+        writer.write(&FromHost::from(&ev)).await?;
+    }
+    // Current derived picture, then live.
+    let current = sess.meta();
+    writer
+        .write(&FromHost::State {
+            ts: now_ms(),
+            meta: current,
+        })
+        .await?;
+
+    loop {
+        tokio::select! {
+            ev = rx.recv() => match ev {
+                Ok(ev) if ev.seq > last => {
+                    last = ev.seq;
+                    writer.write(&FromHost::from(&ev)).await?;
+                }
+                Ok(_) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    // We fell behind the broadcast buffer; the log has it all.
+                    let (snap, l) = sess.snapshot_and_last(last);
+                    for ev in snap {
+                        writer.write(&FromHost::from(&ev)).await?;
+                    }
+                    last = l;
+                }
+                Err(_) => return Ok(()),
+            },
+            changed = state_rx.changed() => {
+                if changed.is_err() {
+                    return Ok(());
+                }
+                let meta = state_rx.borrow().clone();
+                writer.write(&FromHost::State { ts: now_ms(), meta }).await?;
+            }
+            bus = bus_rx.recv() => match bus {
+                Ok(StateEvent::Gone { session, reason }) if session == sid => {
+                    let _ = writer.write(&FromHost::Gone { session, reason }).await;
+                    return Ok(());
+                }
+                Ok(_) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    // Missed some bus events; if the session is gone,
+                    // `resolve` will fail.
+                    if manager.resolve(sid.as_str()).is_err() {
+                        let _ = writer
+                            .write(&FromHost::Gone {
+                                session: sid.clone(),
+                                reason: None,
+                            })
+                            .await;
+                        return Ok(());
+                    }
+                }
+                Err(_) => return Ok(()),
+            },
+            req = reader.read() => match req {
+                // The client never sends on an attach channel; exit on close.
+                Ok(None) | Err(_) => return Ok(()),
+                Ok(Some(_)) => {}
+            },
+        }
+    }
+}
+
+/// One control connection: reads requests, replies through a single bounded
+/// writer task, and keeps the event-stream tasks for launched/resumed
+/// sessions. Outgoing messages travel as typed `FromHost` over a bounded
+/// channel; awaited sends apply backpressure to a slow reader.
 struct Connection {
     reader: FrameReader<tokio::net::tcp::OwnedReadHalf, Request>,
-    out_tx: mpsc::UnboundedSender<FromHost>,
+    out_tx: mpsc::Sender<FromHost>,
     subs: Vec<tokio::task::JoinHandle<()>>,
     manager: Arc<Manager>,
 }
 
 impl Connection {
-    /// Accept one connection: read its channel handshake and serve only that
-    /// channel until the peer closes. Cancellation is the socket closing — no
-    /// per-channel bookkeeping on the daemon side.
-    async fn accept(stream: TcpStream, manager: Arc<Manager>) -> Result<(), Error> {
-        let (read, write) = stream.into_split();
-        let mut reader = FrameReader::<_, Request>::new(read);
-        // A channel must introduce itself as the first frame. Anything else
-        // is a protocol violation — drop the connection.
-        let Some(Request {
-            id,
-            rpc: Rpc::Hello { kind },
-        }) = reader.read().await.ok().flatten()
-        else {
-            eprintln!("bao daemon: connection without a Hello handshake");
-            return Ok(());
-        };
-
-        let (out_tx, mut out_rx) = mpsc::unbounded_channel::<FromHost>();
-        let writer = tokio::spawn(async move {
-            let mut writer = FrameWriter::new(write);
-            while let Some(msg) = out_rx.recv().await {
-                if writer.write(&msg).await.is_err() {
-                    break;
-                }
-            }
-        });
-
-        let mut conn = Connection {
-            reader,
-            out_tx,
-            subs: Vec::new(),
-            manager,
-        };
-        match kind {
-            ChannelKind::Control => conn.run_control(id).await?,
-            ChannelKind::Watch => conn.run_watch(id).await?,
-            ChannelKind::Attach { session } => conn.run_attach(id, session).await?,
-        }
-
-        drop(conn.out_tx);
-        for s in conn.subs {
-            s.abort();
-        }
-        let _ = writer.await;
-        Ok(())
-    }
-
-    /// The RPC channel: acknowledge the Hello, then serve requests until the
-    /// peer closes.
-    async fn run_control(&mut self, hello_id: u32) -> Result<(), Error> {
-        self.reply(hello_id, Reply::Ok);
-        self.run().await
-    }
-
-    /// The watch channel: acknowledge, push the current picture of every
-    /// session, then follow the state bus until the peer closes. Push-only —
-    /// stray frames are ignored.
-    async fn run_watch(&mut self, hello_id: u32) -> Result<(), Error> {
-        self.reply(hello_id, Reply::Ok);
-        for s in self.manager.list() {
-            let m = s.meta();
-            self.push_state(&m);
-        }
-        let mut bus_rx = self.manager.subscribe_state();
-        let out = self.out_tx.clone();
-        let manager = self.manager.clone();
-        self.subs.push(tokio::spawn(async move {
-            loop {
-                match bus_rx.recv().await {
-                    Ok(StateEvent::Snapshot(meta)) => {
-                        if out.send(FromHost::State { ts: now_ms(), meta }).is_err() {
-                            return;
-                        }
-                    }
-                    Ok(StateEvent::Gone { session, reason }) => {
-                        if out.send(FromHost::Gone { session, reason }).is_err() {
-                            return;
-                        }
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                        for s in manager.list() {
-                            let m = s.meta();
-                            if out
-                                .send(FromHost::State {
-                                    ts: now_ms(),
-                                    meta: m,
-                                })
-                                .is_err()
-                            {
-                                return;
-                            }
-                        }
-                    }
-                    Err(_) => return,
-                }
-            }
-        }));
-        // Hold the channel open; exit on EOF or a bad frame.
-        while self.reader.read().await.is_ok_and(|r| r.is_some()) {}
-        Ok(())
-    }
-
-    /// The attach channel: reply with a consistent (seq, screen) snapshot,
-    /// then stream the live session until the peer closes. An unresolvable
-    /// session gets a typed error, not a silent close.
-    async fn run_attach(&mut self, hello_id: u32, session: SessionId) -> Result<(), Error> {
-        let sess = match self.resolve(session) {
-            Ok(s) => s,
-            Err(e) => {
-                let _ = self.out_tx.send(FromHost::Err {
-                    id: hello_id,
-                    error: e.into(),
-                });
-                return Ok(());
-            }
-        };
-        let meta = sess.meta();
-        // One consistent (seq, screen) pair: the snapshot reflects exactly
-        // the output up to `seq`, so replaying from `seq` delivers the rest
-        // with no loss or duplication.
-        let (seq, screen) = sess.attach_point();
-        self.reply(
-            hello_id,
-            Reply::Attach {
-                session: meta,
-                seq,
-                screen: bao_core::types::WireBytes(screen),
-            },
-        );
-        self.subscribe(sess, seq);
-        while self.reader.read().await.is_ok_and(|r| r.is_some()) {}
-        Ok(())
-    }
-
     async fn run(&mut self) -> Result<(), Error> {
         loop {
             let req = match self.reader.read().await {
@@ -239,11 +360,11 @@ impl Connection {
             Rpc::Hello { .. } => {
                 // The channel introduced itself on accept; a second Hello is
                 // noise, not a new channel.
-                self.err(id, "hello already sent");
+                self.err(id, "hello already sent").await?;
             }
             Rpc::List => {
                 let sessions = self.manager.list().iter().map(|s| s.meta()).collect();
-                self.reply(id, Reply::List { sessions });
+                self.reply(id, Reply::List { sessions }).await?;
             }
             Rpc::Info => {
                 // The machine's self-description: every client handshakes on
@@ -257,7 +378,8 @@ impl Connection {
                             isolation_backends: vec![SandboxKind::InPlace, SandboxKind::Worktree],
                         },
                     },
-                );
+                )
+                .await?;
             }
             Rpc::Launch(launch) => {
                 let command = match launch.command {
@@ -265,7 +387,7 @@ impl Connection {
                     None => match Command::parse("pi") {
                         Ok(c) => c,
                         Err(e) => {
-                            self.err(id, e);
+                            self.err(id, e).await?;
                             return Ok(());
                         }
                     },
@@ -273,13 +395,14 @@ impl Connection {
                 let cwd = match launch.dir {
                     Some(d) if d.is_dir() => d,
                     Some(d) => {
-                        self.err(id, format!("directory does not exist: {}", d.display()));
+                        self.err(id, format!("directory does not exist: {}", d.display()))
+                            .await?;
                         return Ok(());
                     }
                     None => match std::env::current_dir() {
                         Ok(c) => c,
                         Err(e) => {
-                            self.err(id, e);
+                            self.err(id, e).await?;
                             return Ok(());
                         }
                     },
@@ -295,10 +418,11 @@ impl Connection {
                             Reply::Launch {
                                 session: sess.meta(),
                             },
-                        );
+                        )
+                        .await?;
                         self.subscribe(sess, 0);
                     }
-                    Err(e) => self.err(id, e),
+                    Err(e) => self.err(id, e).await?,
                 }
             }
             Rpc::Resume { session, size } => match self.resolve(session) {
@@ -322,51 +446,52 @@ impl Connection {
                                 Reply::Resume {
                                     session: sess.meta(),
                                 },
-                            );
+                            )
+                            .await?;
                             self.subscribe(sess, 0);
                         }
-                        Err(e) => self.err(id, e),
+                        Err(e) => self.err(id, e).await?,
                     }
                 }
-                Err(e) => self.err(id, e),
+                Err(e) => self.err(id, e).await?,
             },
             Rpc::Input { session, data } => match self.resolve(session) {
                 Ok(sess) => {
                     if matches!(sess.status(), Status::Exited(_)) {
-                        self.err(id, "session has exited");
+                        self.err(id, "session has exited").await?;
                         return Ok(());
                     }
                     match sess.input(&data) {
-                        Ok(()) => self.reply(id, Reply::Ok),
-                        Err(e) => self.err(id, e),
+                        Ok(()) => self.reply(id, Reply::Ok).await?,
+                        Err(e) => self.err(id, e).await?,
                     }
                 }
-                Err(e) => self.err(id, e),
+                Err(e) => self.err(id, e).await?,
             },
             Rpc::Resize { session, size } => match self.resolve(session) {
                 Ok(s) => match s.resize(size) {
-                    Ok(()) => self.reply(id, Reply::Ok),
-                    Err(e) => self.err(id, e),
+                    Ok(()) => self.reply(id, Reply::Ok).await?,
+                    Err(e) => self.err(id, e).await?,
                 },
-                Err(e) => self.err(id, e),
+                Err(e) => self.err(id, e).await?,
             },
             Rpc::Stop { session } => match self.resolve(session) {
                 Ok(s) => match s.kill() {
-                    Ok(()) => self.reply(id, Reply::Ok),
-                    Err(e) => self.err(id, e),
+                    Ok(()) => self.reply(id, Reply::Ok).await?,
+                    Err(e) => self.err(id, e).await?,
                 },
-                Err(e) => self.err(id, e),
+                Err(e) => self.err(id, e).await?,
             },
             Rpc::Rename { session, name } => match self.resolve(session) {
                 Ok(s) => {
                     s.rename(name);
-                    self.reply(id, Reply::Ok);
+                    self.reply(id, Reply::Ok).await?;
                 }
-                Err(e) => self.err(id, e),
+                Err(e) => self.err(id, e).await?,
             },
             Rpc::Rm { session } => match self.manager.remove(session.as_str()) {
-                Ok(()) => self.reply(id, Reply::Ok),
-                Err(e) => self.err(id, e),
+                Ok(()) => self.reply(id, Reply::Ok).await?,
+                Err(e) => self.err(id, e).await?,
             },
         }
         Ok(())
@@ -376,22 +501,31 @@ impl Connection {
         self.manager.resolve(session.as_str())
     }
 
-    fn reply(&self, id: u32, reply: Reply) {
-        let _ = self.out_tx.send(FromHost::Reply { id, reply });
+    async fn reply(&self, id: u32, reply: Reply) -> Result<(), Error> {
+        self.out_tx
+            .send(FromHost::Reply { id, reply })
+            .await
+            .map_err(|_| {
+                Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "peer closed",
+                ))
+            })
     }
 
-    fn push_state(&self, m: &SessionMeta) {
-        let _ = self.out_tx.send(FromHost::State {
-            ts: now_ms(),
-            meta: m.clone(),
-        });
-    }
-
-    fn err(&self, id: u32, error: impl Into<WireError>) {
-        let _ = self.out_tx.send(FromHost::Err {
-            id,
-            error: error.into(),
-        });
+    async fn err(&self, id: u32, error: impl Into<WireError>) -> Result<(), Error> {
+        self.out_tx
+            .send(FromHost::Err {
+                id,
+                error: error.into(),
+            })
+            .await
+            .map_err(|_| {
+                Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "peer closed",
+                ))
+            })
     }
 
     /// Stream events for a session to this connection: replay the log from
@@ -412,7 +546,7 @@ impl Connection {
             let (snapshot, last) = sess.snapshot_and_last(after);
             let mut last = last;
             for ev in snapshot {
-                if out.send(FromHost::from(&ev)).is_err() {
+                if out.send(FromHost::from(&ev)).await.is_err() {
                     return;
                 }
             }
@@ -423,6 +557,7 @@ impl Connection {
                     ts: now_ms(),
                     meta: current,
                 })
+                .await
                 .is_err()
             {
                 return;
@@ -433,7 +568,7 @@ impl Connection {
                         match ev {
                             Ok(ev) if ev.seq > last => {
                                 last = ev.seq;
-                                if out.send(FromHost::from(&ev)).is_err() {
+                                if out.send(FromHost::from(&ev)).await.is_err() {
                                     return;
                                 }
                             }
@@ -442,7 +577,7 @@ impl Connection {
                                 // We fell behind the broadcast buffer; the log has it all.
                                 let (snap, l) = sess.snapshot_and_last(last);
                                 for ev in snap {
-                                    if out.send(FromHost::from(&ev)).is_err() {
+                                    if out.send(FromHost::from(&ev)).await.is_err() {
                                         return;
                                     }
                                 }
@@ -461,6 +596,7 @@ impl Connection {
                                 ts: now_ms(),
                                 meta,
                             })
+                            .await
                             .is_err()
                         {
                             return;
@@ -469,7 +605,7 @@ impl Connection {
                     bus = bus_rx.recv() => {
                         match bus {
                             Ok(StateEvent::Gone { session, reason }) if session == sid => {
-                                let _ = out.send(FromHost::Gone { session, reason });
+                                let _ = out.send(FromHost::Gone { session, reason }).await;
                                 return;
                             }
                             Ok(_) => {}
@@ -480,7 +616,7 @@ impl Connection {
                                     let _ = out.send(FromHost::Gone {
                                         session: sid.clone(),
                                         reason: None,
-                                    });
+                                    }).await;
                                     return;
                                 }
                             }
