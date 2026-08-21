@@ -17,6 +17,12 @@ pub enum SandboxKind {
     InPlace,
     /// A `git worktree` on its own branch, owned by Bao.
     Worktree,
+    /// A `bubblewrap` namespace sandbox: the harness runs in its own
+    /// user/pid/ipc/uts namespaces with a read-only system, a private
+    /// `/tmp`, and only its workspace writable. Stronger than a worktree;
+    /// the working copy underneath is still a git worktree when the launch
+    /// directory is inside a repo.
+    Bubblewrap,
 }
 
 impl fmt::Display for SandboxKind {
@@ -24,6 +30,7 @@ impl fmt::Display for SandboxKind {
         let s = match self {
             SandboxKind::InPlace => "inplace",
             SandboxKind::Worktree => "worktree",
+            SandboxKind::Bubblewrap => "bubblewrap",
         };
         write!(f, "{s}")
     }
@@ -36,6 +43,7 @@ impl FromStr for SandboxKind {
         match s {
             "inplace" => Ok(SandboxKind::InPlace),
             "worktree" => Ok(SandboxKind::Worktree),
+            "bubblewrap" => Ok(SandboxKind::Bubblewrap),
             other => Err(Error::BadSandboxKind(other.to_string())),
         }
     }
@@ -56,9 +64,9 @@ pub struct SandboxSpec {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Workspace {
     pub kind: SandboxKind,
-    /// Repo root (worktree sandboxes only).
+    /// Repo root (worktree-backed sandboxes only).
     pub repo: Option<PathBuf>,
-    /// Session branch (worktree sandboxes only).
+    /// Session branch (worktree-backed sandboxes only).
     pub branch: Option<String>,
     /// The working copy the session runs in.
     pub path: PathBuf,
@@ -66,7 +74,7 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn isolated(&self) -> bool {
-        self.kind == SandboxKind::Worktree
+        matches!(self.kind, SandboxKind::Worktree | SandboxKind::Bubblewrap)
     }
 }
 
@@ -95,7 +103,12 @@ mod tests {
             SandboxKind::from_str("worktree").unwrap(),
             SandboxKind::Worktree
         );
+        assert_eq!(
+            SandboxKind::from_str("bubblewrap").unwrap(),
+            SandboxKind::Bubblewrap
+        );
         assert!(SandboxKind::from_str("container").is_err());
         assert_eq!(SandboxKind::InPlace.to_string(), "inplace");
+        assert_eq!(SandboxKind::Bubblewrap.to_string(), "bubblewrap");
     }
 }

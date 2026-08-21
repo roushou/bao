@@ -9,7 +9,7 @@ use bao_core::{
 
 use crate::{error::Error, git::Git};
 
-use super::SandboxBackend;
+use super::{SandboxBackend, bubblewrap};
 
 /// Runs the session in the user's own directory — no isolation.
 pub struct InPlace;
@@ -67,21 +67,74 @@ impl SandboxBackend for GitWorktree {
     }
 
     fn compensate(&self, workspace: &Workspace) -> Result<(), Error> {
-        let repo = workspace
-            .repo
-            .as_ref()
-            .ok_or_else(|| Error::Worktree("worktree workspace without a repo root".to_string()))?;
-        let git = Git::open(repo.clone());
-        // Best-effort: git already removed the tree, and the branch and the
-        // store dir are cleaned up regardless.
-        let _ = git.worktree_remove(&workspace.path);
-        if let Some(branch) = &workspace.branch {
-            let _ = git.branch_delete(branch);
+        if workspace.repo.is_none() {
+            return Err(Error::Worktree(
+                "worktree workspace without a repo root".to_string(),
+            ));
         }
-        let _ = std::fs::remove_dir_all(&workspace.path);
-        if let Some(parent) = workspace.path.parent() {
-            let _ = std::fs::remove_dir_all(parent);
-        }
+        teardown_worktree(workspace);
         Ok(())
+    }
+}
+
+/// A `bubblewrap` namespace sandbox, backed by a git worktree when the launch
+/// directory is inside a repo (the worktree is the working copy; bwrap is the
+/// confinement).
+pub struct Bubblewrap {
+    dir: PathBuf,
+}
+
+impl Bubblewrap {
+    pub(super) fn new(dir: PathBuf) -> Self {
+        Self { dir }
+    }
+}
+
+impl SandboxBackend for Bubblewrap {
+    fn kind(&self) -> SandboxKind {
+        SandboxKind::Bubblewrap
+    }
+
+    fn prepare(&self, id: &SessionId, cwd: &Path) -> Result<Workspace, Error> {
+        if !bubblewrap::available() {
+            return Err(Error::SandboxUnavailable(SandboxKind::Bubblewrap));
+        }
+        // Working copy: a git worktree when possible, else the user's dir —
+        // the namespace confinement applies either way.
+        let mut ws = GitWorktree::new(self.dir.clone())
+            .prepare(id, cwd)
+            .unwrap_or(Workspace {
+                kind: SandboxKind::Bubblewrap,
+                repo: None,
+                branch: None,
+                path: cwd.to_path_buf(),
+            });
+        ws.kind = SandboxKind::Bubblewrap;
+        Ok(ws)
+    }
+
+    fn compensate(&self, workspace: &Workspace) -> Result<(), Error> {
+        // bwrap is per-process, so there is nothing to tear down beyond the
+        // working copy.
+        teardown_worktree(workspace);
+        Ok(())
+    }
+}
+
+/// Best-effort teardown of a worktree-backed working copy. A no-op for
+/// in-place workspaces (their directory is the user's own and is never
+/// removed).
+fn teardown_worktree(workspace: &Workspace) {
+    let Some(repo) = &workspace.repo else {
+        return;
+    };
+    let git = Git::open(repo.clone());
+    let _ = git.worktree_remove(&workspace.path);
+    if let Some(branch) = &workspace.branch {
+        let _ = git.branch_delete(branch);
+    }
+    let _ = std::fs::remove_dir_all(&workspace.path);
+    if let Some(parent) = workspace.path.parent() {
+        let _ = std::fs::remove_dir_all(parent);
     }
 }

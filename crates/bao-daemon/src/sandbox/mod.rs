@@ -11,12 +11,14 @@ use bao_core::{
     sandbox::{SandboxKind, SandboxSpec, Workspace},
     types::SessionId,
 };
+use portable_pty::CommandBuilder;
 
 use crate::error::Error;
 
 mod backends;
+mod bubblewrap;
 
-pub use backends::{GitWorktree, InPlace};
+pub use backends::{Bubblewrap, GitWorktree, InPlace};
 
 /// The capability to materialize and remove a [`Workspace`] — the launch
 /// saga's forward and compensating steps. One adapter per isolation
@@ -73,8 +75,35 @@ impl SandboxStore {
         match kind {
             SandboxKind::InPlace => Box::new(InPlace),
             SandboxKind::Worktree => Box::new(GitWorktree::new(self.dir.clone())),
+            SandboxKind::Bubblewrap => Box::new(Bubblewrap::new(self.dir.clone())),
         }
     }
+}
+
+/// Rewrite a harness command to launch inside the sandbox for `kind`. A pure
+/// function of the workspace record: the backend that *materialized* the
+/// workspace is stateful (store dir, git), but the launch wrapper is not.
+///
+/// Non-sandboxed kinds leave the command unchanged.
+pub(crate) fn wrap_command(
+    kind: SandboxKind,
+    workspace: &Workspace,
+    cmd: &mut CommandBuilder,
+) -> Result<(), Error> {
+    match kind {
+        SandboxKind::Bubblewrap => bubblewrap::wrap_command(workspace, cmd),
+        SandboxKind::InPlace | SandboxKind::Worktree => Ok(()),
+    }
+}
+
+/// The isolation backends this machine can actually provide, for the daemon's
+/// self-description. A client offers only these, never more.
+pub fn available_backends() -> Vec<SandboxKind> {
+    let mut backends = vec![SandboxKind::InPlace, SandboxKind::Worktree];
+    if bubblewrap::available() {
+        backends.push(SandboxKind::Bubblewrap);
+    }
+    backends
 }
 
 #[cfg(test)]

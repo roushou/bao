@@ -3,10 +3,7 @@
 
 use std::sync::Arc;
 
-use bao_core::{
-    sandbox::SandboxKind,
-    types::{Command, SessionId, Status, now_ms},
-};
+use bao_core::types::{Command, SessionId, Status, now_ms};
 use bao_protocol::{
     ChannelKind, DaemonInfo, FromHost, PROTOCOL_VERSION, Reply, Request, Rpc, WireBytes, WireError,
 };
@@ -407,7 +404,7 @@ impl<R: AsyncRead + Unpin> Connection<R> {
                         info: DaemonInfo {
                             host: crate::hostname::resolve(),
                             protocol_version: PROTOCOL_VERSION,
-                            sandbox_backends: vec![SandboxKind::InPlace, SandboxKind::Worktree],
+                            sandbox_backends: crate::sandbox::available_backends(),
                         },
                     },
                 )

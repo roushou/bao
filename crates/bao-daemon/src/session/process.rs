@@ -157,7 +157,7 @@ impl Session {
         if self.child.lock().unwrap().is_some() {
             return Err(Error::AlreadyRunning);
         }
-        let cwd = self.workspace().path;
+        let workspace = self.workspace();
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
@@ -167,13 +167,16 @@ impl Session {
                 pixel_height: 0,
             })
             .map_err(|e| Error::Pty(e.to_string()))?;
-        let args = command.as_args();
-        let mut cmd = CommandBuilder::new(&args[0]);
-        for a in &args[1..] {
-            cmd.arg(a);
-        }
-        cmd.cwd(&cwd);
+        let mut cmd = CommandBuilder::from_argv(
+            command
+                .as_args()
+                .iter()
+                .map(|a| std::ffi::OsString::from(a.as_str()))
+                .collect(),
+        );
+        cmd.cwd(&workspace.path);
         cmd.env("TERM", "xterm-256color");
+        crate::sandbox::wrap_command(workspace.kind, &workspace, &mut cmd)?;
         let child = pair.slave.spawn_command(cmd).map_err(|e| {
             Error::Spawn(format!(
                 "failed to spawn the harness (is it installed?): {e}"
