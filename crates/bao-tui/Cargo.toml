@@ -7,8 +7,9 @@ license.workspace = true
 publish = false
 
 [dependencies]
-bao-wire = { workspace = true }
+bao-client = { workspace = true }
 bao-core = { workspace = true }
+bao-transport = { workspace = true }
 crossterm = { workspace = true }
 futures-util = "0.3"
 ratatui = "0.29"

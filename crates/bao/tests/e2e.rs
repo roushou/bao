@@ -7,11 +7,8 @@ mod common;
 
 use std::{str::FromStr, time::Duration};
 
-use bao_core::{
-    protocol::FromHost,
-    types::{Command, LaunchRequest, Status, TerminalSize},
-};
-use bao_wire::{Conn, HostMsg};
+use bao_client::{Conn, HostEvent};
+use bao_core::types::{Command, Status, TerminalSize};
 
 /// Drain events until the status transition to exited arrives, or timeout.
 async fn wait_for_status(conn: &mut Conn, label: &str) {
@@ -19,14 +16,14 @@ async fn wait_for_status(conn: &mut Conn, label: &str) {
     loop {
         assert!(tokio::time::Instant::now() < deadline, "timeout: {label}");
         match conn.next_event().await {
-            Some(HostMsg::Frame(FromHost::Status {
+            Some(HostEvent::Status {
                 status: Status::Exited(_),
                 ..
-            })) => {
+            }) => {
                 return;
             }
-            Some(HostMsg::Frame(_)) => {}
-            Some(HostMsg::Disconnected) | None => panic!("{label}: host disconnected"),
+            Some(HostEvent::Disconnected) | None => panic!("{label}: host disconnected"),
+            Some(_) => {}
         }
     }
 }
@@ -43,16 +40,16 @@ async fn two_clients_share_one_live_session() {
         let mut a = Conn::connect(&addr).await.unwrap();
         let cmd = "bash -c 'echo READY; while read -r line; do echo \"got:$line\"; done'";
         let meta = a
-            .launch(LaunchRequest {
-                command: Some(Command::parse(cmd).unwrap()),
-                dir: Some(scratch),
-                name: None,
-                size: TerminalSize {
+            .launch(
+                Some(Command::parse(cmd).unwrap()),
+                Some(scratch),
+                None,
+                TerminalSize {
                     cols: 120,
                     rows: 40,
                 },
-                sandbox: bao_core::sandbox::SandboxSpec::default(),
-            })
+                bao_core::sandbox::SandboxSpec::default(),
+            )
             .await
             .unwrap();
         let sid = meta.id.clone();
@@ -119,16 +116,16 @@ async fn watch_receives_state_and_never_bytes() {
 
         let mut a = Conn::connect(&addr).await.unwrap();
         let meta = a
-            .launch(LaunchRequest {
-                command: Some(Command::parse("bash -c 'echo STATE_HELLO; sleep 3'").unwrap()),
-                dir: Some(scratch),
-                name: None,
-                size: TerminalSize {
+            .launch(
+                Some(Command::parse("bash -c 'echo STATE_HELLO; sleep 3'").unwrap()),
+                Some(scratch),
+                None,
+                TerminalSize {
                     cols: 120,
                     rows: 40,
                 },
-                sandbox: bao_core::sandbox::SandboxSpec::default(),
-            })
+                bao_core::sandbox::SandboxSpec::default(),
+            )
             .await
             .unwrap();
         let sid = meta.id.clone();
@@ -143,7 +140,7 @@ async fn watch_receives_state_and_never_bytes() {
                 "no state received (snippet={saw_snippet})"
             );
             match w.next_event().await {
-                Some(HostMsg::Frame(FromHost::State { meta, .. })) => {
+                Some(HostEvent::State { meta, .. }) => {
                     assert_eq!(meta.id, sid, "state must name the session");
                     if meta.last_output.contains("STATE_HELLO") {
                         saw_snippet = true;
@@ -157,11 +154,11 @@ async fn watch_receives_state_and_never_bytes() {
                         a.stop(&sid).await.unwrap();
                     }
                 }
-                Some(HostMsg::Frame(FromHost::Output { .. })) => {
+                Some(HostEvent::Output { .. }) => {
                     panic!("watcher must never receive terminal bytes")
                 }
-                Some(HostMsg::Frame(_)) => {}
-                Some(HostMsg::Disconnected) | None => panic!("watcher disconnected"),
+                Some(HostEvent::Disconnected) | None => panic!("watcher disconnected"),
+                Some(_) => {}
             }
         }
     };
@@ -182,16 +179,16 @@ async fn rename_updates_session_name() {
     let test = async {
         let mut a = Conn::connect(&addr).await.unwrap();
         let meta = a
-            .launch(LaunchRequest {
-                command: Some(Command::parse("bash -c 'echo RENAME_ME; sleep 3'").unwrap()),
-                dir: Some(scratch),
-                name: Some("old".to_string()),
-                size: TerminalSize {
+            .launch(
+                Some(Command::parse("bash -c 'echo RENAME_ME; sleep 3'").unwrap()),
+                Some(scratch),
+                Some("old".to_string()),
+                TerminalSize {
                     cols: 120,
                     rows: 40,
                 },
-                sandbox: bao_core::sandbox::SandboxSpec::default(),
-            })
+                bao_core::sandbox::SandboxSpec::default(),
+            )
             .await
             .unwrap();
         let sid = meta.id.clone();
@@ -293,7 +290,7 @@ async fn handshake_reports_daemon_info_and_typed_errors() {
         let info = conn.info();
         assert_eq!(
             info.protocol_version,
-            bao_core::protocol::PROTOCOL_VERSION,
+            bao_protocol::PROTOCOL_VERSION,
             "handshake version must match"
         );
         assert!(!info.host.as_str().is_empty());
@@ -315,7 +312,7 @@ async fn handshake_reports_daemon_info_and_typed_errors() {
         assert!(
             matches!(
                 err,
-                bao_wire::Error::Rpc(bao_core::protocol::WireError::NotFound { .. })
+                bao_client::Error::Rpc(bao_protocol::WireError::NotFound { .. })
             ),
             "rename of an unknown session must come back typed: {err}"
         );
@@ -342,18 +339,18 @@ async fn failed_backgrounded_launch_signals_gone_on_attach_stream() {
     // Request worktree isolation in a non-git dir: the sandbox step fails in
     // the background saga, which must roll the session back and signal Gone.
     let meta = a
-        .launch(LaunchRequest {
-            command: Some(Command::parse("bash -c 'echo hi'").unwrap()),
-            dir: Some(scratch),
-            name: Some("doomed".to_string()),
-            size: TerminalSize {
+        .launch(
+            Some(Command::parse("bash -c 'echo hi'").unwrap()),
+            Some(scratch),
+            Some("doomed".to_string()),
+            TerminalSize {
                 cols: 120,
                 rows: 40,
             },
-            sandbox: bao_core::sandbox::SandboxSpec {
+            bao_core::sandbox::SandboxSpec {
                 isolation: Some(bao_core::sandbox::SandboxKind::Worktree),
             },
-        })
+        )
         .await
         .unwrap();
     // The reply is the honest `Preparing` snapshot — the saga runs after.
@@ -367,11 +364,11 @@ async fn failed_backgrounded_launch_signals_gone_on_attach_stream() {
             "no Gone arrived on the attach stream"
         );
         match a.next_event().await {
-            Some(HostMsg::Frame(FromHost::Gone {
+            Some(HostEvent::Gone {
                 reason: Some(_), ..
-            })) => break,
-            Some(HostMsg::Frame(_)) => {}
-            Some(HostMsg::Disconnected) | None => panic!("host disconnected"),
+            }) => break,
+            Some(HostEvent::Disconnected) | None => panic!("host disconnected"),
+            Some(_) => {}
         }
     }
 

@@ -4,8 +4,9 @@
 
 use std::io::IsTerminal;
 
-use bao_core::types::{Addr, SessionId};
-use bao_wire::client::Conn;
+use bao_client::Conn;
+use bao_core::types::SessionId;
+use bao_transport::Addr;
 use ratatui::DefaultTerminal;
 
 use crate::{error::Error, overview::Overview, terminal::Session};

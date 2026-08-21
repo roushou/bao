@@ -20,16 +20,23 @@ never a copy.
 ## Crates
 
 ```
-bao (the binary) ──┬── bao-daemon ── bao-core, bao-wire
-                  ├── bao-tui    ── bao-wire ── bao-core
-                  └── bao-wire   ── bao-core
+bao (the binary) ──┬── bao-daemon ── bao-transport ── bao-protocol ── bao-core
+                  ├── bao-tui    ── bao-client  ── bao-transport, bao-protocol, bao-core
+                  ├── bao-client ── bao-transport, bao-protocol, bao-core
+                  └── bao-transport ── bao-core
 ```
 
 - **`bao-core`** — the pure domain: the session model, the lifecycle state
-  machine, alert signals, the wire protocol _types_, and the value types.
-  No I/O, no `tokio` — reusable by any client.
-- **`bao-wire`** — the transport: length-prefixed framing and the typed
-  client connection.
+  machine, alert signals, and the value types. No I/O, no `tokio`, no wire
+  types — reusable by any client (native or wasm).
+- **`bao-protocol`** — the wire contract: the versioned message vocabulary
+  (`Rpc`/`Reply`/`FromHost`/`WireError` and the request/reply payloads).
+  Pure `serde`, owned by neither the client nor the daemon.
+- **`bao-transport`** — the plumbing both ends share: length-prefixed
+  framing and addressing (`Addr`).
+- **`bao-client`** — the typed client: `Conn`/`ConnWriter` plus a typed
+  event stream. Frontends speak only this and `bao-core`; the wire
+  vocabulary never reaches them.
 - **`bao-daemon`** — the supervisor: owns the live PTY process, the event
   log, and the sandbox/harness adapters (the only crate that touches the OS).
 - **`bao-tui`** — the overview you see in the terminal: ratatui
@@ -37,6 +44,9 @@ bao (the binary) ──┬── bao-daemon ── bao-core, bao-wire
   theming.
 - **`bao`** — the binary (composition root); the only crate allowed `anyhow`
   (libraries use typed `thiserror` errors).
+
+Dependency direction: everything points inward at `bao-core`; `bao-core`
+points at nothing.
 
 Conventions: `unsafe_code = "forbid"` and clippy `all = "warn"` workspace-wide;
 dependencies are promoted to `[workspace.dependencies]` only when a second
@@ -48,7 +58,7 @@ Follow one keystroke in the overview:
 
 1. You press a key; `bao-tui`'s `Overview` maps it to an `Action` and updates the
    focused component's state.
-2. Anything needing the daemon becomes a typed RPC (`bao-wire` →
+2. Anything needing the daemon becomes a typed RPC (`bao-client` →
    `bao-daemon`).
 3. The daemon's `Manager` acts on the `Session` (spawn, resize, input, …) and
    appends the session's PTY output to the event log.

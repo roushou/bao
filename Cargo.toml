@@ -17,8 +17,10 @@ serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 bao-core = { path = "crates/bao-core" }
+bao-protocol = { path = "crates/bao-protocol" }
+bao-transport = { path = "crates/bao-transport" }
+bao-client = { path = "crates/bao-client" }
 bao-daemon = { path = "crates/bao-daemon" }
-bao-wire = { path = "crates/bao-wire" }
 bao-tui = { path = "crates/bao-tui" }
 
 [workspace.lints.rust]

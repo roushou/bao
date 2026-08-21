@@ -38,7 +38,7 @@ A different axis, pinned to stop the drift between the docs and the wire:
 
 | Term       | Meaning                                                                         | Where it appears                                                                                    |
 | ---------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **Host**   | The server end of the wire, and the machine that runs it — the client/host pair | `bao-daemon` crate, `FromHost`, `HostMsg`, `Addr.host`, `Hostname`, `SessionMeta.host`              |
+| **Host**   | The server end of the wire, and the machine that runs it — the client/host pair | `bao-daemon` crate, `FromHost`, `HostEvent`, `Hostname`, `SessionMeta.host`                         |
 | **Daemon** | The _process behavior_ of that host (background, always-on)                     | the `bao daemon` command (`bao daemon` = "run the daemon", the Unix `X daemon` naming like `httpd`) |
 
 The docs' "daemon" is the process; the crate and wire say "host" (the role).

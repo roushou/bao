@@ -1,5 +1,5 @@
 [package]
-name = "bao-wire"
+name = "bao-protocol"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,10 +8,8 @@ publish = false
 
 [dependencies]
 bao-core = { workspace = true }
+base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
 
 [lints]
 workspace = true

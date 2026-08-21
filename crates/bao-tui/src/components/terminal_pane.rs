@@ -3,8 +3,8 @@
 
 use std::collections::HashMap;
 
+use bao_client::{ConnWriter, HostEvent};
 use bao_core::types::{SessionId, TerminalSize};
-use bao_wire::client::{ConnWriter, HostMsg};
 use crossterm::event::KeyEvent;
 use ratatui::{Frame, layout::Rect};
 
@@ -82,7 +82,7 @@ impl TerminalPane {
         }
     }
 
-    pub fn handle_event(&mut self, sid: &SessionId, msg: HostMsg) {
+    pub fn handle_event(&mut self, sid: &SessionId, msg: HostEvent) {
         if let Some(t) = self.terminals.get_mut(sid) {
             t.handle_event(msg);
         }

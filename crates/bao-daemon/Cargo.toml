@@ -8,7 +8,8 @@ publish = false
 
 [dependencies]
 bao-core = { workspace = true }
-bao-wire = { workspace = true }
+bao-protocol = { workspace = true }
+bao-transport = { workspace = true }
 base64 = "0.22"
 crc32fast = "1.4"
 dirs = "5"

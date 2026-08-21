@@ -5,7 +5,7 @@ use std::{io::IsTerminal, path::PathBuf};
 use anyhow::Result;
 use bao_core::{
     sandbox::{SandboxKind, SandboxSpec},
-    types::{Command, LaunchRequest},
+    types::Command,
 };
 use clap::Args;
 
@@ -66,15 +66,15 @@ impl LaunchCmd {
                 .unwrap_or_default()
         );
         let meta = conn
-            .launch(LaunchRequest {
-                command: Some(command),
+            .launch(
+                Some(command),
                 dir,
-                name: self.name.clone(),
-                size: ctx.terminal_size(),
-                sandbox: SandboxSpec {
+                self.name.clone(),
+                ctx.terminal_size(),
+                SandboxSpec {
                     isolation: self.isolation,
                 },
-            })
+            )
             .await?;
         let sid = meta.id.clone();
         if self.detach {

@@ -25,8 +25,9 @@ use std::{
 
 use anyhow::Result;
 pub use attach::AttachCmd;
-use bao_core::types::{Addr, Command, DEFAULT_PORT, SessionId, TerminalSize};
-use bao_wire::Conn;
+use bao_client::Conn;
+use bao_core::types::{Command, SessionId, TerminalSize};
+use bao_transport::{Addr, DEFAULT_PORT};
 use clap::{Parser, Subcommand};
 pub use daemon::DaemonCmd;
 pub use info::InfoCmd;
@@ -101,7 +102,7 @@ impl Context {
     /// A connection to the local daemon.
     /// A connection to the local daemon. Returns the typed client error so
     /// callers can branch (e.g. `ensure_daemon` on `Unreachable`).
-    pub async fn connect(&self) -> Result<Conn, bao_wire::Error> {
+    pub async fn connect(&self) -> Result<Conn, bao_client::Error> {
         Conn::connect(&self.addr).await
     }
 
@@ -122,7 +123,7 @@ impl Context {
     pub async fn ensure_daemon(&self) -> Result<()> {
         match self.connect().await {
             Ok(_) => Ok(()),
-            Err(bao_wire::Error::Unreachable { .. }) => {
+            Err(bao_client::Error::Unreachable { .. }) => {
                 std::fs::create_dir_all(&self.home)?;
                 let daemon_log = self.home.join("daemon.log");
                 eprintln!("bao: starting daemon (log: {})", daemon_log.display());

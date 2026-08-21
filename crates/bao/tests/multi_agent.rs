@@ -9,8 +9,8 @@ use std::{
     str::FromStr,
 };
 
-use bao_core::types::{Command, LaunchRequest, TerminalSize};
-use bao_wire::Conn;
+use bao_client::Conn;
+use bao_core::types::{Command, TerminalSize};
 
 fn git(cwd: &Path, args: &[&str]) {
     let st = ProcessCommand::new("git")
@@ -50,16 +50,16 @@ async fn two_agents_share_a_repo_without_stepping_on_each_other() {
     // Launch session A (writes a marker file) and session B in the same repo.
     let mut a = Conn::connect(&addr).await.unwrap();
     let meta_a = a
-        .launch(LaunchRequest {
-            command: Some(Command::parse(&launcher("A > marker.txt; echo READY_A")).unwrap()),
-            dir: Some(repo.clone()),
-            name: Some("alpha".to_string()),
-            size: TerminalSize {
+        .launch(
+            Some(Command::parse(&launcher("A > marker.txt; echo READY_A")).unwrap()),
+            Some(repo.clone()),
+            Some("alpha".to_string()),
+            TerminalSize {
                 cols: 120,
                 rows: 40,
             },
-            sandbox: bao_core::sandbox::SandboxSpec::default(),
-        })
+            bao_core::sandbox::SandboxSpec::default(),
+        )
         .await
         .unwrap();
     let sid_a = meta_a.id.clone();
@@ -67,16 +67,16 @@ async fn two_agents_share_a_repo_without_stepping_on_each_other() {
 
     let mut b = Conn::connect(&addr).await.unwrap();
     let meta_b = b
-        .launch(LaunchRequest {
-            command: Some(Command::parse(&launcher("echo READY_B")).unwrap()),
-            dir: Some(repo.clone()),
-            name: Some("beta".to_string()),
-            size: TerminalSize {
+        .launch(
+            Some(Command::parse(&launcher("echo READY_B")).unwrap()),
+            Some(repo.clone()),
+            Some("beta".to_string()),
+            TerminalSize {
                 cols: 120,
                 rows: 40,
             },
-            sandbox: bao_core::sandbox::SandboxSpec::default(),
-        })
+            bao_core::sandbox::SandboxSpec::default(),
+        )
         .await
         .unwrap();
     let sid_b = meta_b.id.clone();

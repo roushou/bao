@@ -33,7 +33,7 @@ pub(crate) struct LoadedLog {
     /// Raw bytes of the newest output chunk.
     pub(crate) last_output: Option<Vec<u8>>,
     /// Lines skipped because their checksum did not hold (torn or flipped
-    /// writes that still parse as JSON). Zero for legacy logs.
+    /// writes that still parse as JSON). Zero for a clean log.
     pub(crate) corrupt_lines: usize,
 }
 
@@ -121,26 +121,29 @@ impl SessionStore {
                     first_ts = first_ts.min(ts);
                     last_ts = last_ts.max(ts);
                 }
-                // `kind: "status"` is a lifecycle event; anything else — or a
-                // legacy line with no `kind` — is output.
-                let kind = if v.get("kind").and_then(|k| k.as_str()) == Some("status") {
-                    let st = v
-                        .get("status")
-                        .cloned()
-                        .and_then(|s| serde_json::from_value::<Status>(s).ok());
-                    match st {
-                        Some(st) => EventKind::Status(st),
-                        None => continue,
+                // Every line names its kind; anything else is skipped.
+                let kind = match v.get("kind").and_then(|k| k.as_str()) {
+                    Some("status") => {
+                        let st = v
+                            .get("status")
+                            .cloned()
+                            .and_then(|s| serde_json::from_value::<Status>(s).ok());
+                        match st {
+                            Some(st) => EventKind::Status(st),
+                            None => continue,
+                        }
                     }
-                } else {
-                    let Some(data) = v.get("data").and_then(|d| d.as_str()) else {
-                        continue;
-                    };
-                    let Ok(bytes) = b64d(data) else {
-                        continue;
-                    };
-                    last_output = Some(bytes.clone());
-                    EventKind::Output(bytes)
+                    Some("output") => {
+                        let Some(data) = v.get("data").and_then(|d| d.as_str()) else {
+                            continue;
+                        };
+                        let Ok(bytes) = b64d(data) else {
+                            continue;
+                        };
+                        last_output = Some(bytes.clone());
+                        EventKind::Output(bytes)
+                    }
+                    _ => continue,
                 };
                 if log.len() >= LOG_CAP {
                     log.pop_front();
@@ -165,28 +168,19 @@ impl SessionStore {
     }
 }
 
-/// Lenient on-disk session record (old files lack newer fields). Also the
-/// serialized shape of `meta.json` (now versioned and written atomically by
+/// Lenient on-disk session record (newer fields may be absent). Also the
+/// serialized shape of `meta.json` (versioned and written atomically by
 /// [`SessionStore`]).
 #[derive(Serialize, Deserialize, Default)]
 #[serde(default)]
 pub(crate) struct StoredMeta {
     /// On-disk format version (missing = 1, written before versioning).
     format: Option<u32>,
-    /// (`session` still parses, for meta.json files written before the
-    /// harness terminology pass.)
-    #[serde(alias = "session")]
     pub(crate) harness: String,
     pub(crate) args: Vec<String>,
     pub(crate) cwd: Option<PathBuf>,
     pub(crate) created: u64,
-    pub(crate) status: Option<Status>,
-    /// Legacy: pre-embedding records carried the exit code separately.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) exit_code: Option<i32>,
     pub(crate) name: Option<String>,
-    /// (`env` still parses, for meta.json files written before the rename.)
-    #[serde(alias = "env")]
     pub(crate) workspace: Option<Workspace>,
 }
 
@@ -202,10 +196,6 @@ impl StoredMeta {
             args: s.command.as_args().to_vec(),
             cwd: Some(workspace.path.clone()),
             created: s.created,
-            // Status is derived from the event log, not persisted — the log
-            // is the source of truth for lifecycle state.
-            status: None,
-            exit_code: None,
             name: s.name.lock().unwrap().clone(),
             workspace: Some(workspace),
         }

@@ -1,14 +1,13 @@
 //! Client crate error type — branchable by consumers, no `anyhow`.
 
-use bao_core::{protocol::WireError, types::Addr};
+use bao_protocol::WireError;
+use bao_transport::Addr;
 use thiserror::Error as ThisError;
 
 #[derive(Debug, ThisError)]
 pub enum Error {
-    #[error("io error: {0}")]
-    Io(#[from] std::io::Error),
     #[error("{0}")]
-    Core(#[from] bao_core::error::Error),
+    Transport(#[from] bao_transport::Error),
     #[error("the {0} transport is not wired up yet")]
     TransportUnsupported(&'static str),
     #[error("cannot reach bao host at {addr} — is `bao daemon` running? ({source})")]

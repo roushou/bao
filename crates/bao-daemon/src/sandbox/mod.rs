@@ -8,10 +8,11 @@
 use std::path::{Path, PathBuf};
 
 use bao_core::{
-    error::Error,
     sandbox::{SandboxKind, SandboxSpec, Workspace},
     types::SessionId,
 };
+
+use crate::error::Error;
 
 mod backends;
 

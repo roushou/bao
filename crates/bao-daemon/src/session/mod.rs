@@ -30,20 +30,30 @@ use tokio::sync::{broadcast, watch};
 
 use bao_core::{
     alert::{Alert, AlertInput, idle_secs},
-    error::Error,
     event::{EventKind, SessionEvent, fold_status},
     lifecycle::{LifecycleEvent, Transition},
     sandbox::{SandboxKind, SandboxSpec, Workspace},
-    types::{
-        Clock, Command, Hostname, SessionId, SessionMeta, SessionSpec, Status, TerminalSize, now_ms,
-    },
+    types::{Clock, Command, SessionId, SessionMeta, Status, TerminalSize, now_ms},
 };
 
-use crate::{sandbox::SandboxStore, screen as vt_screen};
+use crate::{error::Error, sandbox::SandboxStore, screen as vt_screen};
+
+/// Everything needed to launch one session's process (the spawn parameter
+/// object — no more seven-argument constructors).
+#[derive(Debug, Clone)]
+pub struct SessionSpec {
+    pub id: SessionId,
+    pub name: Option<String>,
+    pub command: Command,
+    pub workspace: Workspace,
+    pub size: TerminalSize,
+    /// Time source — system in production; tests inject a fake clock to
+    /// drive idle-alert derivation.
+    pub clock: Clock,
+}
 
 #[cfg(test)]
 mod tests {
-    use super::log::b64e;
     use super::*;
     use bao_core::types::TermStrExt;
 
@@ -54,80 +64,58 @@ mod tests {
         dir
     }
 
-    fn write_session(
-        dir: &Path,
-        id: &str,
-        status: &str,
-        code: Option<i32>,
-        outputs: &[(&str, &str)],
-    ) {
+    fn write_session(dir: &Path, id: &str, outputs: &[(&str, &str)]) {
         let sess_dir = dir.join(id);
         std::fs::create_dir_all(&sess_dir).unwrap();
         std::fs::write(
             sess_dir.join("meta.json"),
             serde_json::json!({
                 "id": id,
-                "session": "bash fixture-session.sh",
+                "harness": "bash fixture-session.sh",
                 "cwd": "/tmp",
                 "created": 1000,
-                "status": status,
-                "exit_code": code,
             })
             .to_string(),
         )
         .unwrap();
-        let mut log = String::new();
         for (seq, text) in outputs {
             let seq: u64 = seq.parse().unwrap();
-            log.push_str(
-                &serde_json::json!({"seq": seq, "ts": seq, "data": b64e(text.as_bytes())})
-                    .to_string(),
+            super::log::persist_event(
+                &sess_dir,
+                seq,
+                seq,
+                &EventKind::Output(text.as_bytes().to_vec()),
             );
-            log.push('\n');
         }
-        std::fs::write(sess_dir.join("events.log"), log).unwrap();
     }
 
     #[test]
     fn fold_derives_status_and_applies_honesty() {
         use EventKind::{Output, Status as Ev};
-        // New-style: status events are authoritative; fold from Preparing.
+        // Status events are authoritative; fold from Preparing.
         let full = VecDeque::from(vec![
             (1u64, Ev(Status::Starting)),
             (2u64, Output(b"hi".to_vec())),
             (3u64, Ev(Status::Exited(Some(3)))),
         ]);
-        assert_eq!(fold_status(&full, None, None), Status::Exited(Some(3)));
+        assert_eq!(fold_status(&full), Status::Exited(Some(3)));
 
         // Booting but no exit: live on restore → Interrupted.
         let booting = VecDeque::from(vec![
             (1u64, Ev(Status::Starting)),
             (2u64, Output(b"hi".to_vec())),
         ]);
-        assert_eq!(fold_status(&booting, None, None), Status::Interrupted);
+        assert_eq!(fold_status(&booting), Status::Interrupted);
 
-        // Legacy: no status events → seed from meta.json.
-        let legacy = VecDeque::from(vec![(1u64, Output(b"hi".to_vec()))]);
-        assert_eq!(
-            fold_status(&legacy, Some(Status::Exited(Some(127))), Some(127)),
-            Status::Exited(Some(127))
-        );
-        assert_eq!(
-            fold_status(&legacy, Some(Status::Running), None),
-            Status::Interrupted
-        );
+        // No status events at all: Preparing seed → Interrupted.
+        let bare = VecDeque::from(vec![(1u64, Output(b"hi".to_vec()))]);
+        assert_eq!(fold_status(&bare), Status::Interrupted);
     }
 
     #[test]
     fn restore_marks_was_running_as_interrupted() {
         let dir = temp_root("interrupted");
-        write_session(
-            &dir,
-            "abc12345",
-            "running",
-            None,
-            &[("1", "hello\r\n"), ("2", "world\r\n")],
-        );
+        write_session(&dir, "abc12345", &[("1", "hello\r\n"), ("2", "world\r\n")]);
         let store = SessionStore::new(dir.clone());
         let restored = Session::restore_all(&store).unwrap();
         assert_eq!(restored.len(), 1);
@@ -148,21 +136,6 @@ mod tests {
         }
         assert!(s.input(b"x").is_err());
         assert!(s.resize(TerminalSize { cols: 80, rows: 24 }).is_err());
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn restore_preserves_exited_status_and_code() {
-        let dir = temp_root("exited");
-        write_session(&dir, "deadbeef", "exited", Some(127), &[("1", "boom\r\n")]);
-        let store = SessionStore::new(dir.clone());
-        let restored = Session::restore_all(&store).unwrap();
-        assert_eq!(restored.len(), 1);
-        assert_eq!(
-            restored[0].status(),
-            Status::Exited(Some(127)),
-            "legacy exit_code merges into the status"
-        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -225,16 +198,18 @@ mod tests {
             "{\"id\": \"damaged01\", \"harness\":",
         )
         .unwrap();
-        let mut log = String::new();
-        log.push_str(
-            &serde_json::json!({"seq": 1, "ts": 1000, "data": b64e(b"hello\r\n")}).to_string(),
+        super::log::persist_event(
+            &sess_dir,
+            1,
+            1000,
+            &EventKind::Output(b"hello\r\n".to_vec()),
         );
-        log.push('\n');
-        log.push_str(
-            &serde_json::json!({"seq": 2, "ts": 2000, "data": b64e(b"world\r\n")}).to_string(),
+        super::log::persist_event(
+            &sess_dir,
+            2,
+            2000,
+            &EventKind::Output(b"world\r\n".to_vec()),
         );
-        log.push('\n');
-        std::fs::write(sess_dir.join("events.log"), log).unwrap();
 
         let store = SessionStore::new(dir.clone());
         let restored = Session::restore_all(&store).unwrap();
@@ -288,8 +263,6 @@ mod tests {
         write_session(
             &dir.join("sessions"),
             "feed0002",
-            "running",
-            None,
             &[
                 ("1", "hello\r\n"),
                 ("2", "\u{1b}[31mred text\u{1b}[0m and\nmore\r\n"),
@@ -412,13 +385,7 @@ mod tests {
         use std::time::Duration;
 
         let home = temp_root("resume");
-        write_session(
-            &home.join("sessions"),
-            "resume0001",
-            "running",
-            None,
-            &[("1", "hello\r\n")],
-        );
+        write_session(&home.join("sessions"), "resume0001", &[("1", "hello\r\n")]);
         let m = Manager::open(&home).unwrap();
         let sess = m.resolve("resume0001").unwrap();
         assert_eq!(sess.status(), Status::Interrupted);
@@ -542,13 +509,7 @@ mod tests {
     #[tokio::test]
     async fn resume_brings_snapshot_parser_to_the_resumed_size() {
         let home = temp_root("resume-size");
-        write_session(
-            &home.join("sessions"),
-            "resz0001",
-            "running",
-            None,
-            &[("1", "hi\r\n")],
-        );
+        write_session(&home.join("sessions"), "resz0001", &[("1", "hi\r\n")]);
         let m = Manager::open(&home).unwrap();
         let sess = m.resolve("resz0001").unwrap();
         assert_eq!(sess.status(), Status::Interrupted);
@@ -567,13 +528,7 @@ mod tests {
     #[test]
     fn manager_open_loads_and_remove_forgets() {
         let home = temp_root("manager");
-        write_session(
-            &home.join("sessions"),
-            "feed0001",
-            "running",
-            None,
-            &[("1", "hi\r\n")],
-        );
+        write_session(&home.join("sessions"), "feed0001", &[("1", "hi\r\n")]);
         let m = Manager::open(&home).unwrap();
         assert_eq!(m.list().len(), 1);
         assert_eq!(m.list()[0].status(), Status::Interrupted);

@@ -3,6 +3,7 @@
 use super::log::{Durability, LOG_CAP, LogWriter, output_snippet};
 use super::store::{LoadedLog, RestoredIdentity, StoredMeta};
 use super::*;
+use bao_core::types::Hostname;
 
 pub struct Session {
     pub id: SessionId,
@@ -59,7 +60,7 @@ impl Session {
     /// no process yet. The launch saga materializes the workspace and spawns.
     pub(crate) fn register(spec: &SessionSpec, store: &SessionStore) -> Result<Arc<Self>, Error> {
         if spec.command.is_empty() {
-            return Err(Error::EmptyCommand);
+            return Err(bao_core::error::Error::EmptyCommand.into());
         }
         let data_dir = store.dir().join(spec.id.as_str());
         std::fs::create_dir_all(&data_dir).ok();
@@ -73,7 +74,7 @@ impl Session {
             cwd: spec.workspace.path.clone(),
             workspace: spec.workspace.clone(),
             created,
-            host: Hostname::local(),
+            host: crate::hostname::resolve(),
             status: Status::Preparing,
             last_activity: created,
             last_output: String::new(),
@@ -523,7 +524,7 @@ impl Session {
                         branch: None,
                         path: cwd.clone(),
                     });
-                    let status = fold_status(&loaded.log, stored.status, stored.exit_code);
+                    let status = fold_status(&loaded.log);
                     out.push(Self::build_restored(
                         store,
                         id,
@@ -605,7 +606,7 @@ impl Session {
             cwd: workspace.path.clone(),
             workspace: workspace.clone(),
             created,
-            host: Hostname::local(),
+            host: crate::hostname::resolve(),
             status,
             last_activity: loaded.last_ts,
             last_output: snippet.clone(),

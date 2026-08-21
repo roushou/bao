@@ -1,5 +1,5 @@
 [package]
-name = "bao-core"
+name = "bao-transport"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,11 +8,9 @@ publish = false
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-thiserror = { workspace = true }
-uuid = { version = "1", features = ["v4"] }
-
-[dev-dependencies]
 serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

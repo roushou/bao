@@ -1,28 +1,12 @@
-//! Domain vocabulary: typed identities, addresses, commands, and data
-//! structures shared across the wire, the host, and the clients.
-//!
-//! The point of this module is that nothing is passed around as a bare
-//! string or untyped JSON anymore: addresses are `Addr`, session ids are
-//! `SessionId`, session commands are `Command`, and session metadata is
-//! the `SessionMeta` struct — one type from host to UI.
+//! Domain vocabulary: typed identities, commands, and the data structures
+//! shared across the wire, the host, and the clients. Pure data and rules —
+//! no I/O, no `tokio`, no process or filesystem access.
 
-use std::{
-    fmt,
-    net::{IpAddr, Ipv4Addr},
-    path::PathBuf,
-    str::FromStr,
-    sync::OnceLock,
-};
+use std::{fmt, path::PathBuf, str::FromStr};
 
-use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    error::Error,
-    sandbox::{SandboxKind, SandboxSpec, Workspace},
-};
-
-pub const DEFAULT_PORT: u16 = 14551;
+use crate::{error::Error, sandbox::Workspace};
 
 /// Epoch milliseconds.
 pub fn now_ms() -> u64 {
@@ -50,71 +34,6 @@ impl Clock {
 impl Default for Clock {
     fn default() -> Self {
         Self::system()
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Addr
-// ---------------------------------------------------------------------------
-
-/// Where the daemon listens or a client connects: a TCP host:port, or a
-/// unix socket path for local-only transport. The transport is part of the
-/// address, so dialing and binding are both driven by one value.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Addr {
-    /// TCP host:port (loopback by default; explicit `--port` for remote).
-    Tcp { host: IpAddr, port: u16 },
-    /// A unix socket path — local-only, trust via filesystem permissions.
-    Unix(PathBuf),
-}
-
-impl Addr {
-    pub fn local(port: u16) -> Self {
-        Self::Tcp {
-            host: IpAddr::V4(Ipv4Addr::LOCALHOST),
-            port,
-        }
-    }
-
-    pub fn localhost() -> Self {
-        Self::local(DEFAULT_PORT)
-    }
-
-    /// A unix-socket address for local-only transport.
-    pub fn unix(path: impl Into<PathBuf>) -> Self {
-        Self::Unix(path.into())
-    }
-}
-
-impl Default for Addr {
-    fn default() -> Self {
-        Self::localhost()
-    }
-}
-
-impl fmt::Display for Addr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Addr::Tcp { host, port } => write!(f, "{host}:{port}"),
-            Addr::Unix(path) => write!(f, "unix:{}", path.display()),
-        }
-    }
-}
-
-impl FromStr for Addr {
-    type Err = Error;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Error> {
-        if let Some(path) = s.strip_prefix("unix:") {
-            if path.is_empty() {
-                return Err(Error::BadAddr);
-            }
-            return Ok(Addr::Unix(PathBuf::from(path)));
-        }
-        let (host, port) = s.rsplit_once(':').ok_or(Error::BadAddr)?;
-        let host = host.parse().map_err(|_| Error::BadAddr)?;
-        let port = port.parse().map_err(|_| Error::BadAddr)?;
-        Ok(Addr::Tcp { host, port })
     }
 }
 
@@ -162,8 +81,8 @@ impl FromStr for SessionId {
 /// Lifecycle of a session, typed everywhere — never matched as a string.
 /// The exit code rides with `Exited` so the type cannot express a running
 /// session with a code, or an exited one without one (`None` = exited, code
-/// unknown — legacy records, or a signal death we couldn't translate).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// unknown).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
     /// Registered, sandbox not yet built (the launch saga's first step).
@@ -181,47 +100,6 @@ pub enum Status {
     Damaged,
     /// Relocated to another machine (future; kept so the enum is closed).
     Moved,
-}
-
-impl<'de> Deserialize<'de> for Status {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        use serde::de::Error as _;
-        // Accept both the modern tagged form ({"exited": 1}) and the legacy
-        // unit strings ("exited") old records wrote.
-        let v = serde_json::Value::deserialize(d)?;
-        match v {
-            serde_json::Value::String(s) => match s.as_str() {
-                "preparing" => Ok(Status::Preparing),
-                "starting" => Ok(Status::Starting),
-                "running" => Ok(Status::Running),
-                // Legacy: the code was carried separately.
-                "exited" => Ok(Status::Exited(None)),
-                "interrupted" => Ok(Status::Interrupted),
-                "damaged" => Ok(Status::Damaged),
-                "moved" => Ok(Status::Moved),
-                other => Err(D::Error::custom(format!("unknown status {other:?}"))),
-            },
-            serde_json::Value::Object(mut o) => {
-                if let Some(code) = o.remove("exited") {
-                    let code = serde_json::from_value(code).map_err(D::Error::custom)?;
-                    Ok(Status::Exited(code))
-                } else if o.contains_key("running") {
-                    Ok(Status::Running)
-                } else if o.contains_key("interrupted") {
-                    Ok(Status::Interrupted)
-                } else if o.contains_key("damaged") {
-                    Ok(Status::Damaged)
-                } else if o.contains_key("moved") {
-                    Ok(Status::Moved)
-                } else {
-                    Err(D::Error::custom("missing status key"))
-                }
-            }
-            other => Err(D::Error::custom(format!(
-                "expected a status, got {other:?}"
-            ))),
-        }
-    }
 }
 
 impl fmt::Display for Status {
@@ -243,7 +121,7 @@ impl fmt::Display for Status {
 // Command
 // ---------------------------------------------------------------------------
 
-/// The exact argv an session runs with. Parsed once (shell-words), then kept as
+/// The exact argv a session runs with. Parsed once (shell-words), then kept as
 /// the source of truth — display strings are not round-trip-safe.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -343,76 +221,21 @@ impl Default for TerminalSize {
 }
 
 // ---------------------------------------------------------------------------
-// WireBytes
-// ---------------------------------------------------------------------------
-
-/// A byte payload carried over the JSON wire as base64.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WireBytes(pub Vec<u8>);
-
-impl Serialize for WireBytes {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(&B64.encode(&self.0))
-    }
-}
-
-impl<'de> Deserialize<'de> for WireBytes {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let encoded = String::deserialize(d)?;
-        B64.decode(&encoded)
-            .map(WireBytes)
-            .map_err(serde::de::Error::custom)
-    }
-}
-
-impl From<Vec<u8>> for WireBytes {
-    fn from(v: Vec<u8>) -> Self {
-        Self(v)
-    }
-}
-
-impl From<&[u8]> for WireBytes {
-    fn from(v: &[u8]) -> Self {
-        Self(v.to_vec())
-    }
-}
-
-impl std::ops::Deref for WireBytes {
-    type Target = [u8];
-
-    fn deref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Hostname
 // ---------------------------------------------------------------------------
 
 /// The identity of the machine a session lives on — a validated hostname.
-/// The seed of location grouping and the spatial the overview: machines are
-/// grouped by this, so it must be stable and never empty.
+/// The seed of location grouping: machines are grouped by this, so it must be
+/// stable and never empty.
 ///
-/// [`Hostname::local`] resolves the local machine once per process (cached),
-/// in this order (first non-empty wins): `BAO_HOST` env override → the
-/// `hostname` command (authoritative on POSIX) → `HOSTNAME` env →
-/// `"localhost"` (honest last resort — a machine with no name is still one
-/// machine).
+/// This is pure data: parsing and validation only. Resolving the *local*
+/// machine's hostname (env + `hostname` command) is I/O and lives in
+/// `bao-daemon`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Hostname(String);
 
 impl Hostname {
-    /// The local machine's hostname, resolved once per process and cached.
-    /// Deterministic: the same machine resolves to the same value across
-    /// restarts (unless it is renamed).
-    pub fn local() -> Self {
-        static LOCAL: OnceLock<Hostname> = OnceLock::new();
-        LOCAL
-            .get_or_init(|| Hostname(Self::resolve_local()))
-            .clone()
-    }
-
     /// A hostname from a trusted source (config, tests). Rejects values
     /// that cannot identify a machine: empty, or containing whitespace or
     /// control characters.
@@ -426,20 +249,6 @@ impl Hostname {
 
     pub fn as_str(&self) -> &str {
         &self.0
-    }
-
-    fn resolve_local() -> String {
-        std::env::var("BAO_HOST")
-            .ok()
-            .or_else(|| {
-                std::process::Command::new("hostname")
-                    .output()
-                    .ok()
-                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            })
-            .or_else(|| std::env::var("HOSTNAME").ok())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "localhost".to_string())
     }
 }
 
@@ -470,21 +279,17 @@ pub struct SessionMeta {
     pub name: Option<String>,
     /// Display string of the harness command running this session (args
     /// joined). pi/Claude Code/Codex CLI are harnesses; the session is the
-    /// running unit of work — this session. (`session` still parses, for old
-    /// files.)
-    #[serde(alias = "session")]
+    /// running unit of work.
     pub harness: String,
     /// Exact argv.
     pub args: Command,
     pub cwd: PathBuf,
     /// The workspace the session works in — where, its git identity, and the
-    /// isolation claim. (`env` still parses, for files/wires written before
-    /// the rename.)
-    #[serde(alias = "env")]
+    /// isolation claim.
     pub workspace: Workspace,
     pub created: u64,
     /// Machine the session lives on (the daemon's hostname). The seed of
-    /// location grouping and the spatial the overview.
+    /// location grouping.
     pub host: Hostname,
     pub status: Status,
     /// Epoch ms of the last session output (0 = none yet).
@@ -503,58 +308,6 @@ pub struct SessionMeta {
     pub idle_secs: u64,
     /// Seconds since the session was created. Same: daemon-stamped.
     pub age_secs: u64,
-}
-
-// ---------------------------------------------------------------------------
-// SessionSpec
-// ---------------------------------------------------------------------------
-
-/// Everything needed to launch one session's process (the spawn parameter
-/// object — no more seven-argument constructors).
-#[derive(Debug, Clone)]
-pub struct SessionSpec {
-    pub id: SessionId,
-    pub name: Option<String>,
-    pub command: Command,
-    pub workspace: Workspace,
-    pub size: TerminalSize,
-    /// Time source — system in production; tests inject a fake clock to
-    /// drive idle-alert derivation.
-    pub clock: Clock,
-}
-
-// ---------------------------------------------------------------------------
-// LaunchRequest
-// ---------------------------------------------------------------------------
-
-/// Wire payload for `Rpc::Launch`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LaunchRequest {
-    #[serde(default)]
-    pub command: Option<Command>,
-    #[serde(default)]
-    pub dir: Option<PathBuf>,
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub size: TerminalSize,
-    /// Requested isolation. `None` = resolve the strongest the machine
-    /// offers for the launch dir.
-    #[serde(default)]
-    pub sandbox: SandboxSpec,
-}
-
-/// What the daemon says about itself — read by the client handshake and the
-/// machine-facing views (sessions across machines, the RTS).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DaemonInfo {
-    /// The machine this daemon runs on.
-    pub host: Hostname,
-    /// Wire protocol version this daemon speaks.
-    pub protocol_version: u32,
-    /// Isolation backends this machine can provide. A client offers only
-    /// these, never more.
-    pub sandbox_backends: Vec<SandboxKind>,
 }
 
 // ---------------------------------------------------------------------------
@@ -630,36 +383,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn addr_tcp_parses_and_displays() {
-        let a: Addr = "127.0.0.1:14551".parse().unwrap();
-        assert_eq!(a, Addr::local(14551));
-        assert_eq!(a.to_string(), "127.0.0.1:14551");
-        assert!(matches!(
-            Addr::localhost(),
-            Addr::Tcp {
-                port: DEFAULT_PORT,
-                ..
-            }
-        ));
-    }
-
-    #[test]
-    fn addr_unix_parses_and_displays() {
-        let a: Addr = "unix:/tmp/bao.sock".parse().unwrap();
-        assert_eq!(a, Addr::Unix("/tmp/bao.sock".into()));
-        assert_eq!(a.to_string(), "unix:/tmp/bao.sock");
-        assert!(matches!(Addr::unix("/s"), Addr::Unix(_)));
-    }
-
-    #[test]
-    fn addr_rejects_garbage() {
-        assert!("".parse::<Addr>().is_err());
-        assert!("unix:".parse::<Addr>().is_err());
-        assert!("nonsense".parse::<Addr>().is_err());
-        assert!("host:notaport".parse::<Addr>().is_err());
-    }
-
-    #[test]
     fn hostname_parse_rejects_non_names() {
         assert!(Hostname::parse("").is_err());
         assert!(Hostname::parse("   ").is_err());
@@ -682,10 +405,5 @@ mod tests {
         assert_eq!(json, "\"vps-01\"");
         let back: Hostname = serde_json::from_str(&json).unwrap();
         assert_eq!(back, h);
-    }
-
-    #[test]
-    fn hostname_local_never_empty() {
-        assert!(!Hostname::local().as_str().is_empty());
     }
 }

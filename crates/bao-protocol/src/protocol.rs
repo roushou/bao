@@ -1,22 +1,19 @@
-//! Wire protocol between bao clients and the daemon: the typed message
-//! vocabulary. Framing lives in `bao-wire`; this crate holds only the data
-//! contract.
-//!
-//! Messages are typed: `Request`/`Rpc` client->daemon, `FromHost`
-//! daemon->client, with `Reply` payloads. The JSON shape is an implementation
+//! The wire message vocabulary: `Request`/`Rpc` client→daemon, `FromHost`
+//! daemon→client, with `Reply` payloads. The JSON shape is an implementation
 //! detail of serde; nothing is matched as a string on the Rust side.
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
+use bao_core::{
     event::{EventKind, SessionEvent},
     sandbox::SandboxKind,
-    types::{DaemonInfo, LaunchRequest, SessionId, SessionMeta, Status, TerminalSize, WireBytes},
+    types::{SessionId, SessionMeta, Status, TerminalSize},
 };
+
+use crate::types::{DaemonInfo, LaunchRequest, WireBytes};
 
 /// The wire protocol version. Bump on breaking wire changes; a client whose
 /// version differs from the daemon's refuses to talk rather than misparse.
-/// Nothing has shipped yet, so this is the first contract: v1.
 pub const PROTOCOL_VERSION: u32 = 1;
 
 // ---------------------------------------------------------------------------
@@ -155,7 +152,7 @@ pub enum FromHost {
         ts: u64,
     },
     /// A session was removed — a rolled-back launch, or an `rm`. Watchers
-    /// drop it from the the overview. `reason` is `Some` when a launch failed
+    /// drop it from the overview. `reason` is `Some` when a launch failed
     /// and was compensated; `None` for an ordinary removal.
     Gone {
         session: SessionId,
@@ -236,29 +233,18 @@ impl From<std::io::Error> for WireError {
     }
 }
 
-impl From<&crate::error::Error> for WireError {
-    fn from(e: &crate::error::Error) -> Self {
-        use crate::error::Error;
-        match e {
-            Error::NotFound(q) => WireError::NotFound { query: q.clone() },
-            Error::Ambiguous(q, ids, names) => WireError::Ambiguous {
-                query: q.clone(),
-                ids: *ids,
-                names: *names,
-            },
-            Error::AlreadyRunning => WireError::AlreadyRunning,
-            Error::NotRunning => WireError::NotRunning,
-            Error::SandboxUnavailable(kind) => WireError::SandboxUnavailable { kind: *kind },
-            // The rest are user-correctable or daemon faults; carry the text.
-            other => WireError::BadRequest {
-                message: other.to_string(),
-            },
+/// Domain validation errors are, by construction, a bad request — the daemon
+/// is fine; the client asked for something invalid.
+impl From<&bao_core::error::Error> for WireError {
+    fn from(e: &bao_core::error::Error) -> Self {
+        WireError::BadRequest {
+            message: e.to_string(),
         }
     }
 }
 
-impl From<crate::error::Error> for WireError {
-    fn from(e: crate::error::Error) -> Self {
+impl From<bao_core::error::Error> for WireError {
+    fn from(e: bao_core::error::Error) -> Self {
         WireError::from(&e)
     }
 }

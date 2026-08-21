@@ -23,13 +23,15 @@ cargo run            # the overview (starts its daemon automatically)
 
 ## Project layout
 
-| crate        | what it is                                                                     |
-| ------------ | ------------------------------------------------------------------------------ |
-| `bao-core`   | the pure domain — session model, lifecycle, alert, protocol types, value types |
-| `bao-wire`   | the transport — framing + the typed client                                     |
-| `bao-daemon` | the supervisor — PTY process, sandbox/harness adapters, wire server            |
-| `bao-tui`    | the overview UI (ratatui components)                                           |
-| `bao`        | the `bao` binary (composition root)                                            |
+| crate           | what it is                                                                               |
+| --------------- | ---------------------------------------------------------------------------------------- |
+| `bao-core`      | the pure domain — session model, lifecycle, alert, value types (no I/O, no tokio)        |
+| `bao-protocol`  | the wire contract — `Rpc`/`Reply`/`FromHost`/`WireError`/payloads, versioned             |
+| `bao-transport` | framing + addressing (`FrameReader`/`FrameWriter`, `Addr`) — shared by client and server |
+| `bao-client`    | the typed client — `Conn`/`ConnWriter` + a typed event stream                            |
+| `bao-daemon`    | the supervisor — PTY process, sandbox/harness adapters, wire server                      |
+| `bao-tui`       | the overview UI (ratatui components)                                                     |
+| `bao`           | the `bao` binary (composition root)                                                      |
 
 ## Conventions
 

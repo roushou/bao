@@ -81,10 +81,12 @@ name = "bao"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bao-client",
  "bao-core",
  "bao-daemon",
+ "bao-protocol",
+ "bao-transport",
  "bao-tui",
- "bao-wire",
  "clap",
  "crossterm",
  "dirs",
@@ -93,10 +95,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bao-client"
+version = "0.1.0"
+dependencies = [
+ "bao-core",
+ "bao-protocol",
+ "bao-transport",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
 name = "bao-core"
 version = "0.1.0"
 dependencies = [
- "base64",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
@@ -108,7 +120,8 @@ name = "bao-daemon"
 version = "0.1.0"
 dependencies = [
  "bao-core",
- "bao-wire",
+ "bao-protocol",
+ "bao-transport",
  "base64",
  "crc32fast",
  "dirs",
@@ -121,28 +134,37 @@ dependencies = [
 ]
 
 [[package]]
-name = "bao-tui"
+name = "bao-protocol"
 version = "0.1.0"
 dependencies = [
  "bao-core",
- "bao-wire",
+ "base64",
+ "serde",
+]
+
+[[package]]
+name = "bao-transport"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
+name = "bao-tui"
+version = "0.1.0"
+dependencies = [
+ "bao-client",
+ "bao-core",
+ "bao-transport",
  "crossterm",
  "futures-util",
  "ratatui",
  "thiserror 2.0.20",
  "tokio",
  "vt100",
-]
-
-[[package]]
-name = "bao-wire"
-version = "0.1.0"
-dependencies = [
- "bao-core",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
 ]
 
 [[package]]

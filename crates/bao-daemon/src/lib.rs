@@ -2,7 +2,9 @@
 //! event log, the sandbox and harness adapters — and serves clients over the
 //! wire.
 
+pub mod error;
 pub mod harness;
+pub mod hostname;
 pub mod sandbox;
 pub mod screen;
 pub mod server;

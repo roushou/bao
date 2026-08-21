@@ -16,7 +16,7 @@ Every FSM is five things, always in this form:
    when it's cheap.
 2. **An `Event` enum** — the machine's _input alphabet_, one variant per real
    fact. Not the storage/wire type: the storage layer maps onto this alphabet
-   (see `lifecycle_event` in `session.rs`).
+   (see `lifecycle_event` in `event.rs`).
 3. **One total `apply(&self, event) -> Result<Self>`** — the whole machine in
    one function. Every legal edge is a named `(state, event)` pair; the last
    arm is `Err(IllegalTransition)`. No guards, no I/O, no context.

@@ -6,8 +6,8 @@ mod common;
 
 use std::time::Duration;
 
-use bao_core::types::{Command, LaunchRequest, TerminalSize};
-use bao_wire::Conn;
+use bao_client::Conn;
+use bao_core::types::{Command, TerminalSize};
 
 #[tokio::test]
 async fn interrupted_session_can_be_resumed() {
@@ -21,16 +21,16 @@ async fn interrupted_session_can_be_resumed() {
     let mut a = Conn::connect(&addr).await.unwrap();
     let cmd = "bash -c 'echo READY; while read -r line; do echo \"got:$line\"; done'";
     let meta = a
-        .launch(LaunchRequest {
-            command: Some(Command::parse(cmd).unwrap()),
-            dir: Some(scratch),
-            name: Some("worker".to_string()),
-            size: TerminalSize {
+        .launch(
+            Some(Command::parse(cmd).unwrap()),
+            Some(scratch),
+            Some("worker".to_string()),
+            TerminalSize {
                 cols: 120,
                 rows: 40,
             },
-            sandbox: bao_core::sandbox::SandboxSpec::default(),
-        })
+            bao_core::sandbox::SandboxSpec::default(),
+        )
         .await
         .unwrap();
     let sid = meta.id;

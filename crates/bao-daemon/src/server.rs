@@ -4,12 +4,16 @@
 use std::sync::Arc;
 
 use bao_core::{
-    error::Error,
-    protocol::{ChannelKind, FromHost, PROTOCOL_VERSION, Reply, Request, Rpc, WireError},
     sandbox::SandboxKind,
-    types::{Addr, Command, DaemonInfo, Hostname, SessionId, Status, WireBytes, now_ms},
+    types::{Command, SessionId, Status, now_ms},
 };
-use bao_wire::frame::{FrameReader, FrameWriter};
+use bao_protocol::{
+    ChannelKind, DaemonInfo, FromHost, PROTOCOL_VERSION, Reply, Request, Rpc, WireBytes, WireError,
+};
+use bao_transport::{
+    Addr,
+    frame::{FrameReader, FrameWriter},
+};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
@@ -17,6 +21,7 @@ use tokio::{
 };
 
 use crate::{
+    error::Error,
     harness::HarnessRegistry,
     session::{Manager, Session, StateEvent},
 };
@@ -400,7 +405,7 @@ impl<R: AsyncRead + Unpin> Connection<R> {
                     id,
                     Reply::Info {
                         info: DaemonInfo {
-                            host: Hostname::local(),
+                            host: crate::hostname::resolve(),
                             protocol_version: PROTOCOL_VERSION,
                             sandbox_backends: vec![SandboxKind::InPlace, SandboxKind::Worktree],
                         },
@@ -665,9 +670,11 @@ mod tests {
     };
 
     use bao_core::{
-        protocol::{ChannelKind, FromHost, PROTOCOL_VERSION, Reply, Request, Rpc, WireError},
         sandbox::{SandboxKind, SandboxSpec},
-        types::{Command, LaunchRequest, SessionId, TerminalSize},
+        types::{Command, SessionId, TerminalSize},
+    };
+    use bao_protocol::{
+        ChannelKind, FromHost, LaunchRequest, PROTOCOL_VERSION, Reply, Request, Rpc, WireError,
     };
     use tokio::io::{AsyncWriteExt, DuplexStream, duplex};
 

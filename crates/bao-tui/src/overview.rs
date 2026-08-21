@@ -3,12 +3,12 @@
 
 use std::time::Duration;
 
+use bao_client::{Conn, ConnWriter, HostEvent};
 use bao_core::{
-    protocol::{FromHost, Reply, Rpc},
     sandbox::SandboxSpec,
-    types::{Addr, LaunchRequest, SessionId, TerminalSize},
+    types::{SessionId, TerminalSize},
 };
-use bao_wire::client::{Conn, ConnWriter, HostMsg};
+use bao_transport::Addr;
 use crossterm::event::{Event as CrosstermEvent, EventStream};
 use futures_util::{StreamExt, future::Either};
 use ratatui::{Frame, layout::Rect, widgets::Paragraph};
@@ -35,9 +35,9 @@ pub struct Overview {
     should_quit: bool,
     components: Components,
     writer: ConnWriter,
-    events: mpsc::UnboundedReceiver<HostMsg>,
+    events: mpsc::UnboundedReceiver<HostEvent>,
     twriter: Option<ConnWriter>,
-    tevents: Option<mpsc::UnboundedReceiver<HostMsg>>,
+    tevents: Option<mpsc::UnboundedReceiver<HostEvent>>,
     addr: Addr,
     reconnecting: bool,
     width: u16,
@@ -49,7 +49,7 @@ impl Overview {
         host: String,
         addr: Addr,
         writer: ConnWriter,
-        events: mpsc::UnboundedReceiver<HostMsg>,
+        events: mpsc::UnboundedReceiver<HostEvent>,
     ) -> Self {
         Overview {
             rows: Vec::new(),
@@ -92,8 +92,8 @@ impl Overview {
 
             enum Tick {
                 Key(Option<std::result::Result<CrosstermEvent, std::io::Error>>),
-                Host(HostMsg),
-                Term(Option<HostMsg>),
+                Host(HostEvent),
+                Term(Option<HostEvent>),
                 Refresh,
             }
             let terminal_fut = match self.tevents.as_mut() {
@@ -102,14 +102,14 @@ impl Overview {
             };
             let state_ev = async {
                 if self.reconnecting {
-                    futures_util::future::pending::<Option<HostMsg>>().await
+                    futures_util::future::pending::<Option<HostEvent>>().await
                 } else {
                     self.events.recv().await
                 }
             };
             let tick = tokio::select! {
                 ev = stream.next() => Tick::Key(ev),
-                msg = state_ev => Tick::Host(msg.unwrap_or(HostMsg::Disconnected)),
+                msg = state_ev => Tick::Host(msg.unwrap_or(HostEvent::Disconnected)),
                 msg = terminal_fut => Tick::Term(msg),
                 _ = tokio::time::sleep(Duration::from_secs(1)) => Tick::Refresh,
             };
@@ -275,15 +275,11 @@ impl Overview {
     // -- effects -----------------------------------------------------------
 
     async fn refresh(&mut self) -> Result<(), Error> {
-        match self.writer.call(Rpc::List).await? {
-            Reply::List { sessions } => {
-                self.rows = sessions.iter().map(Row::from_meta).collect();
-                sort_rows(&mut self.rows);
-                self.components.rail.reconcile(&self.rows);
-                Ok(())
-            }
-            _ => Err(bao_wire::Error::UnexpectedReply.into()),
-        }
+        let sessions = self.writer.list().await?;
+        self.rows = sessions.iter().map(Row::from_meta).collect();
+        sort_rows(&mut self.rows);
+        self.components.rail.reconcile(&self.rows);
+        Ok(())
     }
 
     async fn ensure_terminal(&mut self, sid: &SessionId) {
@@ -315,12 +311,7 @@ impl Overview {
         let mut terminal = Terminal::new(sid.clone(), None, terminal_pane.0, terminal_pane.1);
         let size = terminal.viewport_size();
         if let Some(w) = self.twriter.as_mut() {
-            let _ = w
-                .call(Rpc::Resize {
-                    session: sid.clone(),
-                    size,
-                })
-                .await;
+            let _ = w.resize(sid, size).await;
         }
         let meta = {
             let w = self.twriter.as_mut().expect("connection opened above");
@@ -352,12 +343,7 @@ impl Overview {
 
     async fn terminal_resize(&mut self, sid: &SessionId, size: TerminalSize) {
         if let Some(w) = self.twriter.as_mut() {
-            let _ = w
-                .call(Rpc::Resize {
-                    session: sid.clone(),
-                    size,
-                })
-                .await;
+            let _ = w.resize(sid, size).await;
         }
     }
 
@@ -387,16 +373,8 @@ impl Overview {
         let Some(sid) = self.components.rail.selection().cloned() else {
             return;
         };
-        match self
-            .writer
-            .call(Rpc::Resume {
-                session: sid.clone(),
-                size: TerminalSize::default(),
-            })
-            .await
-        {
-            Ok(Reply::Resume { .. }) => self.flash(format!("resumed {sid}")),
-            Ok(_) => self.status_line = "resume: unexpected reply".to_string(),
+        match self.writer.resume(&sid, TerminalSize::default()).await {
+            Ok(_) => self.flash(format!("resumed {sid}")),
             Err(e) => self.status_line = format!("resume failed: {e:#}"),
         }
     }
@@ -411,54 +389,32 @@ impl Overview {
         let Some(sid) = self.components.rail.selection().cloned() else {
             return;
         };
-        match self
-            .writer
-            .call(Rpc::Stop {
-                session: sid.clone(),
-            })
-            .await
-        {
-            Ok(Reply::Ok) => self.flash(format!("stopped {sid}")),
-            Ok(_) => self.status_line = "stop: unexpected reply".to_string(),
+        match self.writer.stop(&sid).await {
+            Ok(()) => self.flash(format!("stopped {sid}")),
             Err(e) => self.status_line = format!("stop failed: {e:#}"),
         }
     }
 
     async fn rm(&mut self, sid: &SessionId) {
-        match self
-            .writer
-            .call(Rpc::Rm {
-                session: sid.clone(),
-            })
-            .await
-        {
-            Ok(Reply::Ok) => {
+        match self.writer.rm(sid).await {
+            Ok(()) => {
                 self.components.terminal_pane.remove(sid);
                 if self.components.rail.selection() == Some(sid) {
                     self.components.rail.set_selection(None);
                 }
                 self.flash(format!("removed {sid}"));
             }
-            Ok(_) => self.status_line = "rm: unexpected reply".to_string(),
             Err(e) => self.status_line = format!("rm failed: {e:#}"),
         }
     }
 
     async fn rename(&mut self, sid: &SessionId, name: Option<String>) {
-        match self
-            .writer
-            .call(Rpc::Rename {
-                session: sid.clone(),
-                name: name.clone(),
-            })
-            .await
-        {
-            Ok(Reply::Ok) => {
+        match self.writer.rename(sid, name.clone()).await {
+            Ok(()) => {
                 if let Some(n) = name {
                     self.flash(format!("renamed to {n}"));
                 }
             }
-            Ok(_) => self.status_line = "rename: unexpected reply".to_string(),
             Err(e) => self.status_line = format!("rename failed: {e:#}"),
         }
     }
@@ -466,16 +422,16 @@ impl Overview {
     async fn create(&mut self, name: Option<String>) {
         match self
             .writer
-            .call(Rpc::Launch(LaunchRequest {
-                command: None,
-                dir: None,
+            .launch(
+                None,
+                None,
                 name,
-                size: TerminalSize::default(),
-                sandbox: SandboxSpec::default(),
-            }))
+                TerminalSize::default(),
+                SandboxSpec::default(),
+            )
             .await
         {
-            Ok(Reply::Launch { session }) => {
+            Ok(session) => {
                 // Select + dock the new session so its boot is visible in the
                 // terminal pane while the the overview stays focused (the
                 // backgrounded saga advances it preparing → starting → running).
@@ -483,7 +439,6 @@ impl Overview {
                 self.components.rail.set_selection(Some(sid.clone()));
                 self.ensure_terminal(&sid).await;
             }
-            Ok(_) => self.status_line = "launch: unexpected reply".to_string(),
             Err(e) => self.status_line = format!("launch failed: {e:#}"),
         }
     }
@@ -527,9 +482,9 @@ impl Overview {
         }
     }
 
-    async fn handle_host(&mut self, msg: HostMsg) {
+    async fn handle_host(&mut self, msg: HostEvent) {
         match msg {
-            HostMsg::Frame(FromHost::State { meta, .. }) => {
+            HostEvent::State { meta, .. } => {
                 let needs = |m: &bao_core::types::SessionMeta| {
                     Group::of(m.status, m.alert, m.waiting_for_input == Some(true))
                         == Group::NeedsYou
@@ -563,7 +518,7 @@ impl Overview {
                 }
                 sort_rows(&mut self.rows);
             }
-            HostMsg::Frame(FromHost::Gone { session, reason }) => {
+            HostEvent::Gone { session, reason } => {
                 self.rows.retain(|r| r.id != session);
                 self.components.terminal_pane.remove(&session);
                 self.components.rail.reconcile(&self.rows);
@@ -573,8 +528,7 @@ impl Overview {
                     self.status_line = format!("launch failed: {reason}");
                 }
             }
-            HostMsg::Frame(_) => {}
-            HostMsg::Disconnected => {
+            HostEvent::Disconnected => {
                 self.status_line = "reconnecting…".to_string();
                 self.components.terminal_pane.clear();
                 self.tevents = None;
@@ -585,28 +539,28 @@ impl Overview {
                     self.flash("reconnected");
                 }
             }
+            _ => {}
         }
     }
 
-    async fn handle_terminal(&mut self, msg: Option<HostMsg>) {
+    async fn handle_terminal(&mut self, msg: Option<HostEvent>) {
         match msg {
-            Some(HostMsg::Frame(f)) => {
-                let sid = match &f {
-                    FromHost::Output { session, .. } => Some(session.clone()),
-                    FromHost::Status { session, .. } => Some(session.clone()),
-                    FromHost::State { meta, .. } => Some(meta.id.clone()),
-                    _ => None,
-                };
-                if let Some(sid) = sid {
-                    self.components
-                        .terminal_pane
-                        .handle_event(&sid, HostMsg::Frame(f));
-                }
-            }
-            Some(HostMsg::Disconnected) | None => {
+            Some(HostEvent::Disconnected) | None => {
                 self.components.terminal_pane.clear();
                 self.tevents = None;
                 self.status_line = "terminal detached".to_string();
+            }
+            Some(ev) => {
+                let sid = match &ev {
+                    HostEvent::Output { session, .. } => Some(session.clone()),
+                    HostEvent::Status { session, .. } => Some(session.clone()),
+                    HostEvent::State { meta, .. } => Some(meta.id.clone()),
+                    HostEvent::Gone { session, .. } => Some(session.clone()),
+                    HostEvent::Disconnected => None,
+                };
+                if let Some(sid) = sid {
+                    self.components.terminal_pane.handle_event(&sid, ev);
+                }
             }
         }
     }

@@ -42,26 +42,11 @@ fn lifecycle_event(kind: &EventKind) -> Option<LifecycleEvent> {
     }
 }
 
-/// Derive a restored session's lifecycle state: fold the event log (new-style
-/// sessions carry `Status` events), or seed from the legacy `meta.json` status
-/// when the log has none. The honesty rule applies after: any live state found
+/// Derive a restored session's lifecycle state: fold the event log from the
+/// `Preparing` seed. The honesty rule applies after: any live state found
 /// on a fresh restore is `Interrupted` — the process is gone.
-pub fn fold_status(
-    log: &VecDeque<(u64, EventKind)>,
-    legacy: Option<Status>,
-    legacy_code: Option<i32>,
-) -> Status {
-    let has_status_events = log.iter().any(|(_, k)| matches!(k, EventKind::Status(_)));
-    let last = if has_status_events {
-        Status::Preparing.fold(log.iter().filter_map(|(_, k)| lifecycle_event(k)))
-    } else {
-        match legacy {
-            // Legacy records carried the exit code separately.
-            Some(Status::Exited(code)) => Status::Exited(code.or(legacy_code)),
-            Some(s) => s,
-            None => Status::Running,
-        }
-    };
+pub fn fold_status(log: &VecDeque<(u64, EventKind)>) -> Status {
+    let last = Status::Preparing.fold(log.iter().filter_map(|(_, k)| lifecycle_event(k)));
     match last {
         // The process is gone; nothing that looked live can still be running.
         Status::Preparing | Status::Starting | Status::Running => Status::Interrupted,

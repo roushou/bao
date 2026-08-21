@@ -9,5 +9,5 @@ pub enum Error {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("{0}")]
-    Client(#[from] bao_wire::error::Error),
+    Client(#[from] bao_client::Error),
 }

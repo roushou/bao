@@ -6,8 +6,8 @@ use std::{
     time::Duration,
 };
 
-use bao_core::{protocol::FromHost, types::Addr};
-use bao_wire::{Conn, HostMsg};
+use bao_client::{Conn, HostEvent};
+use bao_transport::Addr;
 
 /// A fresh non-git directory (launch dir for tests, so the daemon doesn't create
 /// worktrees in the dev repo).
@@ -68,11 +68,11 @@ pub async fn wait_for_output(conn: &mut Conn, needle: &str, label: &str) -> Stri
             "timeout waiting for {label} ({needle:?}); saw: {acc:?}"
         );
         match conn.next_event().await {
-            Some(HostMsg::Frame(FromHost::Output { data, .. })) => {
+            Some(HostEvent::Output { data, .. }) => {
                 acc.push_str(&String::from_utf8_lossy(&data));
             }
-            Some(HostMsg::Frame(_)) => {}
-            Some(HostMsg::Disconnected) | None => panic!("{label}: host disconnected"),
+            Some(HostEvent::Disconnected) | None => panic!("{label}: host disconnected"),
+            Some(_) => {}
         }
     }
 }

@@ -5,7 +5,9 @@ use std::{io::Write, path::Path, time::Duration};
 
 use tokio::sync::{mpsc, oneshot};
 
-use bao_core::{error::Error, event::EventKind, types::TermStrExt};
+use bao_core::{event::EventKind, types::TermStrExt};
+
+use crate::error::Error;
 
 /// Max entries kept in the in-memory log (ring buffer).
 pub(crate) const LOG_CAP: usize = 20_000;
@@ -193,12 +195,11 @@ pub(crate) fn line_crc(line: &serde_json::Value) -> u32 {
     crc32fast::hash(v.to_string().as_bytes())
 }
 
-/// Does this parsed line's checksum hold? Lines without a `crc` (written
-/// before checksums existed) pass — legacy lines are trusted as before.
+/// Does this parsed line's checksum hold? A line without a `crc` is corrupt.
 pub(crate) fn line_checksum_ok(v: &serde_json::Value) -> bool {
     match v.get("crc").and_then(|c| c.as_u64()) {
         Some(expected) => u64::from(line_crc(v)) == expected,
-        None => true,
+        None => false,
     }
 }
 
@@ -233,9 +234,9 @@ mod tests {
         v3["seq"] = serde_json::json!(99);
         assert!(!line_checksum_ok(&v3), "tampered seq is caught");
 
-        // Legacy lines (no crc) pass — they predate checksums.
-        let legacy = serde_json::json!({"seq": 1, "ts": 1, "data": "aGk="});
-        assert!(line_checksum_ok(&legacy));
+        // A line without a crc is corrupt, not trusted.
+        let missing = serde_json::json!({"seq": 1, "ts": 1, "data": "aGk="});
+        assert!(!line_checksum_ok(&missing));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

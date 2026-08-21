@@ -6,10 +6,11 @@ use std::{
 };
 
 use bao_core::{
-    error::Error,
     sandbox::{SandboxKind, Workspace},
     types::SessionId,
 };
+
+use crate::error::Error;
 
 use super::SandboxBackend;
 

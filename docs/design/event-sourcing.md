@@ -93,29 +93,25 @@ EventKind::Status(Status)       // existing; now also persisted (was broadcast-o
 `meta.json` for an id means "registered", so the initial state is
 `Preparing`).
 
-**`events.log` format** gains a `kind` discriminator and stays backward
-compatible:
+**`events.log` format** carries a `kind` discriminator and a checksum:
 
 ```jsonl
-{"seq": 1, "ts": …, "kind": "status", "status": "starting"}
-{"seq": 2, "ts": …, "kind": "output", "data": "…"}
-{"seq": 3, "ts": …}                                        // legacy: no kind ⇒ output
+{"seq": 1, "ts": …, "kind": "status", "status": "starting", "crc": …}
+{"seq": 2, "ts": …, "kind": "output", "data": "…", "crc": …}
 ```
 
-`load_log` already skips unparseable lines; the reader treats a missing
-`kind` as `output` and a present `kind` as its value. Old logs fold unchanged.
+`load_log` skips unparseable lines, lines whose checksum does not hold, and
+lines with an unknown `kind`.
 
 **`meta.json` split.** Identity facts stay in `StoredMeta` (name, args, cwd,
-created, sandbox); `status` is _no longer written_ for new sessions and is
-kept only to read legacy files. Derived facts (alert, snippets, idle) were
+created, sandbox); `status` is never persisted — the log is the sole source
+of truth for lifecycle state. Derived facts (alert, snippets, idle) were
 never persisted and remain so.
 
 **Restore = fold + honesty rule.** On daemon restart:
 
-1. Fold `events.log` from its seed to derive the last lifecycle state. The
-   seed is `Preparing` when `meta.json` is readable; for legacy logs that
-   carry no `Status` events, the seed is `meta.json.status` (with the legacy
-   `exit_code` fallback) so old sessions behave exactly as today.
+1. Fold `events.log` from the `Preparing` seed to derive the last lifecycle
+   state.
 2. Apply the honesty rule: a fold that ends in a _live_ state
    (`Preparing`/`Starting`/`Running`) on a fresh restore is `Interrupted` —
    the process is gone.
@@ -140,10 +136,10 @@ Rpc::Launch
        on step N failure → compensate 1..N-1 in reverse → emit Gone { reason }
 ```
 
-| Step       | Forward                                                | Compensation                                 |
-| ---------- | ------------------------------------------------------ | -------------------------------------------- |
+| Step              | Forward                                              | Compensation                                 |
+| ----------------- | ---------------------------------------------------- | -------------------------------------------- |
 | 1. SandboxBackend | `SandboxBackend::prepare` (`git worktree add` today) | `remove --force` + `branch -D` + delete tree |
-| 2. Spawn   | open PTY, spawn harness                                | kill child, close PTY                        |
+| 2. Spawn          | open PTY, spawn harness                              | kill child, close PTY                        |
 
 This is the `SandboxBackend` trait already hinted in `sandbox.rs` — a port
 with `prepare`/`compensate`, so inplace/worktree/bubblewrap are adapters the
@@ -158,9 +154,8 @@ and _what_ state the session is in while waiting.
 ## 5. Wire & types
 
 - **`Status`**: add `Preparing`, `Starting`. Serde is automatic
-  (`rename_all = "snake_case"`); the custom legacy `Deserialize` in
-  `types.rs` gains two string arms (`"preparing"`, `"starting"`). `Display`
-  gains both. `AlertInput::alert()` returns `None` for both.
+  (`rename_all = "snake_case"`); `Display` gains both.
+  `AlertInput::alert()` returns `None` for both.
 - **`Reply::Launch`**: shape unchanged (`{ session: SessionMeta }`), but now
   returns the `Preparing` meta immediately.
 - **`FromHost::Gone`**: new variant `Gone { session: SessionId, reason:
@@ -172,7 +167,7 @@ and _what_ state the session is in while waiting.
   of bare `SessionMeta`:
 
   ```
-  StateEvent::State(SessionMeta)              // existing path
+  StateEvent::Snapshot(SessionMeta)           // existing path
   StateEvent::Gone { session, reason }        // new
   ```
 
@@ -215,10 +210,8 @@ and _what_ state the session is in while waiting.
 - The footer prompt clears in the same frame the submit is accepted, so the
   user sees `preparing…` immediately, not a stale cursor.
 
-## 7. Restore & back-compat
+## 7. Restore
 
-- Old logs (output-only lines) fold as before; old `meta.json` (with `status`
-  / `exit_code`) seeds legacy sessions identically to today.
 - A `Preparing` session caught by a daemon restart folds to `Interrupted`
   (honesty rule). Its sandbox may be half-built; `rm` already runs the
   worktree compensation, so it is cleaned on removal.
@@ -233,9 +226,8 @@ and _what_ state the session is in while waiting.
   `Preparing` is rejected, resume from `Running` is rejected). Pure and total:
   no I/O.
 - **`bao-core` — fold & restore.** Fold a synthetic log to `Preparing`,
-  `Starting`, `Running`, `Exited(code)`; verify legacy logs seed from
-  `meta.json.status`; verify live-states → `Interrupted` on restore; verify
-  unreadable meta → `Damaged`.
+  `Starting`, `Running`, `Exited(code)`; verify live-states → `Interrupted`
+  on restore; verify unreadable meta → `Damaged`.
 - **`bao-core` — saga rollback.** Spawn fails after worktree created ⇒ worktree
   removed, session gone; sandbox fails ⇒ nothing leaked; success ⇒
   `Preparing → Starting → Running` in order.

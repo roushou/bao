@@ -5,8 +5,8 @@ mod common;
 
 use std::time::Duration;
 
-use bao_core::types::{Command, LaunchRequest, TerminalSize};
-use bao_wire::Conn;
+use bao_client::Conn;
+use bao_core::types::{Command, TerminalSize};
 
 #[tokio::test]
 async fn list_meta_carries_activity_facts() {
@@ -18,21 +18,21 @@ async fn list_meta_carries_activity_facts() {
 
     let mut a = Conn::connect(&addr).await.unwrap();
     let meta = a
-        .launch(LaunchRequest {
-            command: Some(
+        .launch(
+            Some(
                 Command::parse(
                     "bash -c 'echo HELLO_SESSION; while read -r line; do echo \"got:$line\"; done'",
                 )
                 .unwrap(),
             ),
-            dir: Some(scratch),
-            name: Some("watcher".to_string()),
-            size: TerminalSize {
+            Some(scratch),
+            Some("watcher".to_string()),
+            TerminalSize {
                 cols: 120,
                 rows: 40,
             },
-            sandbox: bao_core::sandbox::SandboxSpec::default(),
-        })
+            bao_core::sandbox::SandboxSpec::default(),
+        )
         .await
         .unwrap();
     let sid = meta.id.clone();

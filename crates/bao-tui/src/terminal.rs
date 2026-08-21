@@ -10,11 +10,8 @@
 //! One reserved key, `⌃q`, steps out (and is never forwarded). `PgUp/PgDn`
 //! scroll Bao's scrollback, so the arrows stay with the harness.
 
-use bao_core::{
-    protocol::FromHost,
-    types::{SessionId, SessionMeta, Status, TerminalSize},
-};
-use bao_wire::client::{ConnWriter, HostMsg};
+use bao_client::{ConnWriter, HostEvent};
+use bao_core::types::{SessionId, SessionMeta, Status, TerminalSize};
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyModifiers};
 use futures_util::StreamExt;
 use ratatui::{
@@ -162,29 +159,22 @@ impl Terminal {
         signal::signal(self.status, alert, waiting, idle)
     }
 
-    pub fn handle_event(&mut self, msg: HostMsg) {
+    pub fn handle_event(&mut self, msg: HostEvent) {
         match msg {
-            HostMsg::Frame(f) => self.on_host(f),
-            HostMsg::Disconnected => self.ended = Some(End::Interrupted),
-        }
-    }
-
-    fn on_host(&mut self, f: FromHost) {
-        match f {
-            FromHost::Output { data, .. } => self.emu.feed(&data),
-            FromHost::Status { status, .. } => {
+            HostEvent::Output { data, .. } => self.emu.feed(&data),
+            HostEvent::Status { status, .. } => {
                 self.status = status;
                 self.ended = End::from_status(status);
             }
-            FromHost::State { meta, .. } => {
+            HostEvent::State { meta, .. } => {
                 self.status = meta.status;
                 self.ended = End::from_status(meta.status);
                 self.meta = Some(meta);
             }
-            FromHost::Gone { reason, .. } => {
+            HostEvent::Gone { reason, .. } => {
                 self.ended = Some(End::Gone { reason });
             }
-            _ => {}
+            HostEvent::Disconnected => self.ended = Some(End::Interrupted),
         }
     }
 
@@ -218,12 +208,7 @@ impl Terminal {
 
     /// Forward raw bytes to the harness's stdin (used for paste verbatim).
     pub async fn forward(&mut self, writer: &mut ConnWriter, bytes: &[u8]) {
-        let _ = writer
-            .call(bao_core::protocol::Rpc::Input {
-                session: self.sid.clone(),
-                data: bytes.into(),
-            })
-            .await;
+        let _ = writer.input(&self.sid, bytes).await;
     }
 
     /// Resize the emulator's viewport. Returns the new size when it actually
@@ -320,7 +305,7 @@ impl Terminal {
 /// The runner for the attach / resume / launch view — `⌃q` detaches.
 pub(crate) struct Session {
     writer: ConnWriter,
-    events: mpsc::UnboundedReceiver<HostMsg>,
+    events: mpsc::UnboundedReceiver<HostEvent>,
     session: SessionId,
     meta: Option<SessionMeta>,
     screen: Vec<u8>,
@@ -329,7 +314,7 @@ pub(crate) struct Session {
 impl Session {
     pub(crate) fn new(
         writer: ConnWriter,
-        events: mpsc::UnboundedReceiver<HostMsg>,
+        events: mpsc::UnboundedReceiver<HostEvent>,
         session: SessionId,
         meta: Option<SessionMeta>,
         screen: Vec<u8>,
@@ -360,12 +345,7 @@ impl Session {
         pane.emu.feed(&screen);
         // The PTY must match the emulator's actual viewport (minus the title bar).
         let size = pane.viewport_size();
-        let _ = writer
-            .call(bao_core::protocol::Rpc::Resize {
-                session: pane.sid.clone(),
-                size,
-            })
-            .await;
+        let _ = writer.resize(&pane.sid, size).await;
         let mut stream = EventStream::new();
         loop {
             terminal.draw(|f| pane.draw_in(f, f.area(), true))?;
@@ -379,10 +359,7 @@ impl Session {
                     Some(Ok(Event::Paste(s))) => pane.forward(&mut writer, s.as_bytes()).await,
                     Some(Ok(Event::Resize(cols, rows))) => {
                         if let Some(size) = pane.set_viewport(cols, rows) {
-                            let _ = writer.call(bao_core::protocol::Rpc::Resize {
-                                session: pane.sid.clone(),
-                                size,
-                            }).await;
+                            let _ = writer.resize(&pane.sid, size).await;
                         }
                     }
                     Some(Ok(_)) => {}
@@ -445,10 +422,10 @@ mod tests {
         let sid = SessionId::from_str("abc12345").unwrap();
         let mut t = Terminal::new(sid.clone(), Some(meta(Status::Running, 5)), 80, 24);
         assert_eq!(t.signal().glyph, '●');
-        t.handle_event(HostMsg::Frame(FromHost::State {
+        t.handle_event(HostEvent::State {
             ts: 0,
             meta: meta(Status::Running, 200),
-        }));
+        });
         assert_eq!(t.signal().glyph, '…');
     }
 
