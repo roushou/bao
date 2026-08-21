@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use bao_core::{
     error::Error,
-    protocol::{FromHost, PROTOCOL_VERSION, Reply, Request, Rpc, WireError},
+    protocol::{ChannelKind, FromHost, PROTOCOL_VERSION, Reply, Request, Rpc, WireError},
     sandbox::SandboxKind,
     types::{Addr, Command, DaemonInfo, Hostname, SessionId, SessionMeta, Status, now_ms},
 };
@@ -84,8 +84,23 @@ struct Connection {
 }
 
 impl Connection {
+    /// Accept one connection: read its channel handshake and serve only that
+    /// channel until the peer closes. Cancellation is the socket closing — no
+    /// per-channel bookkeeping on the daemon side.
     async fn accept(stream: TcpStream, manager: Arc<Manager>) -> Result<(), Error> {
         let (read, write) = stream.into_split();
+        let mut reader = FrameReader::<_, Request>::new(read);
+        // A channel must introduce itself as the first frame. Anything else
+        // is a protocol violation — drop the connection.
+        let Some(Request {
+            id,
+            rpc: Rpc::Hello { kind },
+        }) = reader.read().await.ok().flatten()
+        else {
+            eprintln!("bao daemon: connection without a Hello handshake");
+            return Ok(());
+        };
+
         let (out_tx, mut out_rx) = mpsc::unbounded_channel::<FromHost>();
         let writer = tokio::spawn(async move {
             let mut writer = FrameWriter::new(write);
@@ -97,18 +112,99 @@ impl Connection {
         });
 
         let mut conn = Connection {
-            reader: FrameReader::new(read),
+            reader,
             out_tx,
             subs: Vec::new(),
             manager,
         };
-        conn.run().await?;
+        match kind {
+            ChannelKind::Control => conn.run_control(id).await?,
+            ChannelKind::Watch => conn.run_watch(id).await?,
+            ChannelKind::Attach { session } => conn.run_attach(id, session).await?,
+        }
 
         drop(conn.out_tx);
         for s in conn.subs {
             s.abort();
         }
         let _ = writer.await;
+        Ok(())
+    }
+
+    /// The RPC channel: acknowledge the Hello, then serve requests until the
+    /// peer closes.
+    async fn run_control(&mut self, hello_id: u32) -> Result<(), Error> {
+        self.reply(hello_id, Reply::Ok);
+        self.run().await
+    }
+
+    /// The watch channel: acknowledge, push the current picture of every
+    /// session, then follow the state bus until the peer closes. Push-only —
+    /// stray frames are ignored.
+    async fn run_watch(&mut self, hello_id: u32) -> Result<(), Error> {
+        self.reply(hello_id, Reply::Ok);
+        for s in self.manager.list() {
+            let m = s.meta();
+            self.push_state(&m);
+        }
+        let mut bus_rx = self.manager.subscribe_state();
+        let out = self.out_tx.clone();
+        let manager = self.manager.clone();
+        self.subs.push(tokio::spawn(async move {
+            loop {
+                match bus_rx.recv().await {
+                    Ok(StateEvent::Snapshot(meta)) => {
+                        if out.send(FromHost::State { ts: now_ms(), meta }).is_err() {
+                            return;
+                        }
+                    }
+                    Ok(StateEvent::Gone { session, reason }) => {
+                        if out.send(FromHost::Gone { session, reason }).is_err() {
+                            return;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                        for s in manager.list() {
+                            let m = s.meta();
+                            if out
+                                .send(FromHost::State {
+                                    ts: now_ms(),
+                                    meta: m,
+                                })
+                                .is_err()
+                            {
+                                return;
+                            }
+                        }
+                    }
+                    Err(_) => return,
+                }
+            }
+        }));
+        // Hold the channel open; exit on EOF or a bad frame.
+        while self.reader.read().await.is_ok_and(|r| r.is_some()) {}
+        Ok(())
+    }
+
+    /// The attach channel: reply with a consistent (seq, screen) snapshot,
+    /// then stream the live session until the peer closes.
+    async fn run_attach(&mut self, hello_id: u32, session: SessionId) -> Result<(), Error> {
+        let sess = self.resolve(session)?;
+        let meta = sess.meta();
+        // One consistent (seq, screen) pair: the snapshot reflects exactly
+        // the output up to `seq`, so replaying from `seq` delivers the rest
+        // with no loss or duplication.
+        let (seq, screen) = sess.attach_point();
+        self.reply(
+            hello_id,
+            Reply::Attach {
+                session: meta,
+                seq,
+                screen: bao_core::types::WireBytes(screen),
+            },
+        );
+        self.subscribe(sess, seq);
+        while self.reader.read().await.is_ok_and(|r| r.is_some()) {}
         Ok(())
     }
 
@@ -130,6 +226,11 @@ impl Connection {
     async fn handle(&mut self, req: Request) -> Result<(), Error> {
         let id = req.id;
         match req.rpc {
+            Rpc::Hello { .. } => {
+                // The channel introduced itself on accept; a second Hello is
+                // noise, not a new channel.
+                self.err(id, "hello already sent");
+            }
             Rpc::List => {
                 let sessions = self.manager.list().iter().map(|s| s.meta()).collect();
                 self.reply(id, Reply::List { sessions });

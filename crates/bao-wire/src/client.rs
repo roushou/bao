@@ -6,7 +6,7 @@ use std::{
 };
 
 use bao_core::{
-    protocol::{FromHost, PROTOCOL_VERSION, Reply, Request, Rpc, WireError},
+    protocol::{ChannelKind, FromHost, PROTOCOL_VERSION, Reply, Request, Rpc, WireError},
     types::{Addr, DaemonInfo, Hostname, LaunchRequest, SessionId, SessionMeta, TerminalSize},
 };
 use tokio::{
@@ -99,8 +99,8 @@ impl Conn {
             }
         });
 
-        // Handshake: learn who we're talking to, and refuse to speak a
-        // different protocol version than our own.
+        // Handshake: introduce the channel, learn who we're talking to, and
+        // refuse to speak a different protocol version than our own.
         let mut conn = Conn {
             writer: ConnWriter {
                 writer: tokio::sync::Mutex::new(FrameWriter::<_, Request>::new(write)),
@@ -114,6 +114,15 @@ impl Conn {
                 isolation_backends: Vec::new(),
             },
         };
+        match conn
+            .call(Rpc::Hello {
+                kind: ChannelKind::Control,
+            })
+            .await?
+        {
+            Reply::Ok => {}
+            _ => return Err(Error::UnexpectedReply),
+        }
         let info = match conn.call(Rpc::Info).await? {
             Reply::Info { info } => info,
             _ => return Err(Error::UnexpectedReply),

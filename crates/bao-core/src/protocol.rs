@@ -20,6 +20,25 @@ use crate::{
 pub const PROTOCOL_VERSION: u32 = 1;
 
 // ---------------------------------------------------------------------------
+// Channels
+// ---------------------------------------------------------------------------
+
+/// What a connection carries. The **first frame on every connection** names
+/// its channel, so the daemon dispatches per stream and a channel's lifetime
+/// is its connection's — cancellation is the socket closing, and each
+/// channel gets its own backpressure.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ChannelKind {
+    /// Typed RPC request/reply.
+    Control,
+    /// Daemon-wide derived state (current + changes).
+    Watch,
+    /// One session's terminal bytes, live.
+    Attach { session: SessionId },
+}
+
+// ---------------------------------------------------------------------------
 // Client -> daemon
 // ---------------------------------------------------------------------------
 
@@ -33,6 +52,11 @@ pub struct Request {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "m", rename_all = "snake_case")]
 pub enum Rpc {
+    /// The channel handshake: sent as the first frame on every connection to
+    /// name the channel it carries.
+    Hello {
+        kind: ChannelKind,
+    },
     List,
     /// The daemon's self-description (host, protocol version, capabilities).
     /// Sent first by every client as the handshake.
