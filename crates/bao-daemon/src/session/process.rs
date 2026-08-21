@@ -486,6 +486,12 @@ impl Session {
             };
             let id = SessionId::from_str(id).unwrap_or_default();
             let loaded = store.load_log(&id);
+            if loaded.corrupt_lines > 0 {
+                eprintln!(
+                    "bao daemon: session {id}: {} corrupt event line(s) skipped",
+                    loaded.corrupt_lines
+                );
+            }
             match store.read_meta(&id) {
                 Ok(Some(stored)) => {
                     let cwd = stored.cwd.unwrap_or_default();

@@ -10,6 +10,7 @@ publish = false
 bao-core = { workspace = true }
 bao-wire = { workspace = true }
 base64 = "0.22"
+crc32fast = "1.4"
 dirs = "5"
 portable-pty = "0.8"
 serde = { version = "1", features = ["derive"] }

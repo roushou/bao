@@ -178,6 +178,42 @@ mod tests {
     }
 
     #[test]
+    fn load_log_counts_checksum_corruption() {
+        use std::str::FromStr;
+
+        let dir = temp_root("crc");
+        let store = SessionStore::new(dir.clone());
+        let sess_dir = dir.join("abc12345");
+        std::fs::create_dir_all(&sess_dir).unwrap();
+        super::log::persist_event(
+            &sess_dir,
+            1,
+            1000,
+            &EventKind::Output(b"hello\r\n".to_vec()),
+        );
+        super::log::persist_event(
+            &sess_dir,
+            2,
+            2000,
+            &EventKind::Output(b"world\r\n".to_vec()),
+        );
+
+        // Tamper with the second line's payload: valid JSON, wrong bytes.
+        let path = sess_dir.join("events.log");
+        let raw = std::fs::read_to_string(&path).unwrap();
+        let mut lines: Vec<String> = raw.lines().map(String::from).collect();
+        let mut v: serde_json::Value = serde_json::from_str(&lines[1]).unwrap();
+        v["data"] = serde_json::json!("AAAAAAAA");
+        lines[1] = v.to_string();
+        std::fs::write(&path, lines.join("\n") + "\n").unwrap();
+
+        let loaded = store.load_log(&SessionId::from_str("abc12345").unwrap());
+        assert_eq!(loaded.log.len(), 1, "the good line survives");
+        assert_eq!(loaded.corrupt_lines, 1, "the tampered line is counted");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn restore_salvages_corrupt_meta_keeping_log() {
         let dir = temp_root("salvage");
         // Truncated (corrupt) meta.json + a valid log — the crash-mid-write

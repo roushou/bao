@@ -32,6 +32,9 @@ pub(crate) struct LoadedLog {
     pub(crate) last_ts: u64,
     /// Raw bytes of the newest output chunk.
     pub(crate) last_output: Option<Vec<u8>>,
+    /// Lines skipped because their checksum did not hold (torn or flipped
+    /// writes that still parse as JSON). Zero for legacy logs.
+    pub(crate) corrupt_lines: usize,
 }
 
 /// The parsed-on-disk identity of one session: from a readable `meta.json`,
@@ -93,18 +96,24 @@ impl SessionStore {
     }
 
     /// Rebuild a session's log from `events.log` (JSONL of output chunks).
-    /// Corrupt/partial lines are skipped; a missing log is an empty log.
+    /// Corrupt/partial lines are skipped (and counted); a missing log is an
+    /// empty log. Lines with a bad checksum are corrupt, not legacy.
     pub fn load_log(&self, id: &SessionId) -> LoadedLog {
         let mut log = VecDeque::new();
         let mut last_seq = 0u64;
         let mut first_ts = u64::MAX;
         let mut last_ts = 0u64;
         let mut last_output: Option<Vec<u8>> = None;
+        let mut corrupt_lines = 0usize;
         if let Ok(contents) = std::fs::read_to_string(self.dir_for(id).join("events.log")) {
             for line in contents.lines() {
                 let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
                     continue;
                 };
+                if !super::log::line_checksum_ok(&v) {
+                    corrupt_lines += 1;
+                    continue;
+                }
                 let Some(seq) = v.get("seq").and_then(|s| s.as_u64()) else {
                     continue;
                 };
@@ -146,6 +155,7 @@ impl SessionStore {
             first_ts: if first_ts == u64::MAX { 0 } else { first_ts },
             last_ts,
             last_output,
+            corrupt_lines,
         }
     }
 
