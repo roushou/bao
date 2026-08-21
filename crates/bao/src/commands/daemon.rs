@@ -38,6 +38,7 @@ impl DaemonCmd {
             _ = tokio::signal::ctrl_c() => {
                 eprintln!("bao daemon: shutting down, stopping sessions…");
                 manager.kill_all();
+                manager.flush_all().await;
             }
             _ = handle => {}
         }

@@ -1,15 +1,131 @@
 //! The event log's on-disk helpers: JSONL encoding, base64, and the
 //! output snippet.
 
-use std::{io::Write, path::Path};
+use std::{io::Write, path::Path, time::Duration};
+
+use tokio::sync::{mpsc, oneshot};
 
 use bao_core::{error::Error, event::EventKind, types::TermStrExt};
 
 /// Max entries kept in the in-memory log (ring buffer).
 pub(crate) const LOG_CAP: usize = 20_000;
 
+/// Max pending log lines per session. The writer drains in microseconds;
+/// overflow (a disk that can't keep up) drops the line — the in-memory log
+/// still has it, and checksummed restore reflects what reached disk.
+const LOG_WRITER_CAP: usize = 4096;
+
 /// The session's most recent output, ANSI-stripped and collapsed to one line.
 const SNIPPET_MAX: usize = 64;
+
+/// How durable each append must be. Default: group commits, fsync at most
+/// once per interval and always on flush.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Durability {
+    /// fsync every line. Slowest, strongest. (Not selectable yet — lands
+    /// with the daemon's durability config.)
+    #[allow(dead_code)]
+    PerEvent,
+    /// Group commits: fsync at most every `interval`, always on flush/drop.
+    Batched { interval: Duration },
+}
+
+impl Default for Durability {
+    fn default() -> Self {
+        Self::Batched {
+            interval: Duration::from_secs(1),
+        }
+    }
+}
+
+enum LogCmd {
+    Line(LogLine),
+    Flush(oneshot::Sender<()>),
+}
+
+struct LogLine {
+    seq: u64,
+    ts: u64,
+    kind: EventKind,
+}
+
+/// A session's on-disk event log, owned by one writer task. `Session::append`
+/// hands lines over a bounded channel (no blocking I/O on the pump); the
+/// writer appends immediately and fsyncs per the durability policy. When the
+/// sender is dropped (session dropped), the writer drains and fsyncs once
+/// more.
+pub(crate) struct LogWriter {
+    tx: Option<mpsc::Sender<LogCmd>>,
+}
+
+impl LogWriter {
+    pub(crate) fn spawn(data_dir: &Path, policy: Durability) -> Self {
+        let (tx, mut rx) = mpsc::channel::<LogCmd>(LOG_WRITER_CAP);
+        let file = data_dir.join("events.log");
+        // Without a runtime (sync tests, early startup) the writer is a
+        // no-op — nothing can append without the async pump anyway.
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return Self { tx: None };
+        };
+        // Detached: the task self-terminates when the channel closes (the
+        // session is dropped), flushing once more on the way out.
+        #[allow(clippy::let_underscore_future)]
+        let _ = handle.spawn(async move {
+            let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&file)
+            else {
+                return; // can't write the log; the in-memory log still works
+            };
+            let mut last_sync = std::time::Instant::now();
+            while let Some(cmd) = rx.recv().await {
+                match cmd {
+                    LogCmd::Line(line) => {
+                        write_line(&mut f, &line);
+                        let due = match policy {
+                            Durability::PerEvent => true,
+                            Durability::Batched { interval } => last_sync.elapsed() >= interval,
+                        };
+                        if due {
+                            let _ = f.sync_data();
+                            last_sync = std::time::Instant::now();
+                        }
+                    }
+                    LogCmd::Flush(ack) => {
+                        let _ = f.sync_data();
+                        let _ = ack.send(());
+                    }
+                }
+            }
+            let _ = f.sync_data(); // drain on shutdown
+        });
+        Self { tx: Some(tx) }
+    }
+
+    /// Queue one line. Bounded and non-blocking: a full queue drops the line
+    /// rather than stalling the pump.
+    pub(crate) fn append(&self, seq: u64, ts: u64, kind: &EventKind) {
+        if let Some(tx) = &self.tx {
+            let _ = tx.try_send(LogCmd::Line(LogLine {
+                seq,
+                ts,
+                kind: kind.clone(),
+            }));
+        }
+    }
+
+    /// fsync everything queued so far and wait for it to land.
+    pub(crate) async fn flush(&self) {
+        let Some(tx) = &self.tx else {
+            return;
+        };
+        let (ack, rx) = oneshot::channel();
+        if tx.send(LogCmd::Flush(ack)).await.is_ok() {
+            let _ = rx.await;
+        }
+    }
+}
 
 pub(crate) fn b64e(bytes: &[u8]) -> String {
     use base64::{Engine, engine::general_purpose::STANDARD as B64};
@@ -21,10 +137,10 @@ pub(crate) fn b64d(s: &str) -> Result<Vec<u8>, Error> {
     Ok(B64.decode(s)?)
 }
 
-/// Append one event to a session's `events.log` as JSONL, checksummed. `kind`
-/// is always written explicitly for new entries; legacy readers treat a
-/// missing `kind` as `output`. Lines without a `crc` are trusted (they
-/// predate checksums); every new line carries one.
+/// Append one event to a session's `events.log` as JSONL, checksummed — the
+/// synchronous write path, used by tests and fixtures. Live sessions go
+/// through [`LogWriter`] instead.
+#[cfg(test)]
 pub(crate) fn persist_event(data_dir: &Path, seq: u64, ts: u64, kind: &EventKind) {
     let file = data_dir.join("events.log");
     if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -32,20 +148,38 @@ pub(crate) fn persist_event(data_dir: &Path, seq: u64, ts: u64, kind: &EventKind
         .append(true)
         .open(file)
     {
-        let mut line = match kind {
-            EventKind::Output(bytes) => {
-                serde_json::json!({"seq": seq, "ts": ts, "kind": "output", "data": b64e(bytes)})
-            }
-            EventKind::Status(status) => {
-                serde_json::json!({"seq": seq, "ts": ts, "kind": "status", "status": status})
-            }
-        };
-        let crc = line_crc(&line);
-        line["crc"] = serde_json::json!(crc);
-        let mut line = line.to_string();
-        line.push('\n');
-        let _ = f.write_all(line.as_bytes());
+        write_line(
+            &mut f,
+            &LogLine {
+                seq,
+                ts,
+                kind: kind.clone(),
+            },
+        );
     }
+}
+
+/// Write one checksummed line to the open log file.
+fn write_line(f: &mut std::fs::File, line: &LogLine) {
+    let mut v = match &line.kind {
+        EventKind::Output(bytes) => serde_json::json!({
+            "seq": line.seq,
+            "ts": line.ts,
+            "kind": "output",
+            "data": b64e(bytes)
+        }),
+        EventKind::Status(status) => serde_json::json!({
+            "seq": line.seq,
+            "ts": line.ts,
+            "kind": "status",
+            "status": status
+        }),
+    };
+    let crc = line_crc(&v);
+    v["crc"] = serde_json::json!(crc);
+    let mut s = v.to_string();
+    s.push('\n');
+    let _ = f.write_all(s.as_bytes());
 }
 
 /// The checksum covers the whole line except the `crc` field itself: the

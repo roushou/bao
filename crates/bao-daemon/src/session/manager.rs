@@ -293,4 +293,11 @@ impl Manager {
             let _ = s.kill();
         }
     }
+
+    /// fsync every session's event log (graceful shutdown).
+    pub async fn flush_all(&self) {
+        for s in self.list() {
+            s.flush_log().await;
+        }
+    }
 }

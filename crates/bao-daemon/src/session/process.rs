@@ -1,6 +1,6 @@
 //! The [`Session`]: one live session process + its event log.
 
-use super::log::{LOG_CAP, output_snippet, persist_event};
+use super::log::{Durability, LOG_CAP, LogWriter, output_snippet};
 use super::store::{LoadedLog, RestoredIdentity, StoredMeta};
 use super::*;
 
@@ -22,7 +22,6 @@ pub struct Session {
     master: Mutex<Option<Box<dyn MasterPty + Send>>>,
     writer: Mutex<Option<Box<dyn Write + Send>>>,
     child: Mutex<Option<Box<dyn Child + Send + Sync>>>,
-    data_dir: PathBuf,
     /// The store this session persists to and was loaded from.
     store: SessionStore,
     seq: AtomicU64,
@@ -39,6 +38,9 @@ pub struct Session {
     host: Hostname,
     /// Time source for this session's derivations.
     clock: Clock,
+    /// The on-disk event log writer (None for restored sessions — no live
+    /// process, nothing to append).
+    log_writer: Mutex<Option<Arc<LogWriter>>>,
     /// Honest "is the session waiting for the human?" — set only by the
     /// daemon's harness poll; `None` = we cannot tell. Cleared when the
     /// session stops.
@@ -94,7 +96,6 @@ impl Session {
             master: Mutex::new(None),
             writer: Mutex::new(None),
             child: Mutex::new(None),
-            data_dir,
             store: store.clone(),
             seq: AtomicU64::new(0),
             last_activity: Mutex::new(created),
@@ -102,6 +103,10 @@ impl Session {
             screen: Mutex::new(vt_screen::parser(spec.size.rows, spec.size.cols)),
             host: initial.host.clone(),
             clock,
+            log_writer: Mutex::new(Some(Arc::new(LogWriter::spawn(
+                &data_dir,
+                Durability::default(),
+            )))),
             waiting: Mutex::new(None),
             state_tx,
             last_state: Mutex::new(Some(initial)),
@@ -270,7 +275,9 @@ impl Session {
             ts,
             kind: kind.clone(),
         });
-        persist_event(&self.data_dir, seq, ts, &kind);
+        if let Some(writer) = &*self.log_writer.lock().unwrap() {
+            writer.append(seq, ts, &kind);
+        }
         self.publish_state();
     }
 
@@ -357,6 +364,16 @@ impl Session {
             c.kill().map_err(|e| Error::Pty(e.to_string()))?;
         }
         Ok(())
+    }
+
+    /// fsync the event log so everything appended so far is durable. Called
+    /// on graceful daemon shutdown; a crash skips it (restore reflects what
+    /// reached disk).
+    pub async fn flush_log(&self) {
+        let writer = self.log_writer.lock().unwrap().clone();
+        if let Some(writer) = writer {
+            writer.flush().await;
+        }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<SessionEvent> {
@@ -509,7 +526,6 @@ impl Session {
                     let status = fold_status(&loaded.log, stored.status, stored.exit_code);
                     out.push(Self::build_restored(
                         store,
-                        data_dir,
                         id,
                         RestoredIdentity {
                             name: stored.name,
@@ -533,7 +549,6 @@ impl Session {
                     };
                     out.push(Self::build_restored(
                         store,
-                        data_dir,
                         id,
                         RestoredIdentity {
                             name: None,
@@ -558,7 +573,6 @@ impl Session {
     /// normal and salvaged (`Damaged`) paths.
     fn build_restored(
         store: &SessionStore,
-        data_dir: PathBuf,
         id: SessionId,
         identity: RestoredIdentity,
         loaded: LoadedLog,
@@ -617,7 +631,6 @@ impl Session {
             master: Mutex::new(None),
             writer: Mutex::new(None),
             child: Mutex::new(None),
-            data_dir,
             store: store.clone(),
             seq: AtomicU64::new(loaded.last_seq),
             last_activity: Mutex::new(loaded.last_ts),
@@ -625,6 +638,7 @@ impl Session {
             screen: Mutex::new(restored_screen),
             host: initial.host.clone(),
             clock: Clock::system(),
+            log_writer: Mutex::new(None),
             waiting: Mutex::new(None),
             state_tx,
             last_state: Mutex::new(Some(initial)),
