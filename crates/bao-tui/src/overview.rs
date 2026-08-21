@@ -74,7 +74,7 @@ impl Overview {
         &mut self,
         terminal: &mut ratatui::DefaultTerminal,
     ) -> Result<(), Error> {
-        let _ = self.writer.call(Rpc::Watch).await;
+        let _ = self.writer.watch().await;
         let _ = self.refresh().await;
         let size = terminal.size()?;
         self.width = size.width;
@@ -324,19 +324,12 @@ impl Overview {
         }
         let meta = {
             let w = self.twriter.as_mut().expect("connection opened above");
-            match w
-                .call(Rpc::Attach {
-                    session: sid.clone(),
-                })
-                .await
-            {
-                Ok(Reply::Attach {
-                    session, screen, ..
-                }) => {
+            match w.attach(sid).await {
+                Ok((session, _seq, screen)) => {
                     terminal.emu.feed(&screen);
                     session
                 }
-                _ => {
+                Err(_) => {
                     self.status_line = "attach failed".to_string();
                     return;
                 }
@@ -640,7 +633,7 @@ impl Overview {
         self.host = conn.info().host.to_string();
         let (w, e) = conn.into_parts();
         let mut w = w;
-        if w.call(Rpc::Watch).await.is_err() {
+        if w.watch().await.is_err() {
             return false;
         }
         self.writer = w;

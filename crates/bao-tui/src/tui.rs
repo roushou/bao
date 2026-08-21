@@ -10,6 +10,10 @@ use ratatui::DefaultTerminal;
 
 use crate::{error::Error, overview::Overview, terminal::Session};
 
+/// The two full-screen surfaces the app switches between. Sizes differ
+/// meaningfully (the overview carries two connections), so the enum is
+/// boxed-by-variant rather than padded.
+#[allow(clippy::large_enum_variant)]
 enum Surface {
     Overview(Overview),
     Session(Session),

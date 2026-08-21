@@ -59,15 +59,9 @@ pub enum Rpc {
     },
     List,
     /// The daemon's self-description (host, protocol version, capabilities).
-    /// Sent first by every client as the handshake.
+    /// Sent right after the Hello by every control channel.
     Info,
-    /// Subscribe to the daemon-wide state stream: every session's derived
-    /// picture, current and future. The overview — never bytes.
-    Watch,
     Launch(LaunchRequest),
-    Attach {
-        session: SessionId,
-    },
     Input {
         session: SessionId,
         data: WireBytes,

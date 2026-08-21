@@ -259,50 +259,6 @@ impl Connection {
                     },
                 );
             }
-            Rpc::Watch => {
-                // One subscription for all sessions: current picture for
-                // every session, then the state bus. Lagging behind the bus
-                // tail re-syncs from the manager (latest wins).
-                let mut bus_rx = self.manager.subscribe_state();
-                self.reply(id, Reply::Ok);
-                for s in self.manager.list() {
-                    let m = s.meta();
-                    self.push_state(&m);
-                }
-                let out = self.out_tx.clone();
-                let manager = self.manager.clone();
-                self.subs.push(tokio::spawn(async move {
-                    loop {
-                        match bus_rx.recv().await {
-                            Ok(StateEvent::Snapshot(meta)) => {
-                                if out.send(FromHost::State { ts: now_ms(), meta }).is_err() {
-                                    return;
-                                }
-                            }
-                            Ok(StateEvent::Gone { session, reason }) => {
-                                if out.send(FromHost::Gone { session, reason }).is_err() {
-                                    return;
-                                }
-                            }
-                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                                for s in manager.list() {
-                                    let m = s.meta();
-                                    if out
-                                        .send(FromHost::State {
-                                            ts: now_ms(),
-                                            meta: m,
-                                        })
-                                        .is_err()
-                                    {
-                                        return;
-                                    }
-                                }
-                            }
-                            Err(_) => return,
-                        }
-                    }
-                }));
-            }
             Rpc::Launch(launch) => {
                 let command = match launch.command {
                     Some(c) => c,
@@ -371,27 +327,6 @@ impl Connection {
                         }
                         Err(e) => self.err(id, e),
                     }
-                }
-                Err(e) => self.err(id, e),
-            },
-            Rpc::Attach { session } => match self.resolve(session) {
-                Ok(sess) => {
-                    let meta = sess.meta();
-                    // One consistent (seq, screen) pair: the snapshot reflects
-                    // exactly the output up to `seq`, so replaying from `seq`
-                    // delivers the rest with no loss or duplication.
-                    let (seq, screen) = sess.attach_point();
-                    self.reply(
-                        id,
-                        Reply::Attach {
-                            session: meta,
-                            seq,
-                            screen: bao_core::types::WireBytes(screen),
-                        },
-                    );
-                    // Live from the current tail — the screen snapshot above
-                    // carries the state; no history replay.
-                    self.subscribe(sess, seq);
                 }
                 Err(e) => self.err(id, e),
             },
