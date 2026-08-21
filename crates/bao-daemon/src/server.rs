@@ -29,7 +29,10 @@ pub async fn serve(
     addr: Addr,
     manager: Arc<Manager>,
 ) -> Result<(Addr, tokio::task::JoinHandle<()>), Error> {
-    let listener = TcpListener::bind((addr.host(), addr.port())).await?;
+    let listener = match addr {
+        Addr::Tcp { host, port } => TcpListener::bind((host, port)).await?,
+        Addr::Unix(_) => return Err(Error::TransportUnsupported("unix socket")),
+    };
     let actual = Addr::local(listener.local_addr()?.port());
 
     // Idle ticker: re-derive and publish state for every session on a clock,

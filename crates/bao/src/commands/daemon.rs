@@ -28,7 +28,7 @@ impl DaemonCmd {
                     .count()
             );
         }
-        let (actual, handle) = bao_daemon::serve(ctx.addr, manager.clone()).await?;
+        let (actual, handle) = bao_daemon::serve(ctx.addr.clone(), manager.clone()).await?;
         eprintln!(
             "bao daemon: host {} · listening on {actual} (sessions in {})",
             bao_core::types::Hostname::local(),

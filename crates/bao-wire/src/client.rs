@@ -49,12 +49,17 @@ pub struct ConnWriter {
 
 impl Conn {
     pub async fn connect(addr: &Addr) -> Result<Conn, Error> {
-        let stream = TcpStream::connect((addr.host(), addr.port()))
-            .await
-            .map_err(|source| Error::Unreachable {
-                addr: *addr,
-                source,
-            })?;
+        let stream = match addr {
+            Addr::Tcp { host, port } => {
+                TcpStream::connect((*host, *port))
+                    .await
+                    .map_err(|source| Error::Unreachable {
+                        addr: addr.clone(),
+                        source,
+                    })?
+            }
+            Addr::Unix(_) => return Err(Error::TransportUnsupported("unix socket")),
+        };
         let (read, write) = stream.into_split();
         let (events_tx, events) = mpsc::unbounded_channel();
         let replies = Arc::new(Mutex::new(HashMap::<

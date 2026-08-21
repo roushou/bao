@@ -9,6 +9,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("{0}")]
     Core(#[from] bao_core::error::Error),
+    #[error("the {0} transport is not wired up yet")]
+    TransportUnsupported(&'static str),
     #[error("cannot reach bao host at {addr} — is `bao daemon` running? ({source})")]
     Unreachable { addr: Addr, source: std::io::Error },
     #[error("host error: {0}")]

@@ -113,7 +113,7 @@ impl Context {
 
     /// The daemon address this invocation is talking to.
     pub fn addr(&self) -> Addr {
-        self.addr
+        self.addr.clone()
     }
 
     /// Connect to the daemon, starting it if it isn't running. The

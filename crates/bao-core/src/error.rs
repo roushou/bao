@@ -20,6 +20,8 @@ pub enum Error {
     /// typed variant — consumers branch on `Error::Pty(_)` regardless.
     #[error("pty error: {0}")]
     Pty(String),
+    #[error("the {0} transport is not wired up yet")]
+    TransportUnsupported(&'static str),
     #[error("address must be host:port")]
     BadAddr,
     #[error("empty command")]
