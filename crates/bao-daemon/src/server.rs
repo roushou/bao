@@ -11,7 +11,8 @@ use bao_core::{
 };
 use bao_wire::frame::{FrameReader, FrameWriter};
 use tokio::{
-    net::{TcpListener, TcpStream},
+    io::{AsyncRead, AsyncWrite},
+    net::TcpListener,
     sync::mpsc,
 };
 
@@ -79,8 +80,15 @@ const CONTROL_OUT_CAP: usize = 4096;
 /// Accept one connection: read its channel handshake and serve only that
 /// channel until the peer closes. Cancellation is the socket closing — no
 /// per-channel bookkeeping on the daemon side.
-async fn accept(stream: TcpStream, manager: Arc<Manager>) -> Result<(), Error> {
-    let (read, write) = stream.into_split();
+///
+/// Generic over the stream so tests can drive the full protocol in-process
+/// over `tokio::io::duplex` pairs (no daemon binary), and so a later unix
+/// transport plugs in as another `AsyncRead + AsyncWrite`.
+async fn accept<S>(stream: S, manager: Arc<Manager>) -> Result<(), Error>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let (read, write) = tokio::io::split(stream);
     let mut reader = FrameReader::<_, Request>::new(read);
     // A channel must introduce itself as the first frame. Anything else
     // is a protocol violation — drop the connection.
@@ -106,12 +114,16 @@ async fn accept(stream: TcpStream, manager: Arc<Manager>) -> Result<(), Error> {
 /// channel carries replies plus subscribed session streams), served until the
 /// peer closes. Awaited sends are the backpressure — a slow reader blocks its
 /// own channel and nothing else.
-async fn run_control(
-    read: tokio::net::tcp::OwnedReadHalf,
-    write: tokio::net::tcp::OwnedWriteHalf,
+async fn run_control<R, W>(
+    read: R,
+    write: W,
     manager: Arc<Manager>,
     hello_id: u32,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin + Send + 'static,
+{
     let (out_tx, mut out_rx) = mpsc::channel::<FromHost>(CONTROL_OUT_CAP);
     let writer = tokio::spawn(async move {
         let mut writer = FrameWriter::new(write);
@@ -143,12 +155,16 @@ async fn run_control(
 /// TCP backpressure is the flow control — pushing the current picture of
 /// every session, then following the state bus until the peer closes.
 /// Push-only: stray frames are ignored.
-async fn run_watch(
-    mut reader: FrameReader<tokio::net::tcp::OwnedReadHalf, Request>,
-    mut writer: FrameWriter<tokio::net::tcp::OwnedWriteHalf, FromHost>,
+async fn run_watch<R, W>(
+    mut reader: FrameReader<R, Request>,
+    mut writer: FrameWriter<W, FromHost>,
     manager: Arc<Manager>,
     hello_id: u32,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin + Send + 'static,
+{
     writer
         .write(&FromHost::Reply {
             id: hello_id,
@@ -204,13 +220,17 @@ async fn run_watch(
 /// The attach channel: reply with a consistent (seq, screen) snapshot, then
 /// stream the session's live events directly to the socket until the peer
 /// closes. An unresolvable session gets a typed error, not a silent close.
-async fn run_attach(
-    read: tokio::net::tcp::OwnedReadHalf,
-    write: tokio::net::tcp::OwnedWriteHalf,
+async fn run_attach<R, W>(
+    read: R,
+    write: W,
     manager: Arc<Manager>,
     hello_id: u32,
     session: SessionId,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin + Send + 'static,
+{
     let mut reader = FrameReader::new(read);
     let mut writer = FrameWriter::new(write);
     let sess = match manager.resolve(session.as_str()) {
@@ -247,13 +267,17 @@ async fn run_attach(
 /// then follow the live broadcast, the session's state channel, and the
 /// removal bus — writing directly to the socket. Backpressure is TCP's; a
 /// lagged broadcast re-syncs from the log.
-async fn stream_session(
-    writer: &mut FrameWriter<tokio::net::tcp::OwnedWriteHalf, FromHost>,
-    reader: &mut FrameReader<tokio::net::tcp::OwnedReadHalf, Request>,
+async fn stream_session<R, W>(
+    writer: &mut FrameWriter<W, FromHost>,
+    reader: &mut FrameReader<R, Request>,
     sess: &Arc<Session>,
     manager: &Arc<Manager>,
     after: u64,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
     let mut state_rx = sess.state_subscribe();
     let mut rx = sess.subscribe();
     let mut bus_rx = manager.subscribe_state();
@@ -331,14 +355,17 @@ async fn stream_session(
 /// writer task, and keeps the event-stream tasks for launched/resumed
 /// sessions. Outgoing messages travel as typed `FromHost` over a bounded
 /// channel; awaited sends apply backpressure to a slow reader.
-struct Connection {
-    reader: FrameReader<tokio::net::tcp::OwnedReadHalf, Request>,
+struct Connection<R>
+where
+    R: AsyncRead + Unpin,
+{
+    reader: FrameReader<R, Request>,
     out_tx: mpsc::Sender<FromHost>,
     subs: Vec<tokio::task::JoinHandle<()>>,
     manager: Arc<Manager>,
 }
 
-impl Connection {
+impl<R: AsyncRead + Unpin> Connection<R> {
     async fn run(&mut self) -> Result<(), Error> {
         loop {
             let req = match self.reader.read().await {
@@ -626,5 +653,459 @@ impl Connection {
                 }
             }
         }));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        path::PathBuf,
+        sync::Arc,
+        time::{Duration, Instant},
+    };
+
+    use bao_core::{
+        protocol::{ChannelKind, FromHost, PROTOCOL_VERSION, Reply, Request, Rpc, WireError},
+        sandbox::{SandboxKind, SandboxSpec},
+        types::{Command, LaunchRequest, SessionId, TerminalSize},
+    };
+    use tokio::io::{AsyncWriteExt, DuplexStream, duplex};
+
+    use super::*;
+
+    fn temp_root(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("bao-server-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn launch_request(dir: &std::path::Path, command: &str) -> LaunchRequest {
+        LaunchRequest {
+            command: Some(Command::parse(command).unwrap()),
+            dir: Some(dir.to_path_buf()),
+            name: None,
+            size: TerminalSize::default(),
+            sandbox: SandboxSpec {
+                isolation: Some(SandboxKind::InPlace),
+            },
+        }
+    }
+
+    /// A minimal in-process client: speaks the wire protocol over one end of
+    /// a duplex pair — no daemon binary, no TCP. Mirrors the real client's
+    /// reply routing: frames for other purposes (a launched session's event
+    /// stream, watch state) are skipped until the RPC's own id answers.
+    struct TestClient {
+        reader: FrameReader<tokio::io::ReadHalf<DuplexStream>, FromHost>,
+        writer: FrameWriter<tokio::io::WriteHalf<DuplexStream>, Request>,
+        next_id: u32,
+    }
+
+    impl TestClient {
+        fn new(stream: DuplexStream) -> Self {
+            let (read, write) = tokio::io::split(stream);
+            TestClient {
+                reader: FrameReader::new(read),
+                writer: FrameWriter::new(write),
+                next_id: 1,
+            }
+        }
+
+        /// One RPC round-trip: write the request, read frames until our id
+        /// answers with `Reply` or `Err`.
+        async fn call(&mut self, rpc: Rpc) -> Result<Reply, WireError> {
+            let id = self.next_id;
+            self.next_id += 1;
+            self.writer
+                .write(&Request { id, rpc })
+                .await
+                .map_err(|e| WireError::Internal {
+                    message: e.to_string(),
+                })?;
+            loop {
+                match self.reader.read().await.map_err(|e| WireError::Internal {
+                    message: e.to_string(),
+                })? {
+                    Some(FromHost::Reply { id: rid, reply }) if rid == id => return Ok(reply),
+                    Some(FromHost::Err { id: rid, error }) if rid == id => return Err(error),
+                    Some(_) => continue,
+                    None => {
+                        return Err(WireError::Internal {
+                            message: "connection closed before the reply".into(),
+                        });
+                    }
+                }
+            }
+        }
+
+        /// The next frame the daemon pushes on this channel.
+        async fn next_frame(&mut self) -> Option<FromHost> {
+            self.reader.read().await.ok().flatten()
+        }
+    }
+
+    /// Spawn the daemon's accept loop over one end of a fresh duplex pair and
+    /// return the client half plus the handshake reply. Every connection
+    /// names its channel in the first frame.
+    async fn dial(
+        manager: &Arc<Manager>,
+        kind: ChannelKind,
+        buf: usize,
+    ) -> (TestClient, Result<Reply, WireError>) {
+        let (a, b) = duplex(buf);
+        let m = manager.clone();
+        tokio::spawn(async move {
+            let _ = accept(a, m).await;
+        });
+        let mut client = TestClient::new(b);
+        let reply = client.call(Rpc::Hello { kind }).await;
+        (client, reply)
+    }
+
+    #[tokio::test]
+    async fn control_channel_e2e_no_daemon_binary() {
+        let root = temp_root("ctrl-e2e");
+        let manager = Arc::new(Manager::new(root.clone()));
+        let (mut control, reply) = dial(&manager, ChannelKind::Control, 64 * 1024).await;
+        assert!(matches!(reply.unwrap(), Reply::Ok), "control handshake");
+
+        // The daemon's self-description, with our protocol version.
+        let Reply::Info { info } = control.call(Rpc::Info).await.unwrap() else {
+            panic!("expected Info");
+        };
+        assert_eq!(info.protocol_version, PROTOCOL_VERSION);
+
+        // Empty at first.
+        let Reply::List { sessions } = control.call(Rpc::List).await.unwrap() else {
+            panic!("expected List");
+        };
+        assert!(sessions.is_empty());
+
+        // Launch a real process in place — no git, no daemon binary. The
+        // reply carries the session's meta.
+        let meta = match control
+            .call(Rpc::Launch(launch_request(
+                &root,
+                "bash -c 'echo CHANNEL_E2E; sleep 5'",
+            )))
+            .await
+            .unwrap()
+        {
+            Reply::Launch { session } => session,
+            _ => panic!("expected Launch"),
+        };
+
+        // The new session shows up in List.
+        let Reply::List { sessions } = control.call(Rpc::List).await.unwrap() else {
+            panic!("expected List");
+        };
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, meta.id);
+
+        // Typed error: an unknown session is `NotFound`, not a generic
+        // failure — clients branch on the kind.
+        let err = control
+            .call(Rpc::Stop {
+                session: SessionId::generate(),
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(err, WireError::NotFound { .. }));
+
+        // Rm brings the list back to empty (and kills the process).
+        assert!(matches!(
+            control.call(Rpc::Rm { session: meta.id }).await.unwrap(),
+            Reply::Ok
+        ));
+        let Reply::List { sessions } = control.call(Rpc::List).await.unwrap() else {
+            panic!("expected List");
+        };
+        assert!(sessions.is_empty());
+
+        manager.kill_all();
+    }
+
+    #[tokio::test]
+    async fn watch_channel_streams_state_and_gone() {
+        let root = temp_root("watch-e2e");
+        let manager = Arc::new(Manager::new(root.clone()));
+        let (mut control, reply) = dial(&manager, ChannelKind::Control, 64 * 1024).await;
+        assert!(matches!(reply.unwrap(), Reply::Ok));
+        let (mut watch, reply) = dial(&manager, ChannelKind::Watch, 64 * 1024).await;
+        assert!(matches!(reply.unwrap(), Reply::Ok));
+
+        // The watch channel's initial picture is the (empty) list; the
+        // launched session must then appear as a State frame, unpolled.
+        let meta = match control
+            .call(Rpc::Launch(launch_request(&root, "bash -c 'sleep 5'")))
+            .await
+            .unwrap()
+        {
+            Reply::Launch { session } => session,
+            _ => panic!("expected Launch"),
+        };
+
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut seen = false;
+        while tokio::time::Instant::now() < deadline {
+            let frame = tokio::time::timeout(Duration::from_millis(500), watch.next_frame())
+                .await
+                .expect("watch stream must not stall")
+                .expect("watch channel closed early");
+            if let FromHost::State { meta: m, .. } = frame {
+                if m.id == meta.id {
+                    seen = true;
+                    break;
+                }
+            }
+        }
+        assert!(seen, "launched session never appeared on the watch channel");
+
+        // Rm → the watch channel learns the removal as Gone.
+        assert!(matches!(
+            control
+                .call(Rpc::Rm {
+                    session: meta.id.clone()
+                })
+                .await
+                .unwrap(),
+            Reply::Ok
+        ));
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut gone = false;
+        while tokio::time::Instant::now() < deadline {
+            let frame = tokio::time::timeout(Duration::from_millis(500), watch.next_frame())
+                .await
+                .expect("watch stream must not stall")
+                .expect("watch channel closed early");
+            if let FromHost::Gone { session, .. } = frame {
+                assert_eq!(session, meta.id);
+                gone = true;
+                break;
+            }
+        }
+        assert!(gone, "removal never reached the watch channel");
+
+        manager.kill_all();
+    }
+
+    #[tokio::test]
+    async fn attach_channel_streams_snapshot_and_live_output() {
+        let root = temp_root("attach-e2e");
+        let manager = Arc::new(Manager::new(root.clone()));
+        let (mut control, reply) = dial(&manager, ChannelKind::Control, 64 * 1024).await;
+        assert!(matches!(reply.unwrap(), Reply::Ok));
+
+        // A chatty process so the attach channel has live bytes to stream.
+        let meta = match control
+            .call(Rpc::Launch(launch_request(
+                &root,
+                "bash -c 'for i in 1 2 3 4 5; do echo ATTACH_$i; sleep 0.1; done'",
+            )))
+            .await
+            .unwrap()
+        {
+            Reply::Launch { session } => session,
+            _ => panic!("expected Launch"),
+        };
+
+        // Wait until the process has really printed, so the snapshot is
+        // known to contain output — deterministic, no fixed sleep.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let Reply::List { sessions } = control.call(Rpc::List).await.unwrap() else {
+                panic!("expected List");
+            };
+            if sessions
+                .iter()
+                .any(|m| m.id == meta.id && m.last_output.contains("ATTACH_1"))
+            {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "session never produced ATTACH_1"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+
+        // The attach handshake reply IS the consistent snapshot:
+        // (meta, seq, screen). Replay from `seq` continues without loss or
+        // duplication — the snapshot is exactly the fold of events ≤ seq.
+        let (mut attach, reply) = dial(
+            &manager,
+            ChannelKind::Attach {
+                session: meta.id.clone(),
+            },
+            64 * 1024,
+        )
+        .await;
+        let (seq, screen) = match reply.unwrap() {
+            Reply::Attach {
+                session,
+                seq,
+                screen,
+            } => {
+                assert_eq!(session.id, meta.id);
+                (seq, screen.0)
+            }
+            other => panic!("expected Attach handshake, got {other:?}"),
+        };
+        // The screen is the terminal render of every event ≤ seq, so the
+        // bytes we already saw are folded in — the re-attach contract.
+        assert!(
+            String::from_utf8_lossy(&screen).contains("ATTACH_1"),
+            "snapshot must contain the output folded up to seq {seq}"
+        );
+
+        // Live frames: Output must arrive with seq strictly after the
+        // snapshot's — nothing before it is re-sent (lossless, no dupes).
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut saw_output = false;
+        while tokio::time::Instant::now() < deadline {
+            let frame = tokio::time::timeout(Duration::from_millis(500), attach.next_frame())
+                .await
+                .expect("attach stream must not stall")
+                .expect("attach channel closed early");
+            if let FromHost::Output {
+                session, seq: s, ..
+            } = frame
+            {
+                assert_eq!(session, meta.id);
+                assert!(s >= seq, "replay must not re-send seq ≤ snapshot");
+                saw_output = true;
+                break;
+            }
+        }
+        assert!(saw_output, "no live output arrived on the attach channel");
+
+        manager.kill_all();
+    }
+
+    /// A stalled reader on one channel must not slow any other channel: each
+    /// channel owns its backpressure (bounded out queue + the transport's
+    /// own flow control), so the daemon blocks that channel's writer and
+    /// nothing else.
+    #[tokio::test]
+    async fn stalled_reader_does_not_block_other_channels() {
+        let root = temp_root("isolation");
+        let manager = Arc::new(Manager::new(root.clone()));
+
+        // Channel A: control + a noisy session. After the launch ack we stop
+        // reading entirely; with a 1 KiB duplex buffer the daemon's writer
+        // for A backs up within a few hundred bytes of output.
+        let (mut a, reply) = dial(&manager, ChannelKind::Control, 1024).await;
+        assert!(matches!(reply.unwrap(), Reply::Ok));
+        let meta = match a
+            .call(Rpc::Launch(launch_request(
+                &root,
+                "bash -c 'while true; do echo STALL_ME; sleep 0.01; done'",
+            )))
+            .await
+            .unwrap()
+        {
+            Reply::Launch { session } => session,
+            _ => panic!("expected Launch"),
+        };
+        // Let A's writer fill the tiny duplex buffer and the bounded out
+        // queue. `a` stays alive but unread — the stall is real.
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+
+        // Channel B: a fresh control channel. RPCs must answer promptly even
+        // while A is backed up end-to-end.
+        let (mut b, reply) = dial(&manager, ChannelKind::Control, 64 * 1024).await;
+        assert!(matches!(reply.unwrap(), Reply::Ok));
+        for _ in 0..10 {
+            let t0 = Instant::now();
+            tokio::time::timeout(Duration::from_millis(500), b.call(Rpc::Info))
+                .await
+                .expect("channel B stalled behind channel A's backpressure")
+                .unwrap();
+            assert!(
+                t0.elapsed() < Duration::from_millis(250),
+                "B's round-trip must stay fast while A is stalled"
+            );
+        }
+
+        // Cleanup: the noisy session is killed through its own RPC.
+        assert!(matches!(
+            b.call(Rpc::Rm { session: meta.id }).await.unwrap(),
+            Reply::Ok
+        ));
+        manager.kill_all();
+    }
+
+    /// A connection whose first frame is not a channel Hello is a protocol
+    /// violation — the daemon drops it without answering.
+    #[tokio::test]
+    async fn connection_without_hello_is_dropped() {
+        let root = temp_root("refusal");
+        let manager = Arc::new(Manager::new(root.clone()));
+        let (a, b) = duplex(4096);
+        let m = manager.clone();
+        tokio::spawn(async move {
+            let _ = accept(a, m).await;
+        });
+        let mut client = TestClient::new(b);
+
+        // The first frame must name a channel; an RPC first is a refusal.
+        client
+            .writer
+            .write(&Request {
+                id: 1,
+                rpc: Rpc::List,
+            })
+            .await
+            .unwrap();
+        let eof = tokio::time::timeout(Duration::from_secs(2), client.reader.read())
+            .await
+            .expect("daemon must close the connection")
+            .unwrap();
+        assert!(
+            eof.is_none(),
+            "a non-Hello first frame must not be answered"
+        );
+    }
+
+    /// Garbage on the wire is refused the same way: dropped, not echoed.
+    #[tokio::test]
+    async fn garbage_first_frame_is_dropped() {
+        let root = temp_root("refusal-garbage");
+        let manager = Arc::new(Manager::new(root.clone()));
+        let (a, mut raw) = duplex(4096);
+        let m = manager.clone();
+        tokio::spawn(async move {
+            let _ = accept(a, m).await;
+        });
+
+        // Not a length-prefixed JSON frame at all.
+        raw.write_all(b"not a frame, definitely not a hello")
+            .await
+            .unwrap();
+        let mut client = TestClient::new(raw);
+        let eof = tokio::time::timeout(Duration::from_secs(2), client.reader.read())
+            .await
+            .expect("daemon must close the connection")
+            .unwrap();
+        assert!(eof.is_none(), "garbage must be dropped, not echoed");
+    }
+
+    /// Attaching to a session the daemon doesn't know is a typed refusal —
+    /// `NotFound` on the channel handshake, not a silent close.
+    #[tokio::test]
+    async fn attach_to_unknown_session_is_a_typed_refusal() {
+        let root = temp_root("refusal-attach");
+        let manager = Arc::new(Manager::new(root.clone()));
+        let (_attach, reply) = dial(
+            &manager,
+            ChannelKind::Attach {
+                session: SessionId::generate(),
+            },
+            4096,
+        )
+        .await;
+        let err = reply.expect_err("attach to an unknown session must be refused");
+        assert!(matches!(err, WireError::NotFound { .. }));
     }
 }
