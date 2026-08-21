@@ -1,16 +1,13 @@
 //! The [`SandboxBackend`] adapters: one strategy per isolation mechanism.
 
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::path::{Path, PathBuf};
 
 use bao_core::{
     sandbox::{SandboxKind, Workspace},
     types::SessionId,
 };
 
-use crate::error::Error;
+use crate::{error::Error, git::Git};
 
 use super::SandboxBackend;
 
@@ -54,26 +51,16 @@ impl SandboxBackend for GitWorktree {
     }
 
     fn prepare(&self, id: &SessionId, cwd: &Path) -> Result<Workspace, Error> {
-        let repo = git_root(cwd).map_err(|_| Error::SandboxUnavailable(SandboxKind::Worktree))?;
+        let git =
+            Git::discover(cwd).map_err(|_| Error::SandboxUnavailable(SandboxKind::Worktree))?;
         let path = self.dir.join(id.as_str()).join("tree");
         let branch = format!("bao-{id}");
-        let status = Command::new("git")
-            .arg("-C")
-            .arg(&repo)
-            .args(["worktree", "add", "-b", &branch])
-            .arg(&path)
-            .arg("HEAD")
-            .status()
-            .map_err(|e| Error::Worktree(format!("failed to run git worktree add: {e}")))?;
-        if !status.success() {
-            return Err(Error::Worktree(format!(
-                "could not create a worktree for session {id} in {} (branch `{branch}` may already exist)",
-                repo.display()
-            )));
-        }
+        git.worktree_add(&branch, &path, "HEAD").map_err(|e| {
+            Error::Worktree(format!("could not create a worktree for session {id}: {e}"))
+        })?;
         Ok(Workspace {
             kind: SandboxKind::Worktree,
-            repo: Some(repo),
+            repo: Some(git.root().to_path_buf()),
             branch: Some(branch),
             path,
         })
@@ -84,38 +71,17 @@ impl SandboxBackend for GitWorktree {
             .repo
             .as_ref()
             .ok_or_else(|| Error::Worktree("worktree workspace without a repo root".to_string()))?;
-        let _ = Command::new("git")
-            .arg("-C")
-            .arg(repo)
-            .args(["worktree", "remove", "--force"])
-            .arg(&workspace.path)
-            .status();
+        let git = Git::open(repo.clone());
+        // Best-effort: git already removed the tree, and the branch and the
+        // store dir are cleaned up regardless.
+        let _ = git.worktree_remove(&workspace.path);
         if let Some(branch) = &workspace.branch {
-            let _ = Command::new("git")
-                .arg("-C")
-                .arg(repo)
-                .args(["branch", "-D", branch])
-                .status();
+            let _ = git.branch_delete(branch);
         }
-        // Best-effort: make sure the tree and its store dir are gone.
         let _ = std::fs::remove_dir_all(&workspace.path);
         if let Some(parent) = workspace.path.parent() {
             let _ = std::fs::remove_dir_all(parent);
         }
         Ok(())
     }
-}
-
-fn git_root(cwd: &Path) -> Result<PathBuf, Error> {
-    let out = Command::new("git")
-        .arg("-C")
-        .arg(cwd)
-        .args(["rev-parse", "--show-toplevel"])
-        .output()?;
-    if !out.status.success() {
-        return Err(Error::NotAGitRepo);
-    }
-    Ok(PathBuf::from(
-        String::from_utf8_lossy(&out.stdout).trim().to_string(),
-    ))
 }

@@ -2,6 +2,8 @@
 //! event log, the sandbox and harness adapters — and serves clients over the
 //! wire.
 
+mod git;
+
 pub mod error;
 pub mod harness;
 pub mod hostname;

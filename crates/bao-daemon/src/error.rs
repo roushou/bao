@@ -34,6 +34,8 @@ pub enum Error {
     ResumeNotInterrupted(Status),
     #[error("not a git repository")]
     NotAGitRepo,
+    #[error("git error: {0}")]
+    Git(String),
     #[error("sandbox {0} is not available here (not a git repo, or the backend is missing)")]
     SandboxUnavailable(SandboxKind),
     #[error("worktree error: {0}")]
