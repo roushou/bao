@@ -1,4 +1,4 @@
-//! Sandbox strategies: the [`Sandbox`] port and its adapters. The daemon is
+//! SandboxBackend strategies: the [`SandboxBackend`] port and its adapters. The daemon is
 //! the only place that touches the OS to build or tear down a [`Workspace`].
 
 use std::{
@@ -16,7 +16,7 @@ use bao_core::{
 /// saga's forward and compensating steps. One adapter per isolation
 /// mechanism; a new one (bubblewrap/Landlock, Seatbelt, a container) is a new
 /// impl — the saga and the FSM don't change.
-pub trait Sandbox: Send + Sync {
+pub trait SandboxBackend: Send + Sync {
     /// The isolation level this strategy provides.
     fn kind(&self) -> SandboxKind;
     /// Build the working copy (the saga's forward step).
@@ -28,7 +28,7 @@ pub trait Sandbox: Send + Sync {
 /// Runs the session in the user's own directory — no isolation.
 pub struct InPlace;
 
-impl Sandbox for InPlace {
+impl SandboxBackend for InPlace {
     fn kind(&self) -> SandboxKind {
         SandboxKind::InPlace
     }
@@ -59,13 +59,13 @@ impl GitWorktree {
     }
 }
 
-impl Sandbox for GitWorktree {
+impl SandboxBackend for GitWorktree {
     fn kind(&self) -> SandboxKind {
         SandboxKind::Worktree
     }
 
     fn prepare(&self, id: &SessionId, cwd: &Path) -> Result<Workspace, Error> {
-        let repo = git_root(cwd).map_err(|_| Error::IsolationUnavailable(SandboxKind::Worktree))?;
+        let repo = git_root(cwd).map_err(|_| Error::SandboxUnavailable(SandboxKind::Worktree))?;
         let path = self.dir.join(id.as_str()).join("tree");
         let branch = format!("bao-{id}");
         let status = Command::new("git")
@@ -155,7 +155,7 @@ impl SandboxStore {
         self.backend(workspace.kind).compensate(workspace)
     }
 
-    fn backend(&self, kind: SandboxKind) -> Box<dyn Sandbox> {
+    fn backend(&self, kind: SandboxKind) -> Box<dyn SandboxBackend> {
         match kind {
             SandboxKind::InPlace => Box::new(InPlace),
             SandboxKind::Worktree => Box::new(GitWorktree::new(self.dir.clone())),
@@ -285,7 +285,7 @@ mod tests {
             store
                 .create(&SessionId::from_str("dead0001").unwrap(), &cwd, &spec)
                 .unwrap_err(),
-            Error::IsolationUnavailable(SandboxKind::Worktree)
+            Error::SandboxUnavailable(SandboxKind::Worktree)
         ));
         std::fs::remove_dir_all(&root).unwrap();
     }

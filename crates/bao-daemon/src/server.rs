@@ -402,7 +402,7 @@ impl<R: AsyncRead + Unpin> Connection<R> {
                         info: DaemonInfo {
                             host: Hostname::local(),
                             protocol_version: PROTOCOL_VERSION,
-                            isolation_backends: vec![SandboxKind::InPlace, SandboxKind::Worktree],
+                            sandbox_backends: vec![SandboxKind::InPlace, SandboxKind::Worktree],
                         },
                     },
                 )

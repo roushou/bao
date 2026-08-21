@@ -42,8 +42,8 @@ pub enum Error {
     DirNotFound(String),
     #[error("not a git repository")]
     NotAGitRepo,
-    #[error("isolation {0} is not available here (not a git repo, or the backend is missing)")]
-    IsolationUnavailable(SandboxKind),
+    #[error("sandbox {0} is not available here (not a git repo, or the backend is missing)")]
+    SandboxUnavailable(SandboxKind),
     #[error("unknown sandbox kind: {0:?} (expected inplace | worktree)")]
     BadSandboxKind(String),
     #[error("invalid hostname: {0:?}")]

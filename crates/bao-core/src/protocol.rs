@@ -179,7 +179,7 @@ pub enum WireError {
     },
     AlreadyRunning,
     NotRunning,
-    IsolationUnavailable {
+    SandboxUnavailable {
         kind: SandboxKind,
     },
     /// The request was wrong, not the daemon (bad args, bad command).
@@ -202,9 +202,9 @@ impl std::fmt::Display for WireError {
             ),
             WireError::AlreadyRunning => write!(f, "session already has a running process"),
             WireError::NotRunning => write!(f, "session is not running (interrupted)"),
-            WireError::IsolationUnavailable { kind } => write!(
+            WireError::SandboxUnavailable { kind } => write!(
                 f,
-                "isolation {kind} is not available here (not a git repo, or the backend is missing)"
+                "sandbox {kind} is not available here (not a git repo, or the backend is missing)"
             ),
             WireError::BadRequest { message } => write!(f, "{message}"),
             WireError::Internal { message } => write!(f, "{message}"),
@@ -248,7 +248,7 @@ impl From<&crate::error::Error> for WireError {
             },
             Error::AlreadyRunning => WireError::AlreadyRunning,
             Error::NotRunning => WireError::NotRunning,
-            Error::IsolationUnavailable(kind) => WireError::IsolationUnavailable { kind: *kind },
+            Error::SandboxUnavailable(kind) => WireError::SandboxUnavailable { kind: *kind },
             // The rest are user-correctable or daemon faults; carry the text.
             other => WireError::BadRequest {
                 message: other.to_string(),

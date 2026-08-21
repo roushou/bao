@@ -298,7 +298,7 @@ async fn handshake_reports_daemon_info_and_typed_errors() {
         );
         assert!(!info.host.as_str().is_empty());
         assert!(
-            info.isolation_backends
+            info.sandbox_backends
                 .contains(&bao_core::sandbox::SandboxKind::Worktree),
             "the machine advertises what it can do"
         );

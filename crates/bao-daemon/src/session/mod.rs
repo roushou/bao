@@ -681,7 +681,7 @@ mod tests {
             Ok(_) => panic!("expected launch to fail"),
         };
         assert!(
-            matches!(err, Error::IsolationUnavailable(SandboxKind::Worktree)),
+            matches!(err, Error::SandboxUnavailable(SandboxKind::Worktree)),
             "sandbox step must fail: {err:?}"
         );
 

@@ -1,5 +1,5 @@
 //! The sandbox *data* — what an isolated working copy is. The strategies
-//! that materialize and remove one (`bao-daemon::sandbox::Sandbox`) live in
+//! that materialize and remove one (`bao-daemon::sandbox::SandboxBackend`) live in
 //! the daemon; this crate holds only the serializable record.
 
 use std::{fmt, path::PathBuf, str::FromStr};

@@ -142,10 +142,10 @@ Rpc::Launch
 
 | Step       | Forward                                                | Compensation                                 |
 | ---------- | ------------------------------------------------------ | -------------------------------------------- |
-| 1. Sandbox | `IsolationBackend::prepare` (`git worktree add` today) | `remove --force` + `branch -D` + delete tree |
+| 1. Sandbox | `SandboxBackend::prepare` (`git worktree add` today) | `remove --force` + `branch -D` + delete tree |
 | 2. Spawn   | open PTY, spawn harness                                | kill child, close PTY                        |
 
-This is the `IsolationBackend` trait already hinted in `sandbox.rs` — a port
+This is the `SandboxBackend` trait already hinted in `sandbox.rs` — a port
 with `prepare`/`compensate`, so inplace/worktree/bubblewrap are adapters the
 saga is generic over. The current `Manager::create` (sandbox-then-spawn,
 synchronous) is replaced by `begin_launch` + the saga task; `sandbox_store.remove`
@@ -258,7 +258,7 @@ Each slice ends runnable and testable:
    restore with the honesty rule. Existing tests updated.
 2. **`bao-core` + `bao-daemon` — backgrounded saga.** `begin_launch` +
    compensation + `StateEvent::Gone` + `FromHost::Gone` + `Watch` mapping.
-   `IsolationBackend` port extracted from `sandbox.rs`.
+   `SandboxBackend` port extracted from `sandbox.rs`.
 3. **`bao-tui` — feedback.** Non-blocking create with select+dock, the
    `preparing`/`starting` signal + `hollow` glyph, first-output flash, and
    `Gone` rollback toast.

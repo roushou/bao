@@ -554,7 +554,7 @@ pub struct DaemonInfo {
     pub protocol_version: u32,
     /// Isolation backends this machine can provide. A client offers only
     /// these, never more.
-    pub isolation_backends: Vec<SandboxKind>,
+    pub sandbox_backends: Vec<SandboxKind>,
 }
 
 // ---------------------------------------------------------------------------

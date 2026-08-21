@@ -129,7 +129,7 @@ impl Conn {
             info: DaemonInfo {
                 host: Hostname::local(),
                 protocol_version: 0,
-                isolation_backends: Vec::new(),
+                sandbox_backends: Vec::new(),
             },
         };
         match conn

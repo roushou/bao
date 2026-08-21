@@ -26,7 +26,7 @@ bao-core     pure model: Status, Alert, LifecycleEvent + FSM, SessionMeta,
              protocol types (Rpc/Reply/FromHost/WireError), value types, error
 bao-wire     framing (FrameReader/FrameWriter) + the client (Conn/HostMsg)
 bao-daemon   session (live PTY/process/log/screen), manager (registry + saga),
-             store (meta.json/events.log), sandbox (Sandbox trait + InPlace/
+             store (meta.json/events.log), sandbox (SandboxBackend trait + InPlace/
              GitWorktree), harness (Harness trait + Pi/Fallback), wire (server)
 bao-tui      the overview renderer
 bao          main, CLI dispatch, daemon-process management, Context
@@ -64,7 +64,7 @@ nothing imports it.
 | `bao-core::session::Manager` (registry + saga)              | `bao-daemon::manager`                                                                                                                              |
 | `bao-core::session::SessionStore`/`StoredMeta`              | `bao-daemon::store`                                                                                                                                |
 | `bao-core::screen` (vt100)                                  | `bao-daemon`                                                                                                                                       |
-| `bao-core::sandbox` impls + `IsolationBackend`              | `bao-daemon::sandbox` (`Sandbox` trait + `InPlace`/`GitWorktree`)                                                                                  |
+| `bao-core::sandbox` impls + `IsolationBackend`              | `bao-daemon::sandbox` (`SandboxBackend` trait + `InPlace`/`GitWorktree`)                                                                             |
 | `bao-core::protocol` (types)                                | stays in `bao-core` (pure data)                                                                                                                    |
 | `bao-core` keeps                                            | `Status`, `Alert`, `LifecycleEvent`+FSM, `SessionMeta`, `EventKind`, `Workspace`/`SandboxKind`/`SandboxSpec`, protocol types, value types, `error` |
 

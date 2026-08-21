@@ -16,7 +16,7 @@ impl InfoCmd {
         println!("host: {}", info.host);
         println!("protocol version: {}", info.protocol_version);
         let backends = info
-            .isolation_backends
+            .sandbox_backends
             .iter()
             .map(|k| k.to_string())
             .collect::<Vec<_>>()
