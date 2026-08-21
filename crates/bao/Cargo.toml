@@ -15,7 +15,6 @@ anyhow = { workspace = true }
 bao-client = { workspace = true }
 bao-core = { workspace = true }
 bao-daemon = { workspace = true }
-bao-protocol = { workspace = true }
 bao-transport = { workspace = true }
 bao-tui = { workspace = true }
 clap = { version = "4", features = ["derive"] }
@@ -29,6 +28,7 @@ bao-client = { workspace = true }
 bao-core = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+bao-protocol = { workspace = true }
 
 [lints]
 workspace = true
