@@ -44,8 +44,8 @@ nothing imports it.
    reusable by any client — including wasm — so its purity is a compile error,
    not a convention. This is _why_ `bao-wire` is a crate, not a `bao-core`
    module: framing needs tokio, and a module cannot enforce the boundary.
-3. **Port-graduation rule.** The `Sandbox` and `Harness` traits live as modules
-   inside `bao-daemon`. A trait moves into `bao-core` only when its first
+3. **Port-graduation rule.** The `SandboxBackend` and `Harness` traits live
+   as modules inside `bao-daemon`. A trait moves into `bao-core` only when its first
    adapter becomes its own crate (because that adapter drags a heavy dependency
    or gains external consumers). No speculative ports in the core.
 4. **`Transition` convention.** Every pure FSM follows `docs/design/
@@ -80,7 +80,8 @@ plus the state machine that decides its `Status` — is the domain's.
   daemon and there are two impls; a crate would be a boundary with nothing on
   the other side.
 - `bao-client → bao-wire` — it was transport plumbing, not a product concept.
-- `IsolationBackend → Sandbox` (trait); the data struct `Sandbox → Workspace`
+- `IsolationBackend → SandboxBackend` (trait); the data struct `Sandbox →
+  Workspace`
   (the isolated working copy). Impls: `InPlace`, `GitWorktree`. `SandboxKind`
   and `SandboxSpec` keep their names.
 - `bao-cli → bao` — the binary is `bao`, so the crate that produces it is `bao`.
@@ -130,7 +131,8 @@ Each step ends with `cargo test --workspace` + clippy green.
 3. Slim `bao-core`: move the live `Session`/`Manager`/`SessionStore`/`screen`
    into `bao-daemon`; keep only the pure domain. `bao-core` becomes tokio-free.
 4. Fold harness + sandbox into `bao-daemon`: `bao-agent`'s `Harness` trait +
-   impls into `bao-daemon::harness`; rename `IsolationBackend → Sandbox`,
+   impls into `bao-daemon::harness`; rename `IsolationBackend →
+   SandboxBackend`,
    `Sandbox` (data) → `Workspace`; impls into `bao-daemon::sandbox`.
 5. Re-point frontends: `bao-tui` and `bao` depend only on `bao-core` +
    `bao-wire` (never `bao-daemon`).

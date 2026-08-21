@@ -93,7 +93,8 @@ session's terminal. `WireError` is typed so clients branch on _kind_.
 ### Sandboxes
 
 One isolated working copy per session, so sessions don't step on each other.
-`SandboxSpec` (what the user asks) resolves into a `Sandbox` (what exists),
+`SandboxSpec` (what the user asks) resolves into a `SandboxBackend` (what
+exists),
 and the daemon **never silently delivers a weaker isolation than requested**.
 Worktrees (file isolation) are the default backend; the target tier is
 lightweight process sandboxing (bubblewrap/Landlock on Linux, Seatbelt on
@@ -143,6 +144,7 @@ spectacle · resilience of state. (Full text: `docs/03-principles.md`.)
 - Product: `docs/01-product.md`, `02-capabilities.md`, `03-principles.md`,
   `04-stages.md` (roadmap), `05-open-questions.md`.
 - Design records: `docs/design/terminology.md`, `visual-language.md`,
-  `panes.md`, `no-replay-attach.md`, `event-sourcing.md` (the session
-  lifecycle FSM + backgrounded launch saga), `state-machines.md` (the FSM
-  convention), `crate-topology.md` (the crate/dependency boundaries).
+  `panes.md`, `no-replay-attach.md`, `channels.md` (one logical channel per
+  connection), `event-sourcing.md` (the session lifecycle FSM + backgrounded
+  launch saga), `state-machines.md` (the FSM convention), `crate-topology.md`
+  (the crate/dependency boundaries).

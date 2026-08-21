@@ -142,7 +142,7 @@ Rpc::Launch
 
 | Step       | Forward                                                | Compensation                                 |
 | ---------- | ------------------------------------------------------ | -------------------------------------------- |
-| 1. Sandbox | `SandboxBackend::prepare` (`git worktree add` today) | `remove --force` + `branch -D` + delete tree |
+| 1. SandboxBackend | `SandboxBackend::prepare` (`git worktree add` today) | `remove --force` + `branch -D` + delete tree |
 | 2. Spawn   | open PTY, spawn harness                                | kill child, close PTY                        |
 
 This is the `SandboxBackend` trait already hinted in `sandbox.rs` — a port

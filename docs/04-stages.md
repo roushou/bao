@@ -42,7 +42,7 @@ The single-machine story is built and working:
 - **Isolation choice.** `bao launch --isolation inplace|worktree` requests an
   isolation level; the daemon never silently delivers a weaker one.
 - **Machine identity and capability negotiation.** `bao info` reports the
-  host, protocol version, and available isolation backends; clients
+  host, protocol version, and available sandbox backends; clients
   handshake before speaking.
 
 ## Remaining (single machine)

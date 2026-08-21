@@ -71,8 +71,9 @@ at all.
 
 `Conn` keeps its public surface (`connect`, `into_parts`, `info`, and every
 RPC method) so the TUI and CLI do not change. Internally it owns a
-`ControlChannel` (one socket, the RPC loop) plus a merged event stream fed by
-a reader task per opened `Watch`/`Attach` channel.
+`ConnWriter` (the control socket's write half, typed RPCs, and the channel
+dialer) plus a merged event stream fed by a reader task per opened
+`Watch`/`Attach` channel.
 
 ## 5. Adjacent boundaries (separate records)
 
