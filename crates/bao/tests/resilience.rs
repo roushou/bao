@@ -28,7 +28,7 @@ async fn session_survives_daemon_restart() {
                 cols: 120,
                 rows: 40,
             },
-            bao_core::sandbox::SandboxSpec::default(),
+            common::in_place(),
         )
         .await
         .unwrap();

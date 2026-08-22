@@ -29,7 +29,7 @@ async fn interrupted_session_can_be_resumed() {
                 cols: 120,
                 rows: 40,
             },
-            bao_core::sandbox::SandboxSpec::default(),
+            common::in_place(),
         )
         .await
         .unwrap();

@@ -38,25 +38,15 @@ impl Sandbox {
         Sandbox { workspace, backend }
     }
 
-    /// Materialize a sandbox for `spec` into `store`. A `spec` of `None`
-    /// resolves the strongest the machine offers; a requested kind that
-    /// cannot be provided is an error, never a silent downgrade.
+    /// Materialize the requested sandbox kind into `store`. A kind that
+    /// cannot be provided is an error — never a silent downgrade.
     pub fn create(
         store: &WorkspaceStore,
         id: &SessionId,
         cwd: &Path,
         spec: &SandboxSpec,
     ) -> Result<Sandbox, Error> {
-        match spec.isolation {
-            Some(kind) => prepare_with(store, kind, id, cwd),
-            None => {
-                let backend = backend(store, SandboxKind::Worktree);
-                match backend.prepare(id, cwd) {
-                    Ok(workspace) => Ok(Sandbox::new(workspace, backend)),
-                    Err(_) => prepare_with(store, SandboxKind::InPlace, id, cwd),
-                }
-            }
-        }
+        prepare_with(store, spec.isolation, id, cwd)
     }
 
     /// Re-create a backend from a persisted workspace (restore/resume).
@@ -208,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn non_git_dir_runs_in_place_and_is_left_alone() {
+    fn in_place_runs_in_the_users_dir_and_is_untouched() {
         let root = temp("inplace");
         let cwd = root.join("scratch");
         std::fs::create_dir_all(&cwd).unwrap();
@@ -218,7 +208,9 @@ mod tests {
             &store,
             &SessionId::from_str("deadbeef").unwrap(),
             &cwd,
-            &SandboxSpec::default(),
+            &SandboxSpec {
+                isolation: SandboxKind::InPlace,
+            },
         )
         .unwrap();
         assert!(!sandbox.workspace.isolated());
@@ -235,7 +227,7 @@ mod tests {
         std::fs::create_dir_all(&cwd).unwrap();
         let store = WorkspaceStore::new(root.join("workspaces"));
         let spec = SandboxSpec {
-            isolation: Some(SandboxKind::Worktree),
+            isolation: SandboxKind::Worktree,
         };
         assert!(matches!(
             Sandbox::create(

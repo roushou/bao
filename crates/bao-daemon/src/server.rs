@@ -691,7 +691,7 @@ mod tests {
             name: None,
             size: TerminalSize::default(),
             sandbox: SandboxSpec {
-                isolation: Some(SandboxKind::InPlace),
+                isolation: SandboxKind::InPlace,
             },
         }
     }

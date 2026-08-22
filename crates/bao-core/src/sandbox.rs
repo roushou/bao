@@ -57,13 +57,22 @@ impl FromStr for SandboxKind {
     }
 }
 
-/// What a launch asks for in isolation. The daemon resolves this into a
-/// concrete [`Workspace`] and never silently degrades it.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// What a launch asks for in isolation. The kind is always explicit: the
+/// daemon materializes exactly this backend or fails — it never silently
+/// downgrades or substitutes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SandboxSpec {
-    /// Requested isolation. `None` = resolve the strongest this machine
-    /// offers for the launch cwd (git repo → worktree, else in place).
-    pub isolation: Option<SandboxKind>,
+    /// Requested isolation.
+    pub isolation: SandboxKind,
+}
+
+impl Default for SandboxSpec {
+    /// The default backend: a git worktree (file isolation).
+    fn default() -> Self {
+        SandboxSpec {
+            isolation: SandboxKind::Worktree,
+        }
+    }
 }
 
 /// The isolated working copy an session runs in: where, its git identity (if

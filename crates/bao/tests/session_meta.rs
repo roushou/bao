@@ -31,7 +31,7 @@ async fn list_meta_carries_activity_facts() {
                 cols: 120,
                 rows: 40,
             },
-            bao_core::sandbox::SandboxSpec::default(),
+            common::in_place(),
         )
         .await
         .unwrap();

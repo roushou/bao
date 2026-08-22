@@ -48,7 +48,7 @@ async fn two_clients_share_one_live_session() {
                     cols: 120,
                     rows: 40,
                 },
-                bao_core::sandbox::SandboxSpec::default(),
+                common::in_place(),
             )
             .await
             .unwrap();
@@ -124,7 +124,7 @@ async fn watch_receives_state_and_never_bytes() {
                     cols: 120,
                     rows: 40,
                 },
-                bao_core::sandbox::SandboxSpec::default(),
+                common::in_place(),
             )
             .await
             .unwrap();
@@ -187,7 +187,7 @@ async fn rename_updates_session_name() {
                     cols: 120,
                     rows: 40,
                 },
-                bao_core::sandbox::SandboxSpec::default(),
+                common::in_place(),
             )
             .await
             .unwrap();
@@ -233,6 +233,8 @@ async fn launch_detach_works_without_a_terminal() {
             "detached",
             "--dir",
             scratch.to_str().unwrap(),
+            "--isolation",
+            "inplace",
             "--port",
             &port.to_string(),
         ])
@@ -348,7 +350,7 @@ async fn failed_backgrounded_launch_signals_gone_on_attach_stream() {
                 rows: 40,
             },
             bao_core::sandbox::SandboxSpec {
-                isolation: Some(bao_core::sandbox::SandboxKind::Worktree),
+                isolation: bao_core::sandbox::SandboxKind::Worktree,
             },
         )
         .await

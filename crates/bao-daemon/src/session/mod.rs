@@ -302,7 +302,9 @@ mod tests {
             &store,
             &SessionId::from_str("live0001").unwrap(),
             &dir,
-            &SandboxSpec::default(),
+            &SandboxSpec {
+                isolation: SandboxKind::InPlace,
+            },
         )
         .unwrap();
         let command = Command::parse("bash -c 'echo PING_LIVE'").unwrap();
@@ -312,7 +314,9 @@ mod tests {
                 &sandbox.workspace.path,
                 TerminalSize { cols: 80, rows: 24 },
                 None,
-                &SandboxSpec::default(),
+                &SandboxSpec {
+                    isolation: SandboxKind::InPlace,
+                },
             )
             .unwrap();
         let mut rx = sess.subscribe();
@@ -574,7 +578,9 @@ mod tests {
             &store,
             &SessionId::from_str("wait0001").unwrap(),
             &dir,
-            &SandboxSpec::default(),
+            &SandboxSpec {
+                isolation: SandboxKind::InPlace,
+            },
         )
         .unwrap();
         let command = Command::parse("bash -c 'echo WAIT_UP; sleep 30'").unwrap();
@@ -584,7 +590,9 @@ mod tests {
                 &sandbox.workspace.path,
                 TerminalSize { cols: 80, rows: 24 },
                 None,
-                &SandboxSpec::default(),
+                &SandboxSpec {
+                    isolation: SandboxKind::InPlace,
+                },
             )
             .unwrap();
         assert_eq!(sess.meta().waiting_for_input, None, "honest by default");
@@ -628,7 +636,7 @@ mod tests {
         // deterministically — the saga must compensate and forget.
         let command = Command::parse("bash -c 'echo hi'").unwrap();
         let spec = SandboxSpec {
-            isolation: Some(SandboxKind::Worktree),
+            isolation: SandboxKind::Worktree,
         };
         let err = match m.create(
             &command,

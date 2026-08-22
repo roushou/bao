@@ -29,6 +29,14 @@ pub fn free_port() -> u16 {
     l.local_addr().unwrap().port()
 }
 
+/// The explicit in-place spec for tests launching in a scratch (non-git)
+/// directory — the default spec is a worktree, which requires a repo.
+pub fn in_place() -> bao_core::sandbox::SandboxSpec {
+    bao_core::sandbox::SandboxSpec {
+        isolation: bao_core::sandbox::SandboxKind::InPlace,
+    }
+}
+
 pub async fn start_host(home: &Path, port: u16) -> tokio::process::Child {
     let child = tokio::process::Command::new(env!("CARGO_BIN_EXE_bao"))
         .arg("daemon")
