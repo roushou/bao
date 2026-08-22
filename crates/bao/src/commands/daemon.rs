@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use bao_core::types::Status;
-use bao_daemon::{Home, session::Manager};
+use bao_daemon::session::Manager;
 use clap::Args;
 
 use super::Context;
@@ -16,7 +16,7 @@ pub struct DaemonCmd;
 
 impl DaemonCmd {
     pub async fn run(&self, ctx: &Context) -> Result<()> {
-        let manager = Arc::new(Manager::open(&Home::new(&ctx.home))?);
+        let manager = Arc::new(Manager::open(&ctx.home)?);
         let restored = manager.list();
         if !restored.is_empty() {
             eprintln!(

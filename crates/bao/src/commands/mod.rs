@@ -27,6 +27,7 @@ use anyhow::Result;
 pub use attach::AttachCmd;
 use bao_client::Conn;
 use bao_core::types::{Command, SessionId, TerminalSize};
+use bao_daemon::Home;
 use bao_transport::{Addr, DEFAULT_PORT};
 use clap::{Parser, Subcommand};
 pub use daemon::DaemonCmd;
@@ -72,7 +73,7 @@ pub enum Cmd {
 /// Shared invocation state: resolved home, daemon address, and the loaded
 /// harness profiles. Computed once, passed to every command's `run`.
 pub struct Context {
-    home: PathBuf,
+    home: Home,
     addr: Addr,
     profiles: ProfileMap,
 }
@@ -81,7 +82,7 @@ pub struct Context {
 /// `Cli::run` still moves `self.cmd` after building the context.
 impl From<&Cli> for Context {
     fn from(cli: &Cli) -> Self {
-        let home = std::env::var_os("BAO_HOME")
+        let root = std::env::var_os("BAO_HOME")
             .map(PathBuf::from)
             .or_else(|| dirs::home_dir().map(|h| h.join(".bao")))
             .unwrap_or_else(|| PathBuf::from(".bao"));
@@ -89,10 +90,10 @@ impl From<&Cli> for Context {
             .port
             .or_else(|| std::env::var("BAO_PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(DEFAULT_PORT);
-        let profiles = ProfileMap::load(&home);
+        let profiles = ProfileMap::load(&root);
         Context {
             addr: Addr::local(port),
-            home,
+            home: Home::new(&root),
             profiles,
         }
     }
@@ -124,8 +125,8 @@ impl Context {
         match self.connect().await {
             Ok(_) => Ok(()),
             Err(bao_client::Error::Unreachable { .. }) => {
-                std::fs::create_dir_all(&self.home)?;
-                let daemon_log = self.home.join("daemon.log");
+                std::fs::create_dir_all(self.home.root())?;
+                let daemon_log = self.home.root().join("daemon.log");
                 eprintln!("bao: starting daemon (log: {})", daemon_log.display());
                 let log = std::fs::File::create(&daemon_log)?;
                 std::process::Command::new(std::env::current_exe()?)
