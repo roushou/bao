@@ -1,11 +1,8 @@
-//! Sandbox strategies: the [`SandboxBackend`] port and its adapters. The
-//! daemon is the only place that touches the OS to build or tear down a
-//! [`Workspace`].
-//!
-//! This module holds the port and the store; each adapter (`InPlace`,
-//! `GitWorktree`, `Bubblewrap`) lives in its own file.
+//! Sandbox strategies: the [`SandboxBackend`] port, the [`Sandbox`] handle,
+//! and the [`WorkspaceStore`]. Each adapter (`InPlace`, `GitWorktree`,
+//! `Bubblewrap`) lives in its own file.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use bao_core::{
     sandbox::{SandboxKind, SandboxSpec, Workspace},
@@ -17,10 +14,12 @@ use crate::error::Error;
 
 mod bubblewrap;
 mod inplace;
+mod store;
 mod worktree;
 
 pub use bubblewrap::Bubblewrap;
 pub use inplace::InPlace;
+pub use store::WorkspaceStore;
 pub use worktree::GitWorktree;
 
 /// A materialized sandbox: the serializable [`Workspace`] plus the backend
@@ -35,6 +34,33 @@ pub struct Sandbox {
 impl Sandbox {
     pub(crate) fn new(workspace: Workspace, backend: Box<dyn SandboxBackend>) -> Self {
         Sandbox { workspace, backend }
+    }
+
+    /// Materialize a sandbox for `spec` into `store`. A `spec` of `None`
+    /// resolves the strongest the machine offers; a requested kind that
+    /// cannot be provided is an error, never a silent downgrade.
+    pub fn create(
+        store: &WorkspaceStore,
+        id: &SessionId,
+        cwd: &Path,
+        spec: &SandboxSpec,
+    ) -> Result<Sandbox, Error> {
+        match spec.isolation {
+            Some(kind) => prepare_with(store, kind, id, cwd),
+            None => {
+                let backend = backend(store, SandboxKind::Worktree);
+                match backend.prepare(id, cwd) {
+                    Ok(workspace) => Ok(Sandbox::new(workspace, backend)),
+                    Err(_) => prepare_with(store, SandboxKind::InPlace, id, cwd),
+                }
+            }
+        }
+    }
+
+    /// Re-create a backend from a persisted workspace (restore/resume).
+    pub(crate) fn from_workspace(store: &WorkspaceStore, workspace: Workspace) -> Sandbox {
+        let kind = workspace.kind;
+        Sandbox::new(workspace, backend(store, kind))
     }
 
     /// Rewrite the harness command to launch inside this sandbox.
@@ -66,69 +92,24 @@ pub trait SandboxBackend: Send + Sync + std::fmt::Debug {
     fn teardown(&self, workspace: &Workspace) -> Result<(), Error>;
 }
 
-/// Owns the workspace store (`<home>/envs/`) and resolves a [`SandboxSpec`]
-/// into a concrete [`Sandbox`] — never silently delivering a weaker kind
-/// than requested.
-#[derive(Clone)]
-pub struct SandboxStore {
-    pub dir: PathBuf,
-    #[cfg(test)]
-    override_backend: Option<fn() -> Box<dyn SandboxBackend>>,
+/// Materialize a sandbox of a specific kind.
+fn prepare_with(
+    store: &WorkspaceStore,
+    kind: SandboxKind,
+    id: &SessionId,
+    cwd: &Path,
+) -> Result<Sandbox, Error> {
+    let backend = backend(store, kind);
+    let workspace = backend.prepare(id, cwd)?;
+    Ok(Sandbox::new(workspace, backend))
 }
 
-impl SandboxStore {
-    pub fn new(dir: PathBuf) -> Self {
-        std::fs::create_dir_all(&dir).ok();
-        SandboxStore {
-            dir,
-            #[cfg(test)]
-            override_backend: None,
-        }
-    }
-
-    /// Materialize a sandbox for `spec`, retaining its backend for spawn and
-    /// teardown. A `spec` of `None` resolves the strongest the machine
-    /// offers; a requested kind that cannot be provided is an error, never a
-    /// silent downgrade.
-    pub fn create(&self, id: &SessionId, cwd: &Path, spec: &SandboxSpec) -> Result<Sandbox, Error> {
-        match spec.isolation {
-            Some(kind) => self.prepare_with(kind, id, cwd),
-            None => {
-                let backend = self.backend(SandboxKind::Worktree);
-                match backend.prepare(id, cwd) {
-                    Ok(workspace) => Ok(Sandbox::new(workspace, backend)),
-                    Err(_) => self.prepare_with(SandboxKind::InPlace, id, cwd),
-                }
-            }
-        }
-    }
-
-    /// Re-create a backend from a persisted workspace (restore/resume).
-    pub fn backend_for(&self, kind: SandboxKind) -> Box<dyn SandboxBackend> {
-        self.backend(kind)
-    }
-
-    fn prepare_with(
-        &self,
-        kind: SandboxKind,
-        id: &SessionId,
-        cwd: &Path,
-    ) -> Result<Sandbox, Error> {
-        let backend = self.backend(kind);
-        let workspace = backend.prepare(id, cwd)?;
-        Ok(Sandbox::new(workspace, backend))
-    }
-
-    fn backend(&self, kind: SandboxKind) -> Box<dyn SandboxBackend> {
-        #[cfg(test)]
-        if let Some(f) = self.override_backend {
-            return (f)();
-        }
-        match kind {
-            SandboxKind::InPlace => Box::new(InPlace),
-            SandboxKind::Worktree => Box::new(GitWorktree::new(self.dir.clone())),
-            SandboxKind::Bubblewrap => Box::new(Bubblewrap::new(self.dir.clone())),
-        }
+/// Construct the backend for a kind.
+fn backend(store: &WorkspaceStore, kind: SandboxKind) -> Box<dyn SandboxBackend> {
+    match kind {
+        SandboxKind::InPlace => Box::new(InPlace),
+        SandboxKind::Worktree => Box::new(GitWorktree::new(store.clone())),
+        SandboxKind::Bubblewrap => Box::new(Bubblewrap::new(store.clone())),
     }
 }
 
@@ -145,17 +126,8 @@ pub fn available_backends() -> Vec<SandboxKind> {
 }
 
 #[cfg(test)]
-impl SandboxStore {
-    /// Inject a test backend, overriding every kind. Test-only.
-    pub(crate) fn with_override(mut self, f: fn() -> Box<dyn SandboxBackend>) -> Self {
-        self.override_backend = Some(f);
-        self
-    }
-}
-
-#[cfg(test)]
 mod tests {
-    use std::{process::Command, str::FromStr};
+    use std::{path::PathBuf, process::Command, str::FromStr};
 
     use super::*;
 
@@ -192,14 +164,14 @@ mod tests {
     fn worktree_is_isolated_and_removable() {
         let root = temp("worktree");
         let repo = make_repo(&root);
-        let store = SandboxStore::new(root.join("envs"));
-        let sandbox = store
-            .create(
-                &SessionId::from_str("abc12345").unwrap(),
-                &repo,
-                &SandboxSpec::default(),
-            )
-            .unwrap();
+        let store = WorkspaceStore::new(root.join("envs"));
+        let sandbox = Sandbox::create(
+            &store,
+            &SessionId::from_str("abc12345").unwrap(),
+            &repo,
+            &SandboxSpec::default(),
+        )
+        .unwrap();
         let ws = &sandbox.workspace;
         assert!(ws.isolated());
         assert_ne!(ws.path, repo);
@@ -234,14 +206,14 @@ mod tests {
         let cwd = root.join("scratch");
         std::fs::create_dir_all(&cwd).unwrap();
         std::fs::write(cwd.join("notes.txt"), "mine").unwrap();
-        let store = SandboxStore::new(root.join("envs"));
-        let sandbox = store
-            .create(
-                &SessionId::from_str("deadbeef").unwrap(),
-                &cwd,
-                &SandboxSpec::default(),
-            )
-            .unwrap();
+        let store = WorkspaceStore::new(root.join("envs"));
+        let sandbox = Sandbox::create(
+            &store,
+            &SessionId::from_str("deadbeef").unwrap(),
+            &cwd,
+            &SandboxSpec::default(),
+        )
+        .unwrap();
         assert!(!sandbox.workspace.isolated());
         assert_eq!(sandbox.workspace.path, cwd);
         sandbox.teardown().unwrap();
@@ -254,14 +226,18 @@ mod tests {
         let root = temp("requested");
         let cwd = root.join("scratch");
         std::fs::create_dir_all(&cwd).unwrap();
-        let store = SandboxStore::new(root.join("envs"));
+        let store = WorkspaceStore::new(root.join("envs"));
         let spec = SandboxSpec {
             isolation: Some(SandboxKind::Worktree),
         };
         assert!(matches!(
-            store
-                .create(&SessionId::from_str("dead0001").unwrap(), &cwd, &spec)
-                .unwrap_err(),
+            Sandbox::create(
+                &store,
+                &SessionId::from_str("dead0001").unwrap(),
+                &cwd,
+                &spec
+            )
+            .unwrap_err(),
             Error::SandboxUnavailable(SandboxKind::Worktree)
         ));
         std::fs::remove_dir_all(&root).unwrap();

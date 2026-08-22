@@ -2,7 +2,7 @@
 //! the `bubblewrap` feature and `target_os = "linux"`. Everywhere else the
 //! backend is a stub that refuses honestly.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use bao_core::{
     sandbox::{SandboxKind, Workspace},
@@ -11,7 +11,7 @@ use bao_core::{
 
 use crate::error::Error;
 
-use super::SandboxBackend;
+use super::{SandboxBackend, WorkspaceStore};
 
 #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
 use super::worktree::{GitWorktree, teardown_worktree};
@@ -19,7 +19,7 @@ use super::worktree::{GitWorktree, teardown_worktree};
 #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
 use portable_pty::CommandBuilder;
 #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
-use std::{ffi::OsString, process::Command, sync::OnceLock};
+use std::{ffi::OsString, path::PathBuf, process::Command, sync::OnceLock};
 
 /// A `bubblewrap` namespace sandbox, backed by a git worktree when the launch
 /// directory is inside a repo (the worktree is the working copy; bwrap is the
@@ -27,13 +27,13 @@ use std::{ffi::OsString, process::Command, sync::OnceLock};
 #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
 #[derive(Debug)]
 pub struct Bubblewrap {
-    dir: PathBuf,
+    store: WorkspaceStore,
 }
 
 #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
 impl Bubblewrap {
-    pub(super) fn new(dir: PathBuf) -> Self {
-        Self { dir }
+    pub(super) fn new(store: WorkspaceStore) -> Self {
+        Self { store }
     }
 }
 
@@ -49,7 +49,7 @@ impl SandboxBackend for Bubblewrap {
         }
         // Working copy: a git worktree when possible, else the user's dir —
         // the namespace confinement applies either way.
-        let mut ws = GitWorktree::new(self.dir.clone())
+        let mut ws = GitWorktree::new(self.store.clone())
             .prepare(id, cwd)
             .unwrap_or(Workspace {
                 kind: SandboxKind::Bubblewrap,
@@ -87,7 +87,7 @@ pub struct Bubblewrap;
 
 #[cfg(not(all(feature = "bubblewrap", target_os = "linux")))]
 impl Bubblewrap {
-    pub(super) fn new(_dir: PathBuf) -> Self {
+    pub(super) fn new(_store: WorkspaceStore) -> Self {
         Self
     }
 }

@@ -1,6 +1,6 @@
 //! The git-worktree backend: an isolated checkout on its own branch.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use bao_core::{
     sandbox::{SandboxKind, Workspace},
@@ -9,17 +9,17 @@ use bao_core::{
 
 use crate::{error::Error, git::Git};
 
-use super::SandboxBackend;
+use super::{SandboxBackend, WorkspaceStore};
 
 /// A `git worktree` on its own branch, owned by Bao.
 #[derive(Debug)]
 pub struct GitWorktree {
-    dir: PathBuf,
+    store: WorkspaceStore,
 }
 
 impl GitWorktree {
-    pub(super) fn new(dir: PathBuf) -> Self {
-        Self { dir }
+    pub(super) fn new(store: WorkspaceStore) -> Self {
+        Self { store }
     }
 }
 
@@ -31,7 +31,7 @@ impl SandboxBackend for GitWorktree {
     fn prepare(&self, id: &SessionId, cwd: &Path) -> Result<Workspace, Error> {
         let git =
             Git::discover(cwd).map_err(|_| Error::SandboxUnavailable(SandboxKind::Worktree))?;
-        let path = self.dir.join(id.as_str()).join("tree");
+        let path = self.store.tree_dir(id);
         let branch = format!("bao-{id}");
         git.worktree_add(&branch, &path, "HEAD").map_err(|e| {
             Error::Worktree(format!("could not create a worktree for session {id}: {e}"))

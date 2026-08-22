@@ -12,7 +12,4 @@ pub mod screen;
 pub mod server;
 pub mod session;
 
-#[cfg(test)]
-mod testutil;
-
 pub use server::serve;

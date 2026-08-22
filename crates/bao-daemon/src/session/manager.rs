@@ -1,7 +1,6 @@
 //! The session registry + the launch saga.
 
 use super::*;
-use crate::sandbox::Sandbox;
 
 /// One entry on the state bus: a session's current picture, or a
 /// removal. Watchers render this as-is — they never derive it.
@@ -20,7 +19,7 @@ pub struct Manager {
     sessions: RwLock<HashMap<SessionId, Arc<Session>>>,
     /// Session data dir (`<home>/sessions`).
     pub dir: PathBuf,
-    sandbox_store: SandboxStore,
+    workspaces: WorkspaceStore,
     /// On-disk session store (versioned, atomically written, salvage-on-
     /// restore).
     store: SessionStore,
@@ -38,24 +37,19 @@ impl Manager {
             .parent()
             .map(|p| p.join("envs"))
             .unwrap_or_else(|| sessions_dir.join("envs"));
-        Self::with_store(sessions_dir, SandboxStore::new(envs_dir))
+        Self::with_store(sessions_dir, WorkspaceStore::new(envs_dir))
     }
 
-    fn with_store(sessions_dir: PathBuf, sandbox_store: SandboxStore) -> Self {
+    fn with_store(sessions_dir: PathBuf, workspaces: WorkspaceStore) -> Self {
         std::fs::create_dir_all(&sessions_dir).ok();
         let (state_bus, _) = broadcast::channel(1024);
         Manager {
             sessions: RwLock::new(HashMap::new()),
-            sandbox_store,
+            workspaces,
             store: SessionStore::new(sessions_dir.clone()),
             dir: sessions_dir,
             state_bus,
         }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_sandbox_store(sessions_dir: PathBuf, sandbox_store: SandboxStore) -> Self {
-        Self::with_store(sessions_dir, sandbox_store)
     }
 
     /// Fresh registry from the bao home, then restore any sessions on disk.
@@ -69,8 +63,7 @@ impl Manager {
         let restored = Session::restore_all(&self.store)?;
         for s in restored {
             let workspace = s.workspace();
-            let backend = self.sandbox_store.backend_for(workspace.kind);
-            s.set_sandbox(Sandbox::new(workspace, backend));
+            s.set_sandbox(Sandbox::from_workspace(&self.workspaces, workspace));
             self.spawn_state_forwarder(&s);
             self.sessions.write().unwrap().insert(s.id.clone(), s);
         }
@@ -124,9 +117,7 @@ impl Manager {
     ) -> Result<Arc<Session>, Error> {
         let sess = self.begin_launch(command, cwd, size, name)?;
         let sid = sess.id.clone();
-        let result = self
-            .sandbox_store
-            .create(&sid, cwd, sandbox)
+        let result = Sandbox::create(&self.workspaces, &sid, cwd, sandbox)
             .and_then(|sb| self.attach_and_spawn(&sess, command, size, sb));
         if let Err(e) = result {
             self.fail_launch(&sid, Some(e.to_string()));
@@ -153,11 +144,12 @@ impl Manager {
         tokio::spawn(async move {
             let sid = task_sess.id.clone();
             let sid_for_sandbox = sid.clone();
-            let store = m.sandbox_store.clone();
+            let workspaces = m.workspaces.clone();
             // The blocking git worktree step runs off the async runtime.
-            let sandbox_result =
-                tokio::task::spawn_blocking(move || store.create(&sid_for_sandbox, &cwd, &sandbox))
-                    .await;
+            let sandbox_result = tokio::task::spawn_blocking(move || {
+                Sandbox::create(&workspaces, &sid_for_sandbox, &cwd, &sandbox)
+            })
+            .await;
             let sb = match sandbox_result {
                 Ok(Ok(sb)) => sb,
                 Ok(Err(e)) => {

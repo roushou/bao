@@ -103,9 +103,10 @@ session's terminal. `WireError` is typed so clients branch on _kind_.
 ### Sandboxes
 
 One isolated working copy per session, so sessions don't step on each other.
-`SandboxSpec` (what the user asks) resolves into a `SandboxBackend` (what
-exists),
-and the daemon **never silently delivers a weaker isolation than requested**.
+`SandboxSpec` (what the user asks) is materialized by `Sandbox::create` into a
+`Sandbox` — a `Workspace` plus the `SandboxBackend` that built it, placed in
+the `WorkspaceStore` — and the daemon **never silently delivers a weaker
+isolation than requested**.
 Worktrees (file isolation) are the default backend. `Bubblewrap` (Linux, behind
 the `bubblewrap` feature) is the first process-sandboxing backend; Landlock on
 Linux and Seatbelt on macOS are next, matching Claude Code and Codex, with
