@@ -1,11 +1,11 @@
-//! `bao profiles` — list known harness profiles.
+//! `bao profiles` — list known profiles.
 
 use anyhow::Result;
 use clap::Args;
 
 use super::Context;
 
-/// List known harness profiles.
+/// List known profiles.
 #[derive(Args, Debug)]
 pub struct ProfilesCmd;
 

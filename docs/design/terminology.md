@@ -26,11 +26,13 @@ Bao supervises — exactly one per Bao session.
 
 ## Mapping
 
-| Concept                      | Wire / code                                                   | Product / docs           |
-| ---------------------------- | ------------------------------------------------------------- | ------------------------ |
-| The running unit of work     | session (`SessionId`, `SessionMeta`)                          | session                  |
-| The tool inside it           | harness (`SessionMeta.harness`, `Harness` trait, `--harness`) | harness                  |
-| The model inside the harness | —                                                             | model (invisible to Bao) |
+| Concept                       | Wire / code                                                 | Product / docs           |
+| ----------------------------- | ----------------------------------------------------------- | ------------------------ |
+| The running unit of work      | session (`SessionId`, `SessionMeta`)                        | session                  |
+| The tool inside it            | `Harness` trait (daemon adapter: `Pi`, `Fallback`)          | harness                  |
+| The command the session runs  | `SessionMeta.command` (display) + `SessionMeta.args` (argv) | command                  |
+| A named launch preset (alias) | `profiles.json`, `bao profiles`, `--profile`                | profile                  |
+| The model inside the harness  | —                                                           | model (invisible to Bao) |
 
 ## Host vs daemon
 

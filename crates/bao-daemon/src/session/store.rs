@@ -176,7 +176,7 @@ impl SessionStore {
 pub(crate) struct StoredMeta {
     /// On-disk format version (missing = 1, written before versioning).
     format: Option<u32>,
-    pub(crate) harness: String,
+    pub(crate) command: String,
     pub(crate) args: Vec<String>,
     pub(crate) cwd: Option<PathBuf>,
     pub(crate) created: u64,
@@ -192,7 +192,7 @@ impl StoredMeta {
         let workspace = s.workspace();
         StoredMeta {
             format: Some(META_FORMAT),
-            harness: s.command.display(),
+            command: s.command.display(),
             args: s.command.as_args().to_vec(),
             cwd: Some(workspace.path.clone()),
             created: s.created,

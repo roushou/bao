@@ -277,10 +277,10 @@ impl FromStr for Hostname {
 pub struct SessionMeta {
     pub id: SessionId,
     pub name: Option<String>,
-    /// Display string of the harness command running this session (args
-    /// joined). pi/Claude Code/Codex CLI are harnesses; the session is the
-    /// running unit of work.
-    pub harness: String,
+    /// Display string of the command running this session (`args` joined),
+    /// precomputed for cheap rendering. pi/Claude Code/Codex CLI are
+    /// harnesses — the programs the session runs.
+    pub command: String,
     /// Exact argv.
     pub args: Command,
     pub cwd: PathBuf,

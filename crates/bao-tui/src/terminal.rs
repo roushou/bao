@@ -392,7 +392,7 @@ mod tests {
         SessionMeta {
             id: SessionId::from_str("abc12345").unwrap(),
             name: Some("fix-auth".to_string()),
-            harness: "pi".to_string(),
+            command: "pi".to_string(),
             args: Command::from_args(vec!["pi".to_string()]),
             cwd: "/tmp".into(),
             workspace: Workspace {

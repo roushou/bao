@@ -71,7 +71,7 @@ pub enum Cmd {
 }
 
 /// Shared invocation state: resolved home, daemon address, and the loaded
-/// harness profiles. Computed once, passed to every command's `run`.
+/// profiles. Computed once, passed to every command's `run`.
 pub struct Context {
     home: Home,
     addr: Addr,
@@ -154,7 +154,7 @@ impl Context {
     }
 }
 
-/// Harness profiles: name -> launch command. Built-in default is `pi`; a
+/// Named launch profiles: name -> launch command. Built-in default is `pi`; a
 /// user-supplied `profiles.json` at the bao home overrides/adds entries.
 pub struct ProfileMap {
     entries: Vec<(String, Command)>,

@@ -92,7 +92,7 @@ impl Rail {
             row.name.to_lowercase(),
             row.id.as_str().to_lowercase(),
             row.meta.cwd.display().to_string().to_lowercase(),
-            row.harness.to_lowercase(),
+            row.command.to_lowercase(),
         ]
         .iter()
         .any(|h| h.contains(&f))

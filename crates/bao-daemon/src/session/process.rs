@@ -74,7 +74,7 @@ impl Session {
         let initial = SessionMeta {
             id: spec.id.clone(),
             name: spec.name.clone(),
-            harness: spec.command.display(),
+            command: spec.command.display(),
             args: spec.command.clone(),
             cwd: spec.workspace.path.clone(),
             workspace: spec.workspace.clone(),
@@ -451,7 +451,7 @@ impl Session {
         SessionMeta {
             id: self.id.clone(),
             name: self.name.lock().unwrap().clone(),
-            harness: self.command.display(),
+            command: self.command.display(),
             args: self.command.clone(),
             cwd: workspace.path.clone(),
             workspace,
@@ -538,7 +538,7 @@ impl Session {
                 Ok(Some(stored)) => {
                     let cwd = stored.cwd.unwrap_or_default();
                     let command = if stored.args.is_empty() {
-                        Command::parse(&stored.harness).unwrap_or_default()
+                        Command::parse(&stored.command).unwrap_or_default()
                     } else {
                         Command::from_args(stored.args)
                     };
@@ -625,7 +625,7 @@ impl Session {
         let initial = SessionMeta {
             id: id.clone(),
             name: name.clone(),
-            harness: command.display(),
+            command: command.display(),
             args: command.clone(),
             cwd: workspace.path.clone(),
             workspace: workspace.clone(),

@@ -76,7 +76,7 @@ mod tests {
             sess_dir.join("meta.json"),
             serde_json::json!({
                 "id": id,
-                "harness": "bash fixture-session.sh",
+                "command": "bash fixture-session.sh",
                 "cwd": "/tmp",
                 "created": 1000,
             })
@@ -200,7 +200,7 @@ mod tests {
         std::fs::create_dir_all(&sess_dir).unwrap();
         std::fs::write(
             sess_dir.join("meta.json"),
-            "{\"id\": \"damaged01\", \"harness\":",
+            "{\"id\": \"damaged01\", \"command\":",
         )
         .unwrap();
         super::log::persist_event(

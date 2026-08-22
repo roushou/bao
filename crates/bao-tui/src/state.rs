@@ -51,7 +51,7 @@ impl Group {
 pub struct Row {
     pub id: SessionId,
     pub name: String,
-    pub harness: String,
+    pub command: String,
     pub status: Status,
     pub age_secs: u64,
     pub idle_secs: u64,
@@ -67,7 +67,7 @@ impl Row {
         Row {
             id: m.id.clone(),
             name: m.name.clone().unwrap_or_default(),
-            harness: m.harness.clone(),
+            command: m.command.clone(),
             status: m.status,
             age_secs: m.age_secs,
             idle_secs: m.idle_secs,
@@ -264,7 +264,7 @@ mod tests {
         SessionMeta {
             id: SessionId::from_str("abc12345").unwrap(),
             name: Some("worker".to_string()),
-            harness: "pi".to_string(),
+            command: "pi".to_string(),
             args: Command::from_args(vec!["pi".to_string()]),
             cwd: "/tmp".into(),
             workspace: Workspace {

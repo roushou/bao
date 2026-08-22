@@ -14,10 +14,10 @@ use super::Context;
 /// Launch an session in a session and attach to it.
 #[derive(Args, Debug)]
 pub struct LaunchCmd {
-    /// named harness profile to run (see profiles.json / `bao profiles`)
+    /// named profile to run (see profiles.json / `bao profiles`)
     #[arg(long)]
-    pub harness: Option<String>,
-    /// command to run (overrides --harness; default: $BAO_HARNESS_COMMAND or "pi")
+    pub profile: Option<String>,
+    /// command to run (overrides --profile; default: $BAO_HARNESS_COMMAND or "pi")
     #[arg(long)]
     pub cmd: Option<String>,
     /// working directory for the session (default: current dir)
@@ -41,10 +41,12 @@ impl LaunchCmd {
                 "`bao launch` needs a terminal — run it inside a real TTY (or use --detach)"
             );
         }
-        let command = match &self.harness {
-            Some(h) => ctx.profiles.get(h).cloned().ok_or_else(|| {
-                anyhow::anyhow!("unknown harness profile '{h}' — see `bao profiles`")
-            })?,
+        let command = match &self.profile {
+            Some(h) => ctx
+                .profiles
+                .get(h)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("unknown profile '{h}' — see `bao profiles`"))?,
             None => match &self.cmd {
                 Some(c) => Command::parse(c)?,
                 None => match std::env::var("BAO_HARNESS_COMMAND") {

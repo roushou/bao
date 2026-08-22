@@ -132,14 +132,14 @@ fn agent_score(r: &Row, q: &str) -> Option<u8> {
     let name = r.name.to_lowercase();
     let id = r.id.as_str().to_lowercase();
     let cwd = r.meta.cwd.display().to_string().to_lowercase();
-    let harness = r.harness.to_lowercase();
+    let command = r.command.to_lowercase();
     if name.starts_with(&lq) {
         return Some(0);
     }
     if name.contains(&lq) || id.starts_with(&lq) {
         return Some(1);
     }
-    if id.contains(&lq) || cwd.contains(&lq) || harness.contains(&lq) {
+    if id.contains(&lq) || cwd.contains(&lq) || command.contains(&lq) {
         return Some(2);
     }
     None
