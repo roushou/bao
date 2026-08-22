@@ -31,9 +31,9 @@ bao-protocol Rpc/Reply/FromHost/WireError/ChannelKind/PROTOCOL_VERSION,
 bao-transport framing (FrameReader/FrameWriter) + Addr/DEFAULT_PORT (tokio)
 bao-client   the client (Conn/ConnWriter + HostEvent); wire envelopes stay private
 bao-daemon   session (live PTY/process/log/screen), manager (registry + saga),
-             store (meta.json/events.log), sandbox (SandboxBackend trait + one
-             adapter file per backend: InPlace/Worktree/Bubblewrap), harness
-             (Harness trait + Pi/Fallback), server
+             store (meta.json/events.log), sandbox (Sandbox + SandboxBackend +
+             WorkspaceStore; one file per backend: InPlace/Worktree/Bubblewrap),
+             harness (Harness trait + Pi/Fallback), server
 bao-tui      the overview renderer
 bao          main, CLI dispatch, daemon-process management, Context
 ```

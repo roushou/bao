@@ -59,6 +59,7 @@ pub struct SessionSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::home::Home;
     use bao_core::types::TermStrExt;
 
     fn temp_root(name: &str) -> PathBuf {
@@ -272,7 +273,7 @@ mod tests {
                 ("2", "\u{1b}[31mred text\u{1b}[0m and\nmore\r\n"),
             ],
         );
-        let m = Manager::open(&dir).unwrap();
+        let m = Manager::open(&Home::new(&dir)).unwrap();
         let sess = m.resolve("feed0002").unwrap();
         let meta = sess.meta();
         assert!(meta.last_activity >= 2, "last_activity from log ts");
@@ -295,8 +296,8 @@ mod tests {
         use std::time::Duration;
 
         let dir = temp_root("meta-live");
-        let m = Manager::open(&dir).unwrap();
-        let store = WorkspaceStore::new(dir.join("envs"));
+        let m = Manager::open(&Home::new(&dir)).unwrap();
+        let store = WorkspaceStore::new(dir.join("workspaces"));
         let sandbox = Sandbox::create(
             &store,
             &SessionId::from_str("live0001").unwrap(),
@@ -390,7 +391,7 @@ mod tests {
 
         let home = temp_root("resume");
         write_session(&home.join("sessions"), "resume0001", &[("1", "hello\r\n")]);
-        let m = Manager::open(&home).unwrap();
+        let m = Manager::open(&Home::new(&home)).unwrap();
         let sess = m.resolve("resume0001").unwrap();
         assert_eq!(sess.status(), Status::Interrupted);
         assert!(
@@ -514,7 +515,7 @@ mod tests {
     async fn resume_brings_snapshot_parser_to_the_resumed_size() {
         let home = temp_root("resume-size");
         write_session(&home.join("sessions"), "resz0001", &[("1", "hi\r\n")]);
-        let m = Manager::open(&home).unwrap();
+        let m = Manager::open(&Home::new(&home)).unwrap();
         let sess = m.resolve("resz0001").unwrap();
         assert_eq!(sess.status(), Status::Interrupted);
         // Restored sessions use the default restore size until resumed.
@@ -533,7 +534,7 @@ mod tests {
     fn manager_open_loads_and_remove_forgets() {
         let home = temp_root("manager");
         write_session(&home.join("sessions"), "feed0001", &[("1", "hi\r\n")]);
-        let m = Manager::open(&home).unwrap();
+        let m = Manager::open(&Home::new(&home)).unwrap();
         assert_eq!(m.list().len(), 1);
         assert_eq!(m.list()[0].status(), Status::Interrupted);
         m.remove("feed0001").unwrap();
@@ -567,8 +568,8 @@ mod tests {
     #[tokio::test]
     async fn set_waiting_flows_into_meta_and_state_bus() {
         let dir = temp_root("waiting");
-        let m = Manager::open(&dir).unwrap();
-        let store = WorkspaceStore::new(dir.join("envs"));
+        let m = Manager::open(&Home::new(&dir)).unwrap();
+        let store = WorkspaceStore::new(dir.join("workspaces"));
         let sandbox = Sandbox::create(
             &store,
             &SessionId::from_str("wait0001").unwrap(),
@@ -620,7 +621,7 @@ mod tests {
     #[tokio::test]
     async fn failed_launch_compensates_and_broadcasts_gone() {
         let dir = temp_root("failed-launch");
-        let m = Manager::open(&dir).unwrap();
+        let m = Manager::open(&Home::new(&dir)).unwrap();
         let mut bus = m.subscribe_state();
 
         // Request a worktree in a non-git dir: the sandbox step fails

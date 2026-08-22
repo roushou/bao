@@ -164,7 +164,7 @@ mod tests {
     fn worktree_is_isolated_and_removable() {
         let root = temp("worktree");
         let repo = make_repo(&root);
-        let store = WorkspaceStore::new(root.join("envs"));
+        let store = WorkspaceStore::new(root.join("workspaces"));
         let sandbox = Sandbox::create(
             &store,
             &SessionId::from_str("abc12345").unwrap(),
@@ -206,7 +206,7 @@ mod tests {
         let cwd = root.join("scratch");
         std::fs::create_dir_all(&cwd).unwrap();
         std::fs::write(cwd.join("notes.txt"), "mine").unwrap();
-        let store = WorkspaceStore::new(root.join("envs"));
+        let store = WorkspaceStore::new(root.join("workspaces"));
         let sandbox = Sandbox::create(
             &store,
             &SessionId::from_str("deadbeef").unwrap(),
@@ -226,7 +226,7 @@ mod tests {
         let root = temp("requested");
         let cwd = root.join("scratch");
         std::fs::create_dir_all(&cwd).unwrap();
-        let store = WorkspaceStore::new(root.join("envs"));
+        let store = WorkspaceStore::new(root.join("workspaces"));
         let spec = SandboxSpec {
             isolation: Some(SandboxKind::Worktree),
         };

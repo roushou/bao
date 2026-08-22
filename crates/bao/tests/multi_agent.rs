@@ -90,7 +90,7 @@ async fn two_agents_share_a_repo_without_stepping_on_each_other() {
     let meta_a = sessions.iter().find(|s| s.id == sid_a).unwrap().clone();
     let meta_b = sessions.iter().find(|s| s.id == sid_b).unwrap().clone();
 
-    // Both environments must be distinct worktrees, not the repo itself.
+    // Both workspaces must be distinct worktrees, not the repo itself.
     let env_a = &meta_a.workspace;
     let env_b = &meta_b.workspace;
     assert_eq!(env_a.kind, bao_core::sandbox::SandboxKind::Worktree);

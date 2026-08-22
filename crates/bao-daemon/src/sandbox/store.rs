@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use bao_core::types::SessionId;
 
 /// Owns the directory where the daemon materializes each session's working
-/// copy (`<home>/envs`) — and the layout inside it. This is the store
+/// copy (`<home>/workspaces`) — and the layout inside it. This is the store
 /// primitive the sandbox backends place their checkouts into; it persists no
 /// records (session identity lives in the session store), only locations.
 #[derive(Clone, Debug)]

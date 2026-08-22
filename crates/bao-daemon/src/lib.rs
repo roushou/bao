@@ -6,10 +6,12 @@ mod git;
 
 pub mod error;
 pub mod harness;
+pub mod home;
 pub mod hostname;
 pub mod sandbox;
 pub mod screen;
 pub mod server;
 pub mod session;
 
+pub use home::Home;
 pub use server::serve;

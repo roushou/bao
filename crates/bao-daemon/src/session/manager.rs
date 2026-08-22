@@ -1,6 +1,7 @@
 //! The session registry + the launch saga.
 
 use super::*;
+use crate::home::Home;
 
 /// One entry on the state bus: a session's current picture, or a
 /// removal. Watchers render this as-is — they never derive it.
@@ -17,8 +18,6 @@ pub enum StateEvent {
 /// Registry of sessions known to this host.
 pub struct Manager {
     sessions: RwLock<HashMap<SessionId, Arc<Session>>>,
-    /// Session data dir (`<home>/sessions`).
-    pub dir: PathBuf,
     workspaces: WorkspaceStore,
     /// On-disk session store (versioned, atomically written, salvage-on-
     /// restore).
@@ -30,14 +29,10 @@ pub struct Manager {
 }
 
 impl Manager {
-    /// New registry rooted at the sessions dir; environments live next to it
-    /// (same parent, `/envs`).
-    pub fn new(sessions_dir: PathBuf) -> Self {
-        let envs_dir = sessions_dir
-            .parent()
-            .map(|p| p.join("envs"))
-            .unwrap_or_else(|| sessions_dir.join("envs"));
-        Self::with_store(sessions_dir, WorkspaceStore::new(envs_dir))
+    /// New registry rooted at the given directories (used by tests and the
+    /// composition root; `open` derives them from a [`Home`]).
+    pub fn new(sessions_dir: PathBuf, workspaces_dir: PathBuf) -> Self {
+        Self::with_store(sessions_dir, WorkspaceStore::new(workspaces_dir))
     }
 
     fn with_store(sessions_dir: PathBuf, workspaces: WorkspaceStore) -> Self {
@@ -46,17 +41,21 @@ impl Manager {
         Manager {
             sessions: RwLock::new(HashMap::new()),
             workspaces,
-            store: SessionStore::new(sessions_dir.clone()),
-            dir: sessions_dir,
+            store: SessionStore::new(sessions_dir),
             state_bus,
         }
     }
 
     /// Fresh registry from the bao home, then restore any sessions on disk.
-    pub fn open(home: &Path) -> Result<Self, Error> {
-        let m = Self::new(home.join("sessions"));
+    pub fn open(home: &Home) -> Result<Self, Error> {
+        let m = Self::new(home.sessions_dir(), home.workspaces_dir());
         m.load_existing()?;
         Ok(m)
+    }
+
+    /// The sessions data directory.
+    pub fn sessions_dir(&self) -> &Path {
+        self.store.dir()
     }
 
     fn load_existing(&self) -> Result<(), Error> {
