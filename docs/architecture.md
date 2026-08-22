@@ -108,8 +108,8 @@ One isolated working copy per session, so sessions don't step on each other.
 the `WorkspaceStore` — and the daemon **never silently delivers a weaker
 isolation than requested**.
 Worktrees (file isolation) are the default backend. `Bubblewrap` (Linux, behind
-the `bubblewrap` feature) is the first process-sandboxing backend; Landlock on
-Linux and Seatbelt on macOS are next, matching Claude Code and Codex, with
+the `bubblewrap` feature) and `Seatbelt` (macOS) are the process-sandboxing
+backends; Landlock on Linux is next, matching Claude Code and Codex, with
 containers and MicroVMs later per-machine options.
 
 ### Harness adapters

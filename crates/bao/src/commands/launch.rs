@@ -26,7 +26,7 @@ pub struct LaunchCmd {
     /// human name for the session (default: none)
     #[arg(long)]
     pub name: Option<String>,
-    /// requested isolation: inplace | worktree (default: auto)
+    /// requested isolation: inplace | worktree | seatbelt | bubblewrap (default: auto)
     #[arg(long)]
     pub isolation: Option<SandboxKind>,
     /// launch without attaching — the session keeps running in the background

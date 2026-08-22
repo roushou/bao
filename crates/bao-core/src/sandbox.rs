@@ -23,6 +23,12 @@ pub enum SandboxKind {
     /// the working copy underneath is still a git worktree when the launch
     /// directory is inside a repo.
     Bubblewrap,
+    /// A macOS Seatbelt sandbox (`sandbox-exec`): the harness runs under a
+    /// profile that denies file writes except to the workspace, `$HOME`,
+    /// `$TMPDIR`, and `/dev`. Reads, network, and subprocess spawning stay
+    /// allowed. The working copy underneath is a git worktree when the
+    /// launch directory is inside a repo.
+    Seatbelt,
 }
 
 impl fmt::Display for SandboxKind {
@@ -31,6 +37,7 @@ impl fmt::Display for SandboxKind {
             SandboxKind::InPlace => "inplace",
             SandboxKind::Worktree => "worktree",
             SandboxKind::Bubblewrap => "bubblewrap",
+            SandboxKind::Seatbelt => "seatbelt",
         };
         write!(f, "{s}")
     }
@@ -44,6 +51,7 @@ impl FromStr for SandboxKind {
             "inplace" => Ok(SandboxKind::InPlace),
             "worktree" => Ok(SandboxKind::Worktree),
             "bubblewrap" => Ok(SandboxKind::Bubblewrap),
+            "seatbelt" => Ok(SandboxKind::Seatbelt),
             other => Err(Error::BadSandboxKind(other.to_string())),
         }
     }
@@ -74,7 +82,10 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn isolated(&self) -> bool {
-        matches!(self.kind, SandboxKind::Worktree | SandboxKind::Bubblewrap)
+        matches!(
+            self.kind,
+            SandboxKind::Worktree | SandboxKind::Bubblewrap | SandboxKind::Seatbelt
+        )
     }
 }
 
@@ -107,8 +118,13 @@ mod tests {
             SandboxKind::from_str("bubblewrap").unwrap(),
             SandboxKind::Bubblewrap
         );
+        assert_eq!(
+            SandboxKind::from_str("seatbelt").unwrap(),
+            SandboxKind::Seatbelt
+        );
         assert!(SandboxKind::from_str("container").is_err());
         assert_eq!(SandboxKind::InPlace.to_string(), "inplace");
         assert_eq!(SandboxKind::Bubblewrap.to_string(), "bubblewrap");
+        assert_eq!(SandboxKind::Seatbelt.to_string(), "seatbelt");
     }
 }

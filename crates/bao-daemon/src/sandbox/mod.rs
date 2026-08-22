@@ -1,6 +1,6 @@
 //! Sandbox strategies: the [`SandboxBackend`] port, the [`Sandbox`] handle,
 //! and the [`WorkspaceStore`]. Each adapter (`InPlace`, `GitWorktree`,
-//! `Bubblewrap`) lives in its own file.
+//! `Bubblewrap`, `Seatbelt`) lives in its own file.
 
 use std::path::Path;
 
@@ -14,11 +14,13 @@ use crate::error::Error;
 
 mod bubblewrap;
 mod inplace;
+mod seatbelt;
 mod store;
 mod worktree;
 
 pub use bubblewrap::Bubblewrap;
 pub use inplace::InPlace;
+pub use seatbelt::Seatbelt;
 pub use store::WorkspaceStore;
 pub use worktree::GitWorktree;
 
@@ -110,6 +112,7 @@ fn backend(store: &WorkspaceStore, kind: SandboxKind) -> Box<dyn SandboxBackend>
         SandboxKind::InPlace => Box::new(InPlace),
         SandboxKind::Worktree => Box::new(GitWorktree::new(store.clone())),
         SandboxKind::Bubblewrap => Box::new(Bubblewrap::new(store.clone())),
+        SandboxKind::Seatbelt => Box::new(Seatbelt::new(store.clone())),
     }
 }
 
@@ -121,6 +124,10 @@ pub fn available_backends() -> Vec<SandboxKind> {
     #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
     if bubblewrap::bwrap_available() {
         backends.push(SandboxKind::Bubblewrap);
+    }
+    #[cfg(target_os = "macos")]
+    if seatbelt::seatbelt_available() {
+        backends.push(SandboxKind::Seatbelt);
     }
     backends
 }
