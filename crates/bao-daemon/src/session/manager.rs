@@ -1,6 +1,7 @@
 //! The session registry + the launch saga.
 
 use super::*;
+use crate::sandbox::Sandbox;
 
 /// One entry on the state bus: a session's current picture, or a
 /// removal. Watchers render this as-is — they never derive it.
@@ -33,19 +34,28 @@ impl Manager {
     /// New registry rooted at the sessions dir; environments live next to it
     /// (same parent, `/envs`).
     pub fn new(sessions_dir: PathBuf) -> Self {
-        std::fs::create_dir_all(&sessions_dir).ok();
         let envs_dir = sessions_dir
             .parent()
             .map(|p| p.join("envs"))
             .unwrap_or_else(|| sessions_dir.join("envs"));
+        Self::with_store(sessions_dir, SandboxStore::new(envs_dir))
+    }
+
+    fn with_store(sessions_dir: PathBuf, sandbox_store: SandboxStore) -> Self {
+        std::fs::create_dir_all(&sessions_dir).ok();
         let (state_bus, _) = broadcast::channel(1024);
         Manager {
             sessions: RwLock::new(HashMap::new()),
-            sandbox_store: SandboxStore::new(envs_dir),
+            sandbox_store,
             store: SessionStore::new(sessions_dir.clone()),
             dir: sessions_dir,
             state_bus,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_sandbox_store(sessions_dir: PathBuf, sandbox_store: SandboxStore) -> Self {
+        Self::with_store(sessions_dir, sandbox_store)
     }
 
     /// Fresh registry from the bao home, then restore any sessions on disk.
@@ -58,6 +68,9 @@ impl Manager {
     fn load_existing(&self) -> Result<(), Error> {
         let restored = Session::restore_all(&self.store)?;
         for s in restored {
+            let workspace = s.workspace();
+            let backend = self.sandbox_store.backend_for(workspace.kind);
+            s.set_sandbox(Sandbox::new(workspace, backend));
             self.spawn_state_forwarder(&s);
             self.sessions.write().unwrap().insert(s.id.clone(), s);
         }
@@ -170,9 +183,10 @@ impl Manager {
         sess: &Arc<Session>,
         command: &Command,
         size: TerminalSize,
-        workspace: Workspace,
+        sandbox: Sandbox,
     ) -> Result<(), Error> {
-        sess.set_workspace(workspace);
+        sess.set_workspace(sandbox.workspace.clone());
+        sess.set_sandbox(sandbox);
         sess.start_process(command, size)?;
         Ok(())
     }
@@ -182,8 +196,7 @@ impl Manager {
     fn fail_launch(&self, sid: &SessionId, reason: Option<String>) {
         if let Ok(sess) = self.resolve(sid.as_str()) {
             let _ = sess.kill();
-            let workspace = sess.workspace();
-            let _ = self.sandbox_store.remove(&workspace);
+            let _ = sess.teardown_sandbox();
         }
         let _ = self.store.remove_dir(sid);
         self.sessions.write().unwrap().remove(sid);
@@ -277,8 +290,7 @@ impl Manager {
         let sess = self.resolve(id_or_name)?;
         let id = sess.id.clone();
         let _ = sess.kill();
-        let workspace = sess.workspace();
-        self.sandbox_store.remove(&workspace)?;
+        sess.teardown_sandbox()?;
         let _ = self.store.remove_dir(&id);
         self.sessions.write().unwrap().remove(&id);
         let _ = self.state_bus.send(StateEvent::Gone {

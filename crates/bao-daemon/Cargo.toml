@@ -20,5 +20,9 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 vt100 = "0.15"
 
+[features]
+default = ["bubblewrap"]
+bubblewrap = []
+
 [lints]
 workspace = true

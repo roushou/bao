@@ -136,16 +136,16 @@ Rpc::Launch
        on step N failure → compensate 1..N-1 in reverse → emit Gone { reason }
 ```
 
-| Step              | Forward                                              | Compensation                                 |
-| ----------------- | ---------------------------------------------------- | -------------------------------------------- |
-| 1. SandboxBackend | `SandboxBackend::prepare` (`git worktree add` today) | `remove --force` + `branch -D` + delete tree |
-| 2. Spawn          | open PTY, spawn harness                              | kill child, close PTY                        |
+| Step              | Forward                                              | Compensation                                                               |
+| ----------------- | ---------------------------------------------------- | -------------------------------------------------------------------------- |
+| 1. SandboxBackend | `SandboxBackend::prepare` (`git worktree add` today) | `SandboxBackend::teardown` (`worktree remove` + `branch -D` + delete tree) |
+| 2. Spawn          | open PTY, spawn harness                              | kill child, close PTY                                                      |
 
-This is the `SandboxBackend` trait already hinted in `sandbox.rs` — a port
-with `prepare`/`compensate`, so inplace/worktree/bubblewrap are adapters the
-saga is generic over. The current `Manager::create` (sandbox-then-spawn,
-synchronous) is replaced by `begin_launch` + the saga task; `sandbox_store.remove`
-(the existing compensation) becomes a first-class undo, not just an `rm` path.
+This is the `SandboxBackend` trait — a port with `prepare`/`teardown`, so
+inplace/worktree/bubblewrap are adapters the saga is generic over. The current
+`Manager::create` (sandbox-then-spawn, synchronous) is replaced by
+`begin_launch` + the saga task; the sandbox's `teardown` is a first-class undo
+on the retained `Sandbox`, not just an `rm` path.
 
 The daemon's PTY pump, `append`, `attach_point`, and `input`/`resize` are
 unchanged — the saga only changes _when_ `start_process` runs (backgrounded)
@@ -250,7 +250,7 @@ Each slice ends runnable and testable:
    restore with the honesty rule. Existing tests updated.
 2. **`bao-core` + `bao-daemon` — backgrounded saga.** `begin_launch` +
    compensation + `StateEvent::Gone` + `FromHost::Gone` + `Watch` mapping.
-   `SandboxBackend` port extracted from `sandbox.rs`.
+   `SandboxBackend` port extracted into `sandbox/`.
 3. **`bao-tui` — feedback.** Non-blocking create with select+dock, the
    `preparing`/`starting` signal + `hollow` glyph, first-output flash, and
    `Gone` rollback toast.

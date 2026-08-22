@@ -1,6 +1,6 @@
 //! A small git adapter: the only place this crate runs `git`.
 //!
-//! [`GitWorktree`](crate::sandbox::backends::GitWorktree) decides *what* to ask
+//! [`GitWorktree`](crate::sandbox::GitWorktree) decides *what* to ask
 //! git to do (worktree policy); this type decides *how* to ask (subprocess
 //! plumbing, exit-status handling, error mapping). It is a plain struct, not
 //! a trait — there is exactly one git implementation, and a port would be

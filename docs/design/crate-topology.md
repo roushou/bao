@@ -31,8 +31,9 @@ bao-protocol Rpc/Reply/FromHost/WireError/ChannelKind/PROTOCOL_VERSION,
 bao-transport framing (FrameReader/FrameWriter) + Addr/DEFAULT_PORT (tokio)
 bao-client   the client (Conn/ConnWriter + HostEvent); wire envelopes stay private
 bao-daemon   session (live PTY/process/log/screen), manager (registry + saga),
-             store (meta.json/events.log), sandbox (SandboxBackend trait + InPlace/
-             GitWorktree), harness (Harness trait + Pi/Fallback), server
+             store (meta.json/events.log), sandbox (SandboxBackend trait + one
+             adapter file per backend: InPlace/Worktree/Bubblewrap), harness
+             (Harness trait + Pi/Fallback), server
 bao-tui      the overview renderer
 bao          main, CLI dispatch, daemon-process management, Context
 ```
@@ -71,7 +72,7 @@ owned by neither; the daemon depends on the transport, never on the client.
 | `bao-core::session::Manager` (registry + saga)              | `bao-daemon::manager`                                                                                                                                                 |
 | `bao-core::session::SessionStore`/`StoredMeta`              | `bao-daemon::store`                                                                                                                                                   |
 | `bao-core::screen` (vt100)                                  | `bao-daemon`                                                                                                                                                          |
-| `bao-core::sandbox` impls + `IsolationBackend`              | `bao-daemon::sandbox` (`SandboxBackend` trait + `InPlace`/`GitWorktree`)                                                                                              |
+| `bao-core::sandbox` impls + `IsolationBackend`              | `bao-daemon::sandbox` (`SandboxBackend` trait + `InPlace`/`Worktree`/`Bubblewrap`)                                                                                    |
 | `bao-core::protocol` (types)                                | `bao-protocol` (own crate — the wire contract)                                                                                                                        |
 | `bao-core::types::{LaunchRequest, DaemonInfo, WireBytes}`   | `bao-protocol`                                                                                                                                                        |
 | `bao-core::types::{Addr, DEFAULT_PORT}`                     | `bao-transport`                                                                                                                                                       |
@@ -127,7 +128,7 @@ The skeleton is fixed; all growth is additive and points inward.
 - `bao-client` grows by typed methods and richer events; its wire envelopes
   stay private.
 - `bao-daemon` is the growth home: new sagas (fork, move), new sandbox backends
-  (`Bubblewrap`, `Landlock`, `Seatbelt`), new harnesses (`ClaudeCode`, `Codex`),
+  (`Landlock`, `Seatbelt`), new harnesses (`ClaudeCode`, `Codex`),
   later `machine/` and `peers/` modules. It grows by adapter modules, never by
   feature crates.
 - Frontends are new crates (`bao-web`, `bao-mobile`), each thin, depending only

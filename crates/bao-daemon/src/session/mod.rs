@@ -304,7 +304,7 @@ mod tests {
         let sess = m
             .create(
                 &command,
-                &sandbox.path,
+                &sandbox.workspace.path,
                 TerminalSize { cols: 80, rows: 24 },
                 None,
                 &SandboxSpec::default(),
@@ -576,7 +576,7 @@ mod tests {
         let sess = m
             .create(
                 &command,
-                &sandbox.path,
+                &sandbox.workspace.path,
                 TerminalSize { cols: 80, rows: 24 },
                 None,
                 &SandboxSpec::default(),
@@ -658,5 +658,67 @@ mod tests {
         }
         assert!(saw_gone, "failed launch must broadcast Gone");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn fake_backend_saga_prepares_spawns_and_tears_down() {
+        use std::time::Duration;
+
+        use crate::testutil::FakeSandboxBackend;
+
+        let home = temp_root("fake-sandbox");
+        let fake_root = FakeSandboxBackend::root();
+        let _ = std::fs::remove_dir_all(&fake_root);
+        let store =
+            SandboxStore::new(home.join("envs")).with_override(|| Box::new(FakeSandboxBackend));
+        let m = Manager::with_sandbox_store(home.join("sessions"), store);
+
+        let command = Command::parse("bash -c 'echo FAKE_UP; sleep 30'").unwrap();
+        let sess = m
+            .create(
+                &command,
+                &home,
+                TerminalSize { cols: 80, rows: 24 },
+                Some("fake".to_string()),
+                &SandboxSpec::default(),
+            )
+            .unwrap();
+
+        // The fake backend materialized the workspace, and the real process
+        // runs inside it.
+        let fake_dir = FakeSandboxBackend::root().join(sess.id.as_str());
+        assert!(fake_dir.is_dir(), "fake backend must create the workspace");
+        let mut rx = sess.subscribe();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        while !sess.meta().last_output.contains("FAKE_UP") {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "session never output"
+            );
+            let _ = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await;
+        }
+
+        // rm tears the fake sandbox down and broadcasts Gone.
+        let mut bus = m.subscribe_state();
+        m.remove(sess.id.as_str()).unwrap();
+        assert!(
+            !fake_dir.exists(),
+            "teardown must remove the fake workspace"
+        );
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            match tokio::time::timeout(Duration::from_millis(500), bus.recv()).await {
+                Ok(Ok(StateEvent::Gone { .. })) => break,
+                Ok(Ok(_)) => {}
+                Ok(Err(_)) => panic!("state bus closed"),
+                Err(_) => {
+                    assert!(
+                        tokio::time::Instant::now() < deadline,
+                        "no Gone broadcast after rm"
+                    )
+                }
+            }
+        }
+        std::fs::remove_dir_all(&home).unwrap();
     }
 }

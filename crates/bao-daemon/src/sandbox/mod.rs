@@ -2,8 +2,8 @@
 //! daemon is the only place that touches the OS to build or tear down a
 //! [`Workspace`].
 //!
-//! This module holds the port and the store; the concrete adapters
-//! (`InPlace`, `GitWorktree`) live in [`backends`].
+//! This module holds the port and the store; each adapter (`InPlace`,
+//! `GitWorktree`, `Bubblewrap`) lives in its own file.
 
 use std::path::{Path, PathBuf};
 
@@ -15,63 +15,115 @@ use portable_pty::CommandBuilder;
 
 use crate::error::Error;
 
-mod backends;
 mod bubblewrap;
+mod inplace;
+mod worktree;
 
-pub use backends::{Bubblewrap, GitWorktree, InPlace};
+pub use bubblewrap::Bubblewrap;
+pub use inplace::InPlace;
+pub use worktree::GitWorktree;
 
-/// The capability to materialize and remove a [`Workspace`] — the launch
-/// saga's forward and compensating steps. One adapter per isolation
-/// mechanism; a new one (bubblewrap/Landlock, Seatbelt, a container) is a new
-/// impl — the saga and the FSM don't change.
-pub trait SandboxBackend: Send + Sync {
+/// A materialized sandbox: the serializable [`Workspace`] plus the backend
+/// that created it (which may hold runtime state — a container id, a VM
+/// socket — invisible to the domain).
+#[derive(Debug)]
+pub struct Sandbox {
+    pub workspace: Workspace,
+    backend: Box<dyn SandboxBackend>,
+}
+
+impl Sandbox {
+    pub(crate) fn new(workspace: Workspace, backend: Box<dyn SandboxBackend>) -> Self {
+        Sandbox { workspace, backend }
+    }
+
+    /// Rewrite the harness command to launch inside this sandbox.
+    pub fn wrap_command(&self, cmd: &mut CommandBuilder) -> Result<(), Error> {
+        self.backend.wrap_command(&self.workspace, cmd)
+    }
+
+    /// Tear the sandbox down (the launch saga's compensating step).
+    pub fn teardown(&self) -> Result<(), Error> {
+        self.backend.teardown(&self.workspace)
+    }
+}
+
+/// The capability to materialize, launch-in, and tear down a [`Workspace`].
+/// One adapter per isolation mechanism; a new one (Landlock, Seatbelt, a
+/// container) is a new impl — the saga and the FSM don't change.
+pub trait SandboxBackend: Send + Sync + std::fmt::Debug {
     /// The isolation level this strategy provides.
     fn kind(&self) -> SandboxKind;
-    /// Build the working copy (the saga's forward step).
+    /// Materialize the working copy.
     fn prepare(&self, id: &SessionId, cwd: &Path) -> Result<Workspace, Error>;
-    /// Undo a prepared working copy (the saga's compensating step).
-    fn compensate(&self, workspace: &Workspace) -> Result<(), Error>;
+    /// Rewrite the harness command for launch inside this sandbox.
+    /// Default: launch unchanged.
+    fn wrap_command(&self, workspace: &Workspace, cmd: &mut CommandBuilder) -> Result<(), Error> {
+        let _ = (workspace, cmd);
+        Ok(())
+    }
+    /// Undo [`Self::prepare`].
+    fn teardown(&self, workspace: &Workspace) -> Result<(), Error>;
 }
 
 /// Owns the workspace store (`<home>/envs/`) and resolves a [`SandboxSpec`]
-/// into a concrete [`Workspace`] — never silently delivering a weaker kind
+/// into a concrete [`Sandbox`] — never silently delivering a weaker kind
 /// than requested.
 #[derive(Clone)]
 pub struct SandboxStore {
     pub dir: PathBuf,
+    #[cfg(test)]
+    override_backend: Option<fn() -> Box<dyn SandboxBackend>>,
 }
 
 impl SandboxStore {
     pub fn new(dir: PathBuf) -> Self {
         std::fs::create_dir_all(&dir).ok();
-        SandboxStore { dir }
-    }
-
-    /// Build a working copy for session `id` starting from `cwd`. A `spec` of
-    /// `None` resolves the strongest the machine offers; a requested kind
-    /// that cannot be provided is an error, never a silent downgrade.
-    pub fn create(
-        &self,
-        id: &SessionId,
-        cwd: &Path,
-        spec: &SandboxSpec,
-    ) -> Result<Workspace, Error> {
-        match spec.isolation {
-            Some(kind) => self.backend(kind).prepare(id, cwd),
-            None => match self.backend(SandboxKind::Worktree).prepare(id, cwd) {
-                Ok(s) => Ok(s),
-                Err(_) => self.backend(SandboxKind::InPlace).prepare(id, cwd),
-            },
+        SandboxStore {
+            dir,
+            #[cfg(test)]
+            override_backend: None,
         }
     }
 
-    /// Undo a working copy (the saga's compensating step). In-place copies are
-    /// the user's own directory and are left untouched.
-    pub fn remove(&self, workspace: &Workspace) -> Result<(), Error> {
-        self.backend(workspace.kind).compensate(workspace)
+    /// Materialize a sandbox for `spec`, retaining its backend for spawn and
+    /// teardown. A `spec` of `None` resolves the strongest the machine
+    /// offers; a requested kind that cannot be provided is an error, never a
+    /// silent downgrade.
+    pub fn create(&self, id: &SessionId, cwd: &Path, spec: &SandboxSpec) -> Result<Sandbox, Error> {
+        match spec.isolation {
+            Some(kind) => self.prepare_with(kind, id, cwd),
+            None => {
+                let backend = self.backend(SandboxKind::Worktree);
+                match backend.prepare(id, cwd) {
+                    Ok(workspace) => Ok(Sandbox::new(workspace, backend)),
+                    Err(_) => self.prepare_with(SandboxKind::InPlace, id, cwd),
+                }
+            }
+        }
+    }
+
+    /// Re-create a backend from a persisted workspace (restore/resume).
+    pub fn backend_for(&self, kind: SandboxKind) -> Box<dyn SandboxBackend> {
+        self.backend(kind)
+    }
+
+    fn prepare_with(
+        &self,
+        kind: SandboxKind,
+        id: &SessionId,
+        cwd: &Path,
+    ) -> Result<Sandbox, Error> {
+        let backend = self.backend(kind);
+        let workspace = backend.prepare(id, cwd)?;
+        Ok(Sandbox::new(workspace, backend))
     }
 
     fn backend(&self, kind: SandboxKind) -> Box<dyn SandboxBackend> {
+        #[cfg(test)]
+        if let Some(f) = self.override_backend {
+            return (f)();
+        }
         match kind {
             SandboxKind::InPlace => Box::new(InPlace),
             SandboxKind::Worktree => Box::new(GitWorktree::new(self.dir.clone())),
@@ -80,30 +132,25 @@ impl SandboxStore {
     }
 }
 
-/// Rewrite a harness command to launch inside the sandbox for `kind`. A pure
-/// function of the workspace record: the backend that *materialized* the
-/// workspace is stateful (store dir, git), but the launch wrapper is not.
-///
-/// Non-sandboxed kinds leave the command unchanged.
-pub(crate) fn wrap_command(
-    kind: SandboxKind,
-    workspace: &Workspace,
-    cmd: &mut CommandBuilder,
-) -> Result<(), Error> {
-    match kind {
-        SandboxKind::Bubblewrap => bubblewrap::wrap_command(workspace, cmd),
-        SandboxKind::InPlace | SandboxKind::Worktree => Ok(()),
-    }
-}
-
 /// The isolation backends this machine can actually provide, for the daemon's
 /// self-description. A client offers only these, never more.
 pub fn available_backends() -> Vec<SandboxKind> {
+    #[allow(unused_mut)]
     let mut backends = vec![SandboxKind::InPlace, SandboxKind::Worktree];
-    if bubblewrap::available() {
+    #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
+    if bubblewrap::bwrap_available() {
         backends.push(SandboxKind::Bubblewrap);
     }
     backends
+}
+
+#[cfg(test)]
+impl SandboxStore {
+    /// Inject a test backend, overriding every kind. Test-only.
+    pub(crate) fn with_override(mut self, f: fn() -> Box<dyn SandboxBackend>) -> Self {
+        self.override_backend = Some(f);
+        self
+    }
 }
 
 #[cfg(test)]
@@ -146,13 +193,14 @@ mod tests {
         let root = temp("worktree");
         let repo = make_repo(&root);
         let store = SandboxStore::new(root.join("envs"));
-        let ws = store
+        let sandbox = store
             .create(
                 &SessionId::from_str("abc12345").unwrap(),
                 &repo,
                 &SandboxSpec::default(),
             )
             .unwrap();
+        let ws = &sandbox.workspace;
         assert!(ws.isolated());
         assert_ne!(ws.path, repo);
         assert_eq!(ws.branch.as_deref(), Some("bao-abc12345"));
@@ -164,7 +212,7 @@ mod tests {
             "main checkout must stay clean"
         );
 
-        store.remove(&ws).unwrap();
+        sandbox.teardown().unwrap();
         assert!(!ws.path.exists(), "worktree must be removed");
         let branches = Command::new("git")
             .arg("-C")
@@ -187,16 +235,16 @@ mod tests {
         std::fs::create_dir_all(&cwd).unwrap();
         std::fs::write(cwd.join("notes.txt"), "mine").unwrap();
         let store = SandboxStore::new(root.join("envs"));
-        let ws = store
+        let sandbox = store
             .create(
                 &SessionId::from_str("deadbeef").unwrap(),
                 &cwd,
                 &SandboxSpec::default(),
             )
             .unwrap();
-        assert!(!ws.isolated());
-        assert_eq!(ws.path, cwd);
-        store.remove(&ws).unwrap();
+        assert!(!sandbox.workspace.isolated());
+        assert_eq!(sandbox.workspace.path, cwd);
+        sandbox.teardown().unwrap();
         assert!(cwd.join("notes.txt").exists(), "in-place dir untouched");
         std::fs::remove_dir_all(&root).unwrap();
     }

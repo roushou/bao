@@ -3,6 +3,7 @@
 use super::log::{Durability, LOG_CAP, LogWriter, output_snippet};
 use super::store::{LoadedLog, RestoredIdentity, StoredMeta};
 use super::*;
+use crate::sandbox::Sandbox;
 use bao_core::types::Hostname;
 
 pub struct Session {
@@ -14,6 +15,10 @@ pub struct Session {
     /// saga materializes the workspace (provisional → real); everything else
     /// reads it through [`Session::workspace`].
     workspace: Mutex<Workspace>,
+    /// The materialized sandbox this session runs in (`None` before the
+    /// launch saga materializes it, or for a session restored without a
+    /// rehydrated backend).
+    sandbox: Mutex<Option<Sandbox>>,
     pub created: u64,
     status: Mutex<Status>,
     /// (seq, kind), newest at the back. This is the replay source for attach.
@@ -90,6 +95,7 @@ impl Session {
             name: Mutex::new(spec.name.clone()),
             command: spec.command.clone(),
             workspace: Mutex::new(spec.workspace.clone()),
+            sandbox: Mutex::new(None),
             created,
             status: Mutex::new(Status::Preparing),
             log: Mutex::new(VecDeque::new()),
@@ -176,7 +182,9 @@ impl Session {
         );
         cmd.cwd(&workspace.path);
         cmd.env("TERM", "xterm-256color");
-        crate::sandbox::wrap_command(workspace.kind, &workspace, &mut cmd)?;
+        if let Some(sandbox) = self.sandbox.lock().unwrap().as_ref() {
+            sandbox.wrap_command(&mut cmd)?;
+        }
         let child = pair.slave.spawn_command(cmd).map_err(|e| {
             Error::Spawn(format!(
                 "failed to spawn the harness (is it installed?): {e}"
@@ -321,6 +329,19 @@ impl Session {
         }
         self.persist_meta();
         self.publish_state();
+    }
+
+    /// Attach the materialized sandbox (its backend may hold runtime state).
+    pub(crate) fn set_sandbox(&self, sandbox: Sandbox) {
+        *self.sandbox.lock().unwrap() = Some(sandbox);
+    }
+
+    /// Tear the session's sandbox down. A no-op when there is none.
+    pub(crate) fn teardown_sandbox(&self) -> Result<(), Error> {
+        if let Some(sandbox) = self.sandbox.lock().unwrap().as_ref() {
+            sandbox.teardown()?;
+        }
+        Ok(())
     }
 
     /// A consistent (log sequence, screen snapshot) pair for attach: the
@@ -628,6 +649,7 @@ impl Session {
             name: Mutex::new(name),
             command,
             workspace: Mutex::new(workspace),
+            sandbox: Mutex::new(None),
             created,
             status: Mutex::new(status),
             log: Mutex::new(loaded.log),
