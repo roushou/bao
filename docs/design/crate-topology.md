@@ -31,9 +31,10 @@ bao-protocol Rpc/Reply/FromHost/WireError/ChannelKind/PROTOCOL_VERSION,
 bao-transport framing (FrameReader/FrameWriter) + Addr/DEFAULT_PORT (tokio)
 bao-client   the client (Conn/ConnWriter + HostEvent); wire envelopes stay private
 bao-daemon   session (live PTY/process/log/screen), manager (registry + saga),
-             store (meta.json/events.log), sandbox (Sandbox + SandboxBackend +
-             WorkspaceStore; one file per backend: InPlace/Worktree/Bubblewrap),
-             harness (Harness trait + Pi/Fallback), server
+             store (meta.json/events.log), sandbox (SandboxFactory seam +
+             Sandbox + SandboxBackend + WorkspaceStore; one file per backend:
+             InPlace/Worktree/Bubblewrap/Seatbelt), harness (Harness trait +
+             Pi/Fallback), server
 bao-tui      the overview renderer
 bao          main, CLI dispatch, daemon-process management, Context
 ```
@@ -128,9 +129,9 @@ The skeleton is fixed; all growth is additive and points inward.
 - `bao-client` grows by typed methods and richer events; its wire envelopes
   stay private.
 - `bao-daemon` is the growth home: new sagas (fork, move), new sandbox backends
-  (`Landlock`, `Seatbelt`), new harnesses (`ClaudeCode`, `Codex`),
-  later `machine/` and `peers/` modules. It grows by adapter modules, never by
-  feature crates.
+  (`Landlock`, and later containers/MicroVMs), new harnesses (`ClaudeCode`,
+  `Codex`), later `machine/` and `peers/` modules. It grows by adapter modules,
+  never by feature crates.
 - Frontends are new crates (`bao-web`, `bao-mobile`), each thin, depending only
   on `bao-core` + `bao-client`.
 

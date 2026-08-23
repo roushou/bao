@@ -1,6 +1,6 @@
 //! Sandbox strategies: the [`SandboxBackend`] port, the [`Sandbox`] handle,
-//! and the [`WorkspaceStore`]. Each adapter (`InPlace`, `GitWorktree`,
-//! `Bubblewrap`, `Seatbelt`) lives in its own file.
+//! the [`SandboxFactory`] seam, and the [`WorkspaceStore`]. Each adapter
+//! (`InPlace`, `GitWorktree`, `Bubblewrap`, `Seatbelt`) lives in its own file.
 
 use std::path::Path;
 
@@ -17,6 +17,9 @@ mod inplace;
 mod seatbelt;
 mod store;
 mod worktree;
+
+#[cfg(test)]
+pub(crate) mod fake;
 
 pub use bubblewrap::Bubblewrap;
 pub use inplace::InPlace;
@@ -63,6 +66,36 @@ impl Sandbox {
     /// Tear the sandbox down (the launch saga's compensating step).
     pub fn teardown(&self) -> Result<(), Error> {
         self.backend.teardown(&self.workspace)
+    }
+}
+
+/// Materializes a [`Sandbox`] for a launch. The production implementation
+/// dispatches on the requested [`SandboxKind`]; tests inject a fake so the
+/// registry and saga are testable without git, disk, or sandbox binaries.
+pub trait SandboxFactory: Send + Sync {
+    fn materialize(
+        &self,
+        store: &WorkspaceStore,
+        id: &SessionId,
+        cwd: &Path,
+        spec: &SandboxSpec,
+    ) -> Result<Sandbox, Error>;
+}
+
+/// The production factory: materializes the real backend for the requested
+/// kind.
+#[derive(Debug, Default)]
+pub struct RealSandboxFactory;
+
+impl SandboxFactory for RealSandboxFactory {
+    fn materialize(
+        &self,
+        store: &WorkspaceStore,
+        id: &SessionId,
+        cwd: &Path,
+        spec: &SandboxSpec,
+    ) -> Result<Sandbox, Error> {
+        Sandbox::create(store, id, cwd, spec)
     }
 }
 

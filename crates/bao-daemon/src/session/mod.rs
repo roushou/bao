@@ -629,11 +629,18 @@ mod tests {
     #[tokio::test]
     async fn failed_launch_compensates_and_broadcasts_gone() {
         let dir = temp_root("failed-launch");
-        let m = Manager::open(&Home::new(&dir)).unwrap();
+        let m = Manager::open_with(
+            &Home::new(&dir),
+            Arc::new(crate::sandbox::fake::FakeSandboxFactory {
+                kind: SandboxKind::Worktree,
+                fail: true,
+            }),
+        )
+        .unwrap();
         let mut bus = m.subscribe_state();
 
-        // Request a worktree in a non-git dir: the sandbox step fails
-        // deterministically — the saga must compensate and forget.
+        // The injected sandbox fails deterministically — no git, no disk —
+        // and the saga must compensate and forget.
         let command = Command::parse("bash -c 'echo hi'").unwrap();
         let spec = SandboxSpec {
             isolation: SandboxKind::Worktree,

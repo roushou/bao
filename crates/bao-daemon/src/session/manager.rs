@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::home::Home;
+use crate::sandbox::{RealSandboxFactory, SandboxFactory};
 
 /// One entry on the state bus: a session's current picture, or a
 /// removal. Watchers render this as-is — they never derive it.
@@ -26,16 +27,28 @@ pub struct Manager {
     /// so any overview can stream all sessions over one connection without
     /// polling or per-session subscriptions.
     state_bus: broadcast::Sender<StateEvent>,
+    /// Materializes sandboxes for launches. The production manager uses the
+    /// real dispatcher; tests inject a fake so the registry and saga are
+    /// testable without git, disk, or sandbox binaries.
+    sandbox_factory: Arc<dyn SandboxFactory>,
 }
 
 impl Manager {
     /// New registry rooted at the given directories (used by tests and the
     /// composition root; `open` derives them from a [`Home`]).
     pub fn new(sessions_dir: PathBuf, workspaces_dir: PathBuf) -> Self {
-        Self::with_store(sessions_dir, WorkspaceStore::new(workspaces_dir))
+        Self::with_store(
+            sessions_dir,
+            WorkspaceStore::new(workspaces_dir),
+            Arc::new(RealSandboxFactory),
+        )
     }
 
-    fn with_store(sessions_dir: PathBuf, workspaces: WorkspaceStore) -> Self {
+    fn with_store(
+        sessions_dir: PathBuf,
+        workspaces: WorkspaceStore,
+        sandbox_factory: Arc<dyn SandboxFactory>,
+    ) -> Self {
         std::fs::create_dir_all(&sessions_dir).ok();
         let (state_bus, _) = broadcast::channel(1024);
         Manager {
@@ -43,12 +56,25 @@ impl Manager {
             workspaces,
             store: SessionStore::new(sessions_dir),
             state_bus,
+            sandbox_factory,
         }
     }
 
     /// Fresh registry from the bao home, then restore any sessions on disk.
     pub fn open(home: &Home) -> Result<Self, Error> {
-        let m = Self::new(home.sessions_dir(), home.workspaces_dir());
+        Self::open_with(home, Arc::new(RealSandboxFactory))
+    }
+
+    /// Like [`Manager::open`], but with an injected sandbox factory (tests).
+    pub(crate) fn open_with(
+        home: &Home,
+        sandbox_factory: Arc<dyn SandboxFactory>,
+    ) -> Result<Self, Error> {
+        let m = Self::with_store(
+            home.sessions_dir(),
+            WorkspaceStore::new(home.workspaces_dir()),
+            sandbox_factory,
+        );
         m.load_existing()?;
         Ok(m)
     }
@@ -116,7 +142,9 @@ impl Manager {
     ) -> Result<Arc<Session>, Error> {
         let sess = self.begin_launch(command, cwd, size, name)?;
         let sid = sess.id.clone();
-        let result = Sandbox::create(&self.workspaces, &sid, cwd, sandbox)
+        let result = self
+            .sandbox_factory
+            .materialize(&self.workspaces, &sid, cwd, sandbox)
             .and_then(|sb| self.attach_and_spawn(&sess, command, size, sb));
         if let Err(e) = result {
             self.fail_launch(&sid, Some(e.to_string()));
@@ -144,9 +172,10 @@ impl Manager {
             let sid = task_sess.id.clone();
             let sid_for_sandbox = sid.clone();
             let workspaces = m.workspaces.clone();
+            let factory = m.sandbox_factory.clone();
             // The blocking git worktree step runs off the async runtime.
             let sandbox_result = tokio::task::spawn_blocking(move || {
-                Sandbox::create(&workspaces, &sid_for_sandbox, &cwd, &sandbox)
+                factory.materialize(&workspaces, &sid_for_sandbox, &cwd, &sandbox)
             })
             .await;
             let sb = match sandbox_result {

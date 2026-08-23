@@ -142,7 +142,8 @@ Rpc::Launch
 | 2. Spawn          | open PTY, spawn harness                              | kill child, close PTY                                                      |
 
 This is the `SandboxBackend` trait — a port with `prepare`/`teardown`, so
-inplace/worktree/bubblewrap are adapters the saga is generic over. The current
+inplace/worktree/bubblewrap/seatbelt are adapters the saga is generic over.
+The current
 `Manager::create` (sandbox-then-spawn, synchronous) is replaced by
 `begin_launch` + the saga task; the sandbox's `teardown` is a first-class undo
 on the retained `Sandbox`, not just an `rm` path.
