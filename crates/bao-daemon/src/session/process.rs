@@ -39,7 +39,7 @@ pub struct Session {
     last_output: Mutex<String>,
     /// The terminal's current state (the screen), always fed — the daemon
     /// holds it so clients can attach without replaying history.
-    pub(crate) screen: Mutex<vt100::Parser>,
+    pub(crate) screen: Mutex<vt_screen::Screen>,
     /// Machine this session lives on.
     host: Hostname,
     /// Time source for this session's derivations.
@@ -107,7 +107,7 @@ impl Session {
             seq: AtomicU64::new(0),
             last_activity: Mutex::new(created),
             last_output: Mutex::new(String::new()),
-            screen: Mutex::new(vt_screen::parser(spec.size.rows, spec.size.cols)),
+            screen: Mutex::new(vt_screen::Screen::new(spec.size)),
             host: initial.host.clone(),
             clock,
             log_writer: Mutex::new(Some(Arc::new(LogWriter::spawn(
@@ -146,9 +146,9 @@ impl Session {
             return Err(Error::ResumeNotInterrupted(self.status()));
         }
         self.start_process(command, size)?;
-        // The PTY was opened at `size`; bring the snapshot parser to the same
+        // The PTY was opened at `size`; bring the snapshot screen to the same
         // size so screen snapshots and the PTY window never disagree.
-        self.screen.lock().unwrap().set_size(size.rows, size.cols);
+        self.screen.lock().unwrap().resize(size);
         Ok(())
     }
 
@@ -344,16 +344,15 @@ impl Session {
         Ok(())
     }
 
-    /// A consistent (log sequence, screen snapshot) pair for attach: the
-    /// snapshot reflects exactly the output with `seq <=` the returned value,
-    /// so replaying the log from that sequence reproduces everything the
-    /// snapshot doesn't already show — no loss, no duplication. Captured
-    /// under the screen lock, matching the lock `append` holds when it
-    /// advances the sequence for output.
+    /// A consistent (log sequence, screen snapshot) pair for attach. The
+    /// contract — and its locking requirement — lives on
+    /// [`Screen::snapshot`](vt_screen::Screen::snapshot); the screen lock
+    /// held here is the one `append` holds when it advances the sequence for
+    /// output.
     pub fn attach_point(&self) -> (u64, Vec<u8>) {
         let screen = self.screen.lock().unwrap();
         let seq = self.seq.load(Ordering::SeqCst);
-        (seq, vt_screen::repaint(&screen))
+        screen.snapshot(seq)
     }
 
     /// Write bytes to the session's terminal (stdin).
@@ -366,10 +365,10 @@ impl Session {
     }
 
     pub fn resize(&self, size: TerminalSize) -> Result<(), Error> {
-        // Lock order: screen, then master. The PTY window and the snapshot
-        // parser change together to the same size — the single size-mutation
-        // point for a running session. `append` takes only `screen`, so this
-        // order cannot deadlock with it.
+        // Lock order: screen, then master. `append` takes only `screen`, so
+        // this order cannot deadlock with it. The PTY window and the
+        // snapshot screen change together to the same size — the single
+        // size-mutation point (see `Screen::resize`).
         let mut screen = self.screen.lock().unwrap();
         let mut master = self.master.lock().unwrap();
         let m = master.as_mut().ok_or(Error::NotRunning)?;
@@ -380,7 +379,7 @@ impl Session {
             pixel_height: 0,
         })
         .map_err(|e| Error::Pty(e.to_string()))?;
-        screen.set_size(size.rows, size.cols);
+        screen.resize(size);
         Ok(())
     }
 
@@ -616,7 +615,7 @@ impl Session {
             .unwrap_or_default();
         // Reconstruct the screen from the log (once, at restore) so an
         // interrupted session attaches to its real last state.
-        let mut restored_screen = vt_screen::parser(40, 120);
+        let mut restored_screen = vt_screen::Screen::new(TerminalSize::default());
         for (_, kind) in loaded.log.iter() {
             if let EventKind::Output(bytes) = kind {
                 restored_screen.process(bytes);
