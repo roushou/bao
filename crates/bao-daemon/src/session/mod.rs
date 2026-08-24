@@ -1,7 +1,7 @@
 //! Sessions: one running session process + its terminal event log.
 //!
 //! Sessions persist `meta.json` + an append-only `events.log`; on startup
-//! [`Session::restore_all`] rebuilds them from disk — honestly marked
+//! `Session::restore_all` rebuilds them from disk — honestly marked
 //! [`Status::Interrupted`] when the process is gone.
 
 mod log;

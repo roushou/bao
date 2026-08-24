@@ -297,7 +297,10 @@ impl Session {
         Ok(())
     }
 
-    /// Append an event: log it (ring buffer), persist it, broadcast it.
+    /// Append an event: assign its sequence and feed the screen under the
+    /// screen lock (so attach sees a consistent seq/snapshot pair), then
+    /// refresh the derived output facts. The ring buffer, persistence, and
+    /// broadcast live in `SessionLog`.
     fn append(&self, kind: EventKind) {
         // First output flips a booting session to running — the boot-complete
         // fact — before the output itself is recorded, so the log orders

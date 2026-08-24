@@ -84,14 +84,14 @@ compute understanding themselves.
 
 Every session appends its terminal output to an on-disk event log
 (`events.log`, JSONL) and a ring buffer. But **attach does not replay the
-log**: the daemon keeps a live `vt100` parser per session (the terminal's
-_state_) and, on attach, sends a **screen snapshot** — the current screen
-rebuilt as a short byte stream — plus the live byte stream from the current
-sequence. State is transmitted directly, never reconstructed from history
-(see `docs/design/no-replay-attach.md`). The snapshot is generated at the
-session's current terminal size: the PTY window, the daemon's snapshot
-parser, and each client's emulator share one size, so the screen is laid out
-at the width the client actually renders.
+log**: the daemon keeps a live `Screen` per session (a scrollback-free
+`vt100` parser — the terminal's _state_) and, on attach, sends a **screen
+snapshot** — the current screen rebuilt as a short byte stream — plus the
+live byte stream from the current sequence. State is transmitted directly,
+never reconstructed from history (see `docs/design/no-replay-attach.md`).
+The snapshot is generated at the session's current terminal size: the PTY
+window, the daemon's snapshot screen, and each client's emulator share one
+size, so the screen is laid out at the width the client actually renders.
 
 ### The wire
 

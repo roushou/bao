@@ -23,11 +23,12 @@ produced it. State is transmitted directly; history is paged only on demand.
 
 ## The shape
 
-- **The daemon holds the screen.** Each `Session` owns a `vt100::Parser`
-  (screen-only, no scrollback), fed on every output chunk in `append`.
+- **The daemon holds the screen.** Each `Session` owns a `Screen` — a
+  `vt100::Parser` configured with no scrollback — fed on every output chunk
+  in `Session::append`.
 - **Attach sends a snapshot.** `Reply::Attach` carries `seq` (the event-log
   cursor the live stream follows from) and `screen` — the current screen
-  rebuilt as a short byte stream via `screen::repaint`, which delegates to
+  rebuilt as a short byte stream via `Screen::repaint`, which delegates to
   `vt100`'s own `contents_formatted` (correct for attributes, wide
   characters, and cursor state by construction).
 - **The client feeds the snapshot, then follows live.** A fresh emulator
