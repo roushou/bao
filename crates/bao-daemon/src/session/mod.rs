@@ -18,10 +18,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     str::FromStr,
-    sync::{
-        Arc, Mutex, RwLock,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, Mutex, RwLock},
 };
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};

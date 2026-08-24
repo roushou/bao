@@ -1,11 +1,23 @@
-//! The event log's on-disk helpers: JSONL encoding, base64, and the
-//! output snippet.
+//! The session's event log: the in-memory ring + sequence + broadcast, and
+//! its on-disk writer (JSONL encoding, base64, checksummed output snippet).
 
-use std::{io::Write, path::Path, time::Duration};
+use std::{
+    collections::VecDeque,
+    io::Write,
+    path::Path,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::Duration,
+};
 
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot};
 
-use bao_core::{event::EventKind, types::TermStrExt};
+use bao_core::{
+    event::{EventKind, SessionEvent},
+    types::{SessionId, TermStrExt},
+};
 
 use crate::error::Error;
 
@@ -51,17 +63,17 @@ struct LogLine {
     kind: EventKind,
 }
 
-/// A session's on-disk event log, owned by one writer task. `Session::append`
+/// A session's on-disk event log, owned by one writer task. [`SessionLog`]
 /// hands lines over a bounded channel (no blocking I/O on the pump); the
 /// writer appends immediately and fsyncs per the durability policy. When the
 /// sender is dropped (session dropped), the writer drains and fsyncs once
 /// more.
-pub(crate) struct LogWriter {
+struct LogWriter {
     tx: Option<mpsc::Sender<LogCmd>>,
 }
 
 impl LogWriter {
-    pub(crate) fn spawn(data_dir: &Path, policy: Durability) -> Self {
+    fn spawn(data_dir: &Path, policy: Durability) -> Self {
         let (tx, mut rx) = mpsc::channel::<LogCmd>(LOG_WRITER_CAP);
         let file = data_dir.join("events.log");
         // Without a runtime (sync tests, early startup) the writer is a
@@ -107,7 +119,7 @@ impl LogWriter {
 
     /// Queue one line. Bounded and non-blocking: a full queue drops the line
     /// rather than stalling the pump.
-    pub(crate) fn append(&self, seq: u64, ts: u64, kind: &EventKind) {
+    fn append(&self, seq: u64, ts: u64, kind: &EventKind) {
         if let Some(tx) = &self.tx {
             let _ = tx.try_send(LogCmd::Line(LogLine {
                 seq,
@@ -118,13 +130,108 @@ impl LogWriter {
     }
 
     /// fsync everything queued so far and wait for it to land.
-    pub(crate) async fn flush(&self) {
+    async fn flush(&self) {
         let Some(tx) = &self.tx else {
             return;
         };
         let (ack, rx) = oneshot::channel();
         if tx.send(LogCmd::Flush(ack)).await.is_ok() {
             let _ = rx.await;
+        }
+    }
+}
+
+/// One session's event log: the in-memory ring buffer, the sequence counter,
+/// the live-event broadcast, and the async writer — the four things every
+/// append touches. `snapshot_after` is the attach-replay source.
+pub(crate) struct SessionLog {
+    id: SessionId,
+    ring: Mutex<VecDeque<(u64, EventKind)>>,
+    seq: AtomicU64,
+    tx: broadcast::Sender<SessionEvent>,
+    writer: Mutex<Option<Arc<LogWriter>>>,
+}
+
+impl SessionLog {
+    /// A fresh log for a live session: empty ring, a writer at `data_dir`.
+    pub(crate) fn new(id: &SessionId, data_dir: &Path, durability: Durability) -> Self {
+        SessionLog {
+            id: id.clone(),
+            ring: Mutex::new(VecDeque::new()),
+            seq: AtomicU64::new(0),
+            tx: broadcast::channel(4096).0,
+            writer: Mutex::new(Some(Arc::new(LogWriter::spawn(data_dir, durability)))),
+        }
+    }
+
+    /// A log rebuilt from on-disk state (restore): ring from the file, the
+    /// sequence continuing, no writer (no live process to append).
+    pub(crate) fn restored(id: &SessionId, log: VecDeque<(u64, EventKind)>, last_seq: u64) -> Self {
+        SessionLog {
+            id: id.clone(),
+            ring: Mutex::new(log),
+            seq: AtomicU64::new(last_seq),
+            tx: broadcast::channel(4096).0,
+            writer: Mutex::new(None),
+        }
+    }
+
+    /// The sequence the next append will be assigned.
+    pub(crate) fn last_seq(&self) -> u64 {
+        self.seq.load(Ordering::SeqCst)
+    }
+
+    /// Append an event: assign the seq, ring-buffer it, broadcast it, and
+    /// hand it to the async writer. Returns the assigned seq.
+    pub(crate) fn append(&self, kind: EventKind, ts: u64) -> u64 {
+        let seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
+        {
+            let mut ring = self.ring.lock().unwrap();
+            if ring.len() >= LOG_CAP {
+                ring.pop_front();
+            }
+            ring.push_back((seq, kind.clone()));
+        }
+        let _ = self.tx.send(SessionEvent {
+            session: self.id.clone(),
+            seq,
+            ts,
+            kind: kind.clone(),
+        });
+        if let Some(writer) = &*self.writer.lock().unwrap() {
+            writer.append(seq, ts, &kind);
+        }
+        seq
+    }
+
+    /// Entries with seq > `after`, plus the latest seq, under one lock so
+    /// attach-replay cannot race with new appends.
+    pub(crate) fn snapshot_after(&self, after: u64) -> (Vec<SessionEvent>, u64) {
+        let ring = self.ring.lock().unwrap();
+        let out = ring
+            .iter()
+            .filter(|(s, _)| *s > after)
+            .map(|(seq, kind)| SessionEvent {
+                session: self.id.clone(),
+                seq: *seq,
+                ts: 0,
+                kind: kind.clone(),
+            })
+            .collect();
+        let last = ring.back().map(|(s, _)| *s).unwrap_or(0);
+        (out, last)
+    }
+
+    /// Subscribe to the live event broadcast (every append).
+    pub(crate) fn subscribe(&self) -> broadcast::Receiver<SessionEvent> {
+        self.tx.subscribe()
+    }
+
+    /// fsync everything queued so far and wait for it to land.
+    pub(crate) async fn flush(&self) {
+        let writer = self.writer.lock().unwrap().clone();
+        if let Some(writer) = writer {
+            writer.flush().await;
         }
     }
 }

@@ -1,6 +1,8 @@
 //! The [`Session`]: one live session process + its event log.
 
-use super::log::{Durability, LOG_CAP, LogWriter, output_snippet};
+use std::io::Read;
+
+use super::log::{Durability, SessionLog, output_snippet};
 use super::store::{LoadedLog, RestoredIdentity, StoredMeta};
 use super::*;
 use crate::sandbox::Sandbox;
@@ -21,16 +23,14 @@ pub struct Session {
     sandbox: Mutex<Option<Sandbox>>,
     pub created: u64,
     status: Mutex<Status>,
-    /// (seq, kind), newest at the back. This is the replay source for attach.
-    log: Mutex<VecDeque<(u64, EventKind)>>,
-    tx: broadcast::Sender<SessionEvent>,
-    /// `None` for restored sessions (no live process).
-    master: Mutex<Option<Box<dyn MasterPty + Send>>>,
-    writer: Mutex<Option<Box<dyn Write + Send>>>,
-    child: Mutex<Option<Box<dyn Child + Send + Sync>>>,
+    /// The event log: in-memory ring, sequence, live-event broadcast, and
+    /// async writer. The attach-replay source.
+    log: SessionLog,
+    /// The live PTY process (master, writer, child) — empty when restored or
+    /// exited.
+    process: Mutex<Process>,
     /// The store this session persists to and was loaded from.
     store: SessionStore,
-    seq: AtomicU64,
     /// Epoch ms of the last session output (0 = none yet). Drives the honest
     /// "idle" signal.
     last_activity: Mutex<u64>,
@@ -44,9 +44,6 @@ pub struct Session {
     host: Hostname,
     /// Time source for this session's derivations.
     clock: Clock,
-    /// The on-disk event log writer (None for restored sessions — no live
-    /// process, nothing to append).
-    log_writer: Mutex<Option<Arc<LogWriter>>>,
     /// Honest "is the session waiting for the human?" — set only by the
     /// daemon's harness poll; `None` = we cannot tell. Cleared when the
     /// session stops.
@@ -58,6 +55,104 @@ pub struct Session {
     /// Last picture we actually pushed, so `publish_state` only sends on
     /// change.
     last_state: Mutex<Option<SessionMeta>>,
+}
+
+/// One live PTY process: the master handle, its writer, and the child — the
+/// three handles that always appear and disappear together. Empty while the
+/// session has no live process (restored, exited, not yet spawned).
+#[derive(Default)]
+struct Process {
+    master: Option<Box<dyn MasterPty + Send>>,
+    writer: Option<Box<dyn Write + Send>>,
+    child: Option<Box<dyn Child + Send + Sync>>,
+}
+
+impl Process {
+    /// Open the PTY and spawn `command` in `workspace`, sandbox applied.
+    /// Returns the master reader for the caller's pump.
+    fn open(
+        &mut self,
+        command: &Command,
+        workspace: &Workspace,
+        sandbox: Option<&Sandbox>,
+        size: TerminalSize,
+    ) -> Result<Box<dyn Read + Send>, Error> {
+        if self.child.is_some() {
+            return Err(Error::AlreadyRunning);
+        }
+        let pair = native_pty_system()
+            .openpty(PtySize {
+                rows: size.rows,
+                cols: size.cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|e| Error::Pty(e.to_string()))?;
+        let mut cmd = CommandBuilder::from_argv(
+            command
+                .as_args()
+                .iter()
+                .map(|a| std::ffi::OsString::from(a.as_str()))
+                .collect(),
+        );
+        cmd.cwd(&workspace.path);
+        cmd.env("TERM", "xterm-256color");
+        if let Some(sb) = sandbox {
+            sb.wrap_command(&mut cmd)?;
+        }
+        let child = pair.slave.spawn_command(cmd).map_err(|e| {
+            Error::Spawn(format!(
+                "failed to spawn the harness (is it installed?): {e}"
+            ))
+        })?;
+        drop(pair.slave);
+        let reader = pair
+            .master
+            .try_clone_reader()
+            .map_err(|e| Error::Pty(e.to_string()))?;
+        self.writer = Some(
+            pair.master
+                .take_writer()
+                .map_err(|e| Error::Pty(e.to_string()))?,
+        );
+        self.master = Some(pair.master);
+        self.child = Some(child);
+        Ok(reader)
+    }
+
+    /// Write bytes to the process's stdin. [`Error::NotRunning`] when there
+    /// is no live process.
+    fn input(&mut self, bytes: &[u8]) -> Result<(), Error> {
+        let w = self.writer.as_mut().ok_or(Error::NotRunning)?;
+        w.write_all(bytes)?;
+        w.flush()?;
+        Ok(())
+    }
+
+    /// Resize the PTY window. [`Error::NotRunning`] when there is none.
+    fn resize(&mut self, size: TerminalSize) -> Result<(), Error> {
+        let m = self.master.as_mut().ok_or(Error::NotRunning)?;
+        m.resize(PtySize {
+            rows: size.rows,
+            cols: size.cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| Error::Pty(e.to_string()))
+    }
+
+    /// Kill the child. A no-op when there is no live process.
+    fn kill(&mut self) -> Result<(), Error> {
+        if let Some(c) = self.child.as_mut() {
+            c.kill().map_err(|e| Error::Pty(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    /// Take the child for the pump's exit-wait (fires on master EOF).
+    fn take_child(&mut self) -> Option<Box<dyn Child + Send + Sync>> {
+        self.child.take()
+    }
 }
 
 impl Session {
@@ -98,22 +193,14 @@ impl Session {
             sandbox: Mutex::new(None),
             created,
             status: Mutex::new(Status::Preparing),
-            log: Mutex::new(VecDeque::new()),
-            tx: broadcast::channel(4096).0,
-            master: Mutex::new(None),
-            writer: Mutex::new(None),
-            child: Mutex::new(None),
+            log: SessionLog::new(&spec.id, &data_dir, Durability::default()),
+            process: Mutex::new(Process::default()),
             store: store.clone(),
-            seq: AtomicU64::new(0),
             last_activity: Mutex::new(created),
             last_output: Mutex::new(String::new()),
             screen: Mutex::new(vt_screen::Screen::new(spec.size)),
             host: initial.host.clone(),
             clock,
-            log_writer: Mutex::new(Some(Arc::new(LogWriter::spawn(
-                &data_dir,
-                Durability::default(),
-            )))),
             waiting: Mutex::new(None),
             state_tx,
             last_state: Mutex::new(Some(initial)),
@@ -160,49 +247,12 @@ impl Session {
         command: &Command,
         size: TerminalSize,
     ) -> Result<(), Error> {
-        if self.child.lock().unwrap().is_some() {
-            return Err(Error::AlreadyRunning);
-        }
         let workspace = self.workspace();
-        let pty_system = native_pty_system();
-        let pair = pty_system
-            .openpty(PtySize {
-                rows: size.rows,
-                cols: size.cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .map_err(|e| Error::Pty(e.to_string()))?;
-        let mut cmd = CommandBuilder::from_argv(
-            command
-                .as_args()
-                .iter()
-                .map(|a| std::ffi::OsString::from(a.as_str()))
-                .collect(),
-        );
-        cmd.cwd(&workspace.path);
-        cmd.env("TERM", "xterm-256color");
-        if let Some(sandbox) = self.sandbox.lock().unwrap().as_ref() {
-            sandbox.wrap_command(&mut cmd)?;
-        }
-        let child = pair.slave.spawn_command(cmd).map_err(|e| {
-            Error::Spawn(format!(
-                "failed to spawn the harness (is it installed?): {e}"
-            ))
-        })?;
-        drop(pair.slave);
-        let mut reader = pair
-            .master
-            .try_clone_reader()
-            .map_err(|e| Error::Pty(e.to_string()))?;
-        let writer = pair
-            .master
-            .take_writer()
-            .map_err(|e| Error::Pty(e.to_string()))?;
-
-        *self.master.lock().unwrap() = Some(pair.master);
-        *self.writer.lock().unwrap() = Some(writer);
-        *self.child.lock().unwrap() = Some(child);
+        let mut reader = {
+            let sandbox = self.sandbox.lock().unwrap();
+            let mut process = self.process.lock().unwrap();
+            process.open(command, &workspace, sandbox.as_ref(), size)?
+        };
         // The process is up — Preparing → Starting on launch, Interrupted →
         // Starting on resume. Emitted before the pump starts so the first
         // output sees `Starting` and flips it to `Running`.
@@ -233,7 +283,7 @@ impl Session {
             }
             // EOF on the master: wait for the child and record its exit.
             let code = {
-                let child = s2.child.lock().unwrap().take();
+                let child = s2.process.lock().unwrap().take_child();
                 match child {
                     Some(mut ch) => match tokio::task::spawn_blocking(move || ch.wait()).await {
                         Ok(Ok(st)) => Some(st.exit_code() as i32),
@@ -260,35 +310,21 @@ impl Session {
         // Output: the sequence number and the screen update happen together
         // under the screen lock, so `attach_point` can capture a consistent
         // (seq, snapshot) pair — the snapshot always reflects exactly the
-        // output with seq <= the returned value.
-        let seq = match &kind {
+        // output with seq <= the returned value. The seq itself lives in the
+        // log; it is assigned here, under the screen lock.
+        match &kind {
             EventKind::Output(bytes) => {
                 let mut screen = self.screen.lock().unwrap();
-                let seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
+                self.log.append(kind.clone(), ts);
                 screen.process(bytes);
-                seq
             }
-            EventKind::Status(_) => self.seq.fetch_add(1, Ordering::SeqCst) + 1,
-        };
+            EventKind::Status(_) => {
+                self.log.append(kind.clone(), ts);
+            }
+        }
         if let EventKind::Output(bytes) = &kind {
             *self.last_activity.lock().unwrap() = ts;
             *self.last_output.lock().unwrap() = output_snippet(bytes);
-        }
-        {
-            let mut log = self.log.lock().unwrap();
-            if log.len() >= LOG_CAP {
-                log.pop_front();
-            }
-            log.push_back((seq, kind.clone()));
-        }
-        let _ = self.tx.send(SessionEvent {
-            session: self.id.clone(),
-            seq,
-            ts,
-            kind: kind.clone(),
-        });
-        if let Some(writer) = &*self.log_writer.lock().unwrap() {
-            writer.append(seq, ts, &kind);
         }
         self.publish_state();
     }
@@ -351,7 +387,7 @@ impl Session {
     /// output.
     pub fn attach_point(&self) -> (u64, Vec<u8>) {
         let screen = self.screen.lock().unwrap();
-        let seq = self.seq.load(Ordering::SeqCst);
+        let seq = self.log.last_seq();
         screen.snapshot(seq)
     }
 
@@ -363,70 +399,39 @@ impl Session {
 
     /// Write bytes to the session's terminal (stdin).
     pub fn input(&self, bytes: &[u8]) -> Result<(), Error> {
-        let mut guard = self.writer.lock().unwrap();
-        let w = guard.as_mut().ok_or(Error::NotRunning)?;
-        w.write_all(bytes)?;
-        w.flush()?;
-        Ok(())
+        self.process.lock().unwrap().input(bytes)
     }
 
     pub fn resize(&self, size: TerminalSize) -> Result<(), Error> {
-        // Lock order: screen, then master. `append` takes only `screen`, so
+        // Lock order: screen, then process. `append` takes only `screen`, so
         // this order cannot deadlock with it. The PTY window and the
         // snapshot screen change together to the same size — the single
         // size-mutation point (see `Screen::resize`).
         let mut screen = self.screen.lock().unwrap();
-        let mut master = self.master.lock().unwrap();
-        let m = master.as_mut().ok_or(Error::NotRunning)?;
-        m.resize(PtySize {
-            rows: size.rows,
-            cols: size.cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| Error::Pty(e.to_string()))?;
+        self.process.lock().unwrap().resize(size)?;
         screen.resize(size);
         Ok(())
     }
 
     pub fn kill(&self) -> Result<(), Error> {
-        if let Some(c) = self.child.lock().unwrap().as_mut() {
-            c.kill().map_err(|e| Error::Pty(e.to_string()))?;
-        }
-        Ok(())
+        self.process.lock().unwrap().kill()
     }
 
     /// fsync the event log so everything appended so far is durable. Called
     /// on graceful daemon shutdown; a crash skips it (restore reflects what
     /// reached disk).
     pub async fn flush_log(&self) {
-        let writer = self.log_writer.lock().unwrap().clone();
-        if let Some(writer) = writer {
-            writer.flush().await;
-        }
+        self.log.flush().await;
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<SessionEvent> {
-        self.tx.subscribe()
+        self.log.subscribe()
     }
 
     /// Snapshot the log entries with seq > `after`, plus the latest seq,
     /// under one lock so attach-replay cannot race with new appends.
     pub fn snapshot_and_last(&self, after: u64) -> (Vec<SessionEvent>, u64) {
-        let log = self.log.lock().unwrap();
-        let mut out = Vec::new();
-        for (seq, kind) in log.iter() {
-            if *seq > after {
-                out.push(SessionEvent {
-                    session: self.id.clone(),
-                    seq: *seq,
-                    ts: 0,
-                    kind: kind.clone(),
-                });
-            }
-        }
-        let last = log.back().map(|(s, _)| *s).unwrap_or(0);
-        (out, last)
+        self.log.snapshot_after(after)
     }
 
     /// Seconds since the session last produced output — the daemon's time
@@ -650,6 +655,7 @@ impl Session {
         };
         let (state_tx, _) = watch::channel(initial.clone());
         Arc::new(Session {
+            log: SessionLog::restored(&id, loaded.log, loaded.last_seq),
             id,
             name: Mutex::new(name),
             command,
@@ -657,19 +663,13 @@ impl Session {
             sandbox: Mutex::new(None),
             created,
             status: Mutex::new(status),
-            log: Mutex::new(loaded.log),
-            tx: broadcast::channel(4096).0,
-            master: Mutex::new(None),
-            writer: Mutex::new(None),
-            child: Mutex::new(None),
+            process: Mutex::new(Process::default()),
             store: store.clone(),
-            seq: AtomicU64::new(loaded.last_seq),
             last_activity: Mutex::new(loaded.last_ts),
             last_output: Mutex::new(snippet),
             screen: Mutex::new(restored_screen),
             host: initial.host.clone(),
             clock: Clock::system(),
-            log_writer: Mutex::new(None),
             waiting: Mutex::new(None),
             state_tx,
             last_state: Mutex::new(Some(initial)),
