@@ -262,23 +262,57 @@ where
             },
         })
         .await?;
-    stream_session(&mut writer, &mut reader, &sess, &manager, seq).await
+    stream_session_to(&mut writer, Some(&mut reader), &sess, &manager, seq).await
 }
 
-/// Stream one session to an attached channel: replay the log from `after`,
-/// then follow the live broadcast, the session's state channel, and the
-/// removal bus — writing directly to the socket. Backpressure is TCP's; a
-/// lagged broadcast re-syncs from the log.
-async fn stream_session<R, W>(
-    writer: &mut FrameWriter<W, FromHost>,
-    reader: &mut FrameReader<R, Request>,
+/// Where the daemon pushes one session's streamed events. The attach channel
+/// writes straight to the socket; a control channel's per-session task sends
+/// into the connection's bounded out-queue. This is the *only* difference
+/// between the two streaming paths.
+trait StreamSink {
+    async fn push(&mut self, msg: FromHost) -> Result<(), Error>;
+}
+
+impl<W: AsyncWrite + Unpin> StreamSink for FrameWriter<W, FromHost> {
+    async fn push(&mut self, msg: FromHost) -> Result<(), Error> {
+        // bao_transport::Error → Error::Transport via #[from].
+        self.write(&msg).await?;
+        Ok(())
+    }
+}
+
+impl StreamSink for mpsc::Sender<FromHost> {
+    async fn push(&mut self, msg: FromHost) -> Result<(), Error> {
+        self.send(msg).await.map_err(|_| {
+            Error::Io(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "peer closed",
+            ))
+        })
+    }
+}
+
+/// Stream one session: replay the log from `after`, push the current derived
+/// picture, then follow the live broadcast, the session's state channel, and
+/// the removal bus — writing to whatever sink the channel uses. One copy of
+/// the state machine serves both the attach channel (`read` = its
+/// close-detection arm) and every control channel's per-session task
+/// (`read` = `None`, the arm never fires). Backpressure is the sink's: TCP
+/// flow control for the socket, the bounded out-queue for a control channel.
+///
+/// Correct under races: we snapshot the log under its lock, then skip
+/// broadcast entries we already replayed; a lagged broadcast re-syncs from
+/// the log (which has it all).
+async fn stream_session_to<S, R>(
+    sink: &mut S,
+    mut read: Option<&mut FrameReader<R, Request>>,
     sess: &Arc<Session>,
     manager: &Arc<Manager>,
     after: u64,
 ) -> Result<(), Error>
 where
+    S: StreamSink,
     R: AsyncRead + Unpin,
-    W: AsyncWrite + Unpin,
 {
     let mut state_rx = sess.state_subscribe();
     let mut rx = sess.subscribe();
@@ -287,30 +321,29 @@ where
 
     let (snapshot, mut last) = sess.snapshot_and_last(after);
     for ev in snapshot {
-        writer.write(&FromHost::from(&ev)).await?;
+        sink.push(FromHost::from(&ev)).await?;
     }
     // Current derived picture, then live.
     let current = sess.meta();
-    writer
-        .write(&FromHost::State {
-            ts: now_ms(),
-            meta: current,
-        })
-        .await?;
+    sink.push(FromHost::State {
+        ts: now_ms(),
+        meta: current,
+    })
+    .await?;
 
     loop {
         tokio::select! {
             ev = rx.recv() => match ev {
                 Ok(ev) if ev.seq > last => {
                     last = ev.seq;
-                    writer.write(&FromHost::from(&ev)).await?;
+                    sink.push(FromHost::from(&ev)).await?;
                 }
                 Ok(_) => {}
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                    // We fell behind the broadcast buffer; the log has it all.
+                    // Fell behind the broadcast buffer; the log has it all.
                     let (snap, l) = sess.snapshot_and_last(last);
                     for ev in snap {
-                        writer.write(&FromHost::from(&ev)).await?;
+                        sink.push(FromHost::from(&ev)).await?;
                     }
                     last = l;
                 }
@@ -321,11 +354,11 @@ where
                     return Ok(());
                 }
                 let meta = state_rx.borrow().clone();
-                writer.write(&FromHost::State { ts: now_ms(), meta }).await?;
+                sink.push(FromHost::State { ts: now_ms(), meta }).await?;
             }
             bus = bus_rx.recv() => match bus {
                 Ok(StateEvent::Gone { session, reason }) if session == sid => {
-                    let _ = writer.write(&FromHost::Gone { session, reason }).await;
+                    let _ = sink.push(FromHost::Gone { session, reason }).await;
                     return Ok(());
                 }
                 Ok(_) => {}
@@ -333,8 +366,8 @@ where
                     // Missed some bus events; if the session is gone,
                     // `resolve` will fail.
                     if manager.resolve(sid.as_str()).is_err() {
-                        let _ = writer
-                            .write(&FromHost::Gone {
+                        let _ = sink
+                            .push(FromHost::Gone {
                                 session: sid.clone(),
                                 reason: None,
                             })
@@ -344,12 +377,24 @@ where
                 }
                 Err(_) => return Ok(()),
             },
-            req = reader.read() => match req {
-                // The client never sends on an attach channel; exit on close.
-                Ok(None) | Err(_) => return Ok(()),
-                Ok(Some(_)) => {}
-            },
+            close = close_detect(&mut read) => return close,
         }
+    }
+}
+
+/// The attach channel's close detection: exit on EOF or error; stray frames
+/// are noise — the client never sends on an attach channel — and, like the
+/// original loop, are ignored (the arm simply stops firing). With no reader
+/// (control subscriptions) the arm never fires at all.
+async fn close_detect<R: AsyncRead + Unpin>(
+    read: &mut Option<&mut FrameReader<R, Request>>,
+) -> Result<(), Error> {
+    match read {
+        Some(r) => match r.read().await {
+            Ok(None) | Err(_) => Ok(()),
+            Ok(Some(_)) => std::future::pending::<Result<(), Error>>().await,
+        },
+        None => std::future::pending::<Result<(), Error>>().await,
     }
 }
 
@@ -367,7 +412,7 @@ where
     manager: Arc<Manager>,
 }
 
-impl<R: AsyncRead + Unpin> Connection<R> {
+impl<R: AsyncRead + Unpin + Send> Connection<R> {
     async fn run(&mut self) -> Result<(), Error> {
         loop {
             let req = match self.reader.read().await {
@@ -557,103 +602,20 @@ impl<R: AsyncRead + Unpin> Connection<R> {
             })
     }
 
-    /// Stream events for a session to this connection: replay the log from
-    /// `after`, then follow the live broadcast — and, in parallel, follow the
-    /// session's state channel. Correct under races: we snapshot the log
-    /// under its lock, then skip broadcast entries we already replayed.
+    /// Stream events for a session to this connection: the same state
+    /// machine the attach channel runs ([`stream_session_to`]) — replay the
+    /// log from `after`, then follow the broadcast, the session's state
+    /// channel, and the removal bus — with this connection's bounded
+    /// out-queue as the sink. No close-detection arm: the control loop's own
+    /// reader owns that.
     fn subscribe(&mut self, sess: Arc<Session>, after: u64) {
-        let out = self.out_tx.clone();
+        let mut out = self.out_tx.clone();
         let manager = self.manager.clone();
-        let sid = sess.id.clone();
         self.subs.push(tokio::spawn(async move {
-            let mut state_rx = sess.state_subscribe();
-            let mut rx = sess.subscribe();
-            // A per-session stream also watches the state bus for this
-            // session's removal, so an attached terminal learns a rolled-back
-            // launch (or an `rm`) instead of sitting empty forever.
-            let mut bus_rx = manager.subscribe_state();
-            let (snapshot, last) = sess.snapshot_and_last(after);
-            let mut last = last;
-            for ev in snapshot {
-                if out.send(FromHost::from(&ev)).await.is_err() {
-                    return;
-                }
-            }
-            // Current derived picture, then live.
-            let current = sess.meta();
-            if out
-                .send(FromHost::State {
-                    ts: now_ms(),
-                    meta: current,
-                })
-                .await
-                .is_err()
-            {
-                return;
-            }
-            loop {
-                tokio::select! {
-                    ev = rx.recv() => {
-                        match ev {
-                            Ok(ev) if ev.seq > last => {
-                                last = ev.seq;
-                                if out.send(FromHost::from(&ev)).await.is_err() {
-                                    return;
-                                }
-                            }
-                            Ok(_) => {}
-                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                                // We fell behind the broadcast buffer; the log has it all.
-                                let (snap, l) = sess.snapshot_and_last(last);
-                                for ev in snap {
-                                    if out.send(FromHost::from(&ev)).await.is_err() {
-                                        return;
-                                    }
-                                }
-                                last = l;
-                            }
-                            Err(_) => return,
-                        }
-                    }
-                    changed = state_rx.changed() => {
-                        if changed.is_err() {
-                            return;
-                        }
-                        let meta = state_rx.borrow().clone();
-                        if out
-                            .send(FromHost::State {
-                                ts: now_ms(),
-                                meta,
-                            })
-                            .await
-                            .is_err()
-                        {
-                            return;
-                        }
-                    }
-                    bus = bus_rx.recv() => {
-                        match bus {
-                            Ok(StateEvent::Gone { session, reason }) if session == sid => {
-                                let _ = out.send(FromHost::Gone { session, reason }).await;
-                                return;
-                            }
-                            Ok(_) => {}
-                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                                // Missed some bus events; if the session is
-                                // gone, `resolve` will fail.
-                                if manager.resolve(sid.as_str()).is_err() {
-                                    let _ = out.send(FromHost::Gone {
-                                        session: sid.clone(),
-                                        reason: None,
-                                    }).await;
-                                    return;
-                                }
-                            }
-                            Err(_) => return,
-                        }
-                    }
-                }
-            }
+            let _ = stream_session_to::<mpsc::Sender<FromHost>, R>(
+                &mut out, None, &sess, &manager, after,
+            )
+            .await;
         }));
     }
 }
