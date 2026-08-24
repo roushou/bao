@@ -500,7 +500,7 @@ mod tests {
             clock: Clock::system(),
         };
         let sess = Session::spawn(&spec, &store).unwrap();
-        assert_eq!(sess.screen.lock().unwrap().size(), (24, 80));
+        assert_eq!(sess.screen_size(), (24, 80));
 
         // The single size-mutation point: the snapshot screen must track the
         // PTY on every resize.
@@ -509,7 +509,7 @@ mod tests {
             rows: 40,
         })
         .unwrap();
-        assert_eq!(sess.screen.lock().unwrap().size(), (40, 100));
+        assert_eq!(sess.screen_size(), (40, 100));
 
         sess.kill().unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
@@ -523,12 +523,12 @@ mod tests {
         let sess = m.resolve("resz0001").unwrap();
         assert_eq!(sess.status(), Status::Interrupted);
         // Restored sessions use the default restore size until resumed.
-        assert_eq!(sess.screen.lock().unwrap().size(), (40, 120));
+        assert_eq!(sess.screen_size(), (40, 120));
 
         let command = Command::parse("bash -c 'sleep 30'").unwrap();
         sess.resume(&command, TerminalSize { cols: 90, rows: 30 })
             .unwrap();
-        assert_eq!(sess.screen.lock().unwrap().size(), (30, 90));
+        assert_eq!(sess.screen_size(), (30, 90));
 
         sess.kill().unwrap();
         std::fs::remove_dir_all(&home).unwrap();

@@ -39,7 +39,7 @@ pub struct Session {
     last_output: Mutex<String>,
     /// The terminal's current state (the screen), always fed — the daemon
     /// holds it so clients can attach without replaying history.
-    pub(crate) screen: Mutex<vt_screen::Screen>,
+    screen: Mutex<vt_screen::Screen>,
     /// Machine this session lives on.
     host: Hostname,
     /// Time source for this session's derivations.
@@ -353,6 +353,12 @@ impl Session {
         let screen = self.screen.lock().unwrap();
         let seq = self.seq.load(Ordering::SeqCst);
         screen.snapshot(seq)
+    }
+
+    /// The session's terminal size, `(rows, cols)` — what a client emulator
+    /// must render at.
+    pub fn screen_size(&self) -> (u16, u16) {
+        self.screen.lock().unwrap().size()
     }
 
     /// Write bytes to the session's terminal (stdin).
