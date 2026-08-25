@@ -170,17 +170,14 @@ impl Overview {
                 self.components.footer.handle_events(Some(&event), &ctx)
             } else if self.components.rail.filtering() {
                 self.components.rail.handle_events(Some(&event), &ctx)
+            } else if self.focus == Focus::Terminal {
+                // Raw passthrough is not a cross-component intent: the
+                // terminal decides purely, effects are applied below.
+                self.terminal_key(&key).await;
+                Action::Noop
             } else {
-                let scope = if self.focus == Focus::Terminal {
-                    keys::Scope::Terminal
-                } else {
-                    keys::Scope::Rail
-                };
-                match keys::Keymap::defaults().resolve(scope, &key) {
+                match keys::Keymap::defaults().resolve(keys::Scope::Rail, &key) {
                     Some(action) => action,
-                    // Not a binding: the terminal forwards raw bytes; the
-                    // rail has nothing to do with it.
-                    None if scope == keys::Scope::Terminal => Action::TerminalKey(key),
                     None => Action::Noop,
                 }
             }
@@ -248,7 +245,6 @@ impl Overview {
             Action::OpenPalette => self.components.palette.open_palette(),
             Action::OpenHelp => self.components.help.open(),
             Action::PaletteConfirm => self.palette_confirm().await,
-            Action::TerminalKey(key) => self.terminal_key(&key).await,
             Action::RenameSession(sid, name) => self.rename(&sid, name).await,
             Action::CreateSession(name) => self.create(name).await,
             Action::Rm(sid) => self.rm(&sid).await,
@@ -382,29 +378,33 @@ impl Overview {
     }
 
     async fn terminal_key(&mut self, key: &crossterm::event::KeyEvent) {
-        let Some(mut writer) = self.twriter.take() else {
+        let Some((sid, keypress)) = self.components.terminal_pane.press(key) else {
             return;
         };
-        let outcome = self
-            .components
-            .terminal_pane
-            .handle_key(key, &mut writer)
-            .await;
-        self.twriter = Some(writer);
-        if outcome == crate::terminal::Outcome::StepOut {
-            self.focus = Focus::Rail;
-            self.components.terminal_pane.set_fullscreen(false);
+        match keypress {
+            crate::terminal::Keypress::StepOut => {
+                self.focus = Focus::Rail;
+                self.components.terminal_pane.set_fullscreen(false);
+            }
+            crate::terminal::Keypress::Send(bytes) => {
+                if let Some(w) = self.twriter.as_mut() {
+                    let _ = w.input(&sid, bytes).await;
+                }
+            }
+            // Scroll was already applied to local state by `press`.
+            crate::terminal::Keypress::Scroll(_) | crate::terminal::Keypress::Ignore => {}
         }
     }
 
     /// Forward a paste to the active terminal — encoded per the harness's
-    /// bracketed-paste mode, which the overview previously dropped entirely.
+    /// bracketed-paste mode.
     async fn terminal_paste(&mut self, text: &str) {
-        let Some(mut writer) = self.twriter.take() else {
+        let Some((sid, bytes)) = self.components.terminal_pane.paste_bytes(text) else {
             return;
         };
-        self.components.terminal_pane.paste(text, &mut writer).await;
-        self.twriter = Some(writer);
+        if let Some(w) = self.twriter.as_mut() {
+            let _ = w.input(&sid, bytes).await;
+        }
     }
 
     async fn resume_selected(&mut self) {

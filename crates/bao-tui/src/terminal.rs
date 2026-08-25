@@ -25,13 +25,22 @@ use tokio::sync::mpsc;
 
 use crate::{emu::Emu, error::Error, signal};
 
-/// What a key did, from the terminal's point of view.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Outcome {
-    /// The key was forwarded to the harness.
-    None,
-    /// Step out: `⌃q`, or any key after the session ended.
+/// What one keypress means to the terminal model — decided purely (no I/O,
+/// no connection), applied by the caller at the shell. `StepOut` crosses a
+/// pane boundary and maps to [`crate::action::Action::StepOut`] there; the
+/// other variants stay inside the terminal subsystem.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Keypress {
+    /// Leave the terminal: the keymap's reserved key, or any key once the
+    /// session has ended.
     StepOut,
+    /// Scroll Bao's scrollback by lines — already applied to local state;
+    /// the caller does nothing.
+    Scroll(isize),
+    /// Bytes to deliver to the harness's stdin.
+    Send(Vec<u8>),
+    /// Not a key a terminal would send — drop it.
+    Ignore,
 }
 
 /// The session is over, one way or another — the TUI shows a banner and any
@@ -139,11 +148,14 @@ impl Terminal {
         }
     }
 
-    /// Handle a keystroke. Raw passthrough: `⌃q` steps out, `PgUp/PgDn`
-    /// scroll Bao's scrollback, everything else is forwarded byte-for-byte.
-    pub async fn handle_key(&mut self, k: &KeyEvent, writer: &mut ConnWriter) -> Outcome {
+    /// Decide what a keystroke means — purely: no connection, no awaiting.
+    /// Raw passthrough dialect: `⌃q` (the keymap's one reserved key) steps
+    /// out, `PgUp/PgDn` scroll Bao's scrollback (applied to local state here),
+    /// everything else encodes to the bytes a terminal would send. The caller
+    /// applies the effect at the shell.
+    pub fn press(&mut self, k: &KeyEvent) -> Keypress {
         if self.ended.is_some() {
-            return Outcome::StepOut;
+            return Keypress::StepOut;
         }
         // Step-out is the table's one exception to passthrough — resolved
         // here so the attached view and the overview share it.
@@ -151,40 +163,34 @@ impl Terminal {
             .resolve(crate::keys::Scope::Terminal, k)
             .is_some()
         {
-            return Outcome::StepOut;
+            return Keypress::StepOut;
         }
         match k.code {
             KeyCode::PageUp => {
                 self.scroll += 12;
                 self.emu.set_scroll(self.scroll);
-                Outcome::None
+                Keypress::Scroll(12)
             }
             KeyCode::PageDown => {
                 self.scroll = self.scroll.saturating_sub(12);
                 self.emu.set_scroll(self.scroll);
-                Outcome::None
+                Keypress::Scroll(-12)
             }
             _ => {
                 let modes = self.emu.modes();
-                if let Some(bytes) = crate::input::Encoder::new(&modes).key(k) {
-                    self.forward(writer, &bytes).await;
+                match crate::input::Encoder::new(&modes).key(k) {
+                    Some(bytes) => Keypress::Send(bytes),
+                    None => Keypress::Ignore,
                 }
-                Outcome::None
             }
         }
     }
 
-    /// Encode and forward a paste, honoring the harness's bracketed-paste
-    /// mode (wrapped iff it asked for it).
-    pub async fn paste(&mut self, writer: &mut ConnWriter, text: &str) {
+    /// Encode a paste, honoring the harness's bracketed-paste mode (wrapped
+    /// iff it asked for it). Pure; the caller sends the bytes.
+    pub fn paste_bytes(&self, text: &str) -> Vec<u8> {
         let modes = self.emu.modes();
-        let bytes = crate::input::Encoder::new(&modes).paste(text);
-        self.forward(writer, &bytes).await;
-    }
-
-    /// Forward raw bytes to the harness's stdin (used for paste verbatim).
-    pub async fn forward(&mut self, writer: &mut ConnWriter, bytes: &[u8]) {
-        let _ = writer.input(&self.sid, bytes).await;
+        crate::input::Encoder::new(&modes).paste(text)
     }
 
     /// Resize the emulator's viewport. Returns the new size when it actually
@@ -327,12 +333,17 @@ impl Session {
             terminal.draw(|f| pane.draw_in(f, f.area(), true))?;
             tokio::select! {
                 maybe = stream.next() => match maybe {
-                    Some(Ok(Event::Key(k))) => {
-                        if pane.handle_key(&k, &mut writer).await == Outcome::StepOut {
-                            break;
+                    Some(Ok(Event::Key(k))) => match pane.press(&k) {
+                        Keypress::StepOut => break,
+                        Keypress::Send(bytes) => {
+                            let _ = writer.input(&pane.sid, bytes).await;
                         }
+                        Keypress::Scroll(_) | Keypress::Ignore => {}
+                    },
+                    Some(Ok(Event::Paste(s))) => {
+                        let bytes = pane.paste_bytes(&s);
+                        let _ = writer.input(&pane.sid, bytes).await;
                     }
-                    Some(Ok(Event::Paste(s))) => pane.paste(&mut writer, &s).await,
                     Some(Ok(Event::Resize(cols, rows))) => {
                         if let Some(size) = pane.set_viewport(cols, rows) {
                             let _ = writer.resize(&pane.sid, size).await;
@@ -354,6 +365,8 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     use bao_core::{
         alert::AlertInput,
@@ -400,5 +413,50 @@ mod tests {
             meta: meta(Status::Running, 200),
         });
         assert_eq!(t.signal().glyph, '…');
+    }
+
+    #[test]
+    fn keypresses_decide_purely_without_a_connection() {
+        let sid = SessionId::from_str("abc12345").unwrap();
+        let mut t = Terminal::new(sid, Some(meta(Status::Running, 5)), 80, 24);
+        assert_eq!(
+            t.press(&KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty())),
+            Keypress::Send(b"a".to_vec())
+        );
+        // The keymap's reserved key, decided by the same pure path.
+        assert_eq!(
+            t.press(&KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL)),
+            Keypress::StepOut
+        );
+        // Scroll applies to local state; the caller does nothing.
+        assert_eq!(
+            t.press(&KeyEvent::new(KeyCode::PageUp, KeyModifiers::empty())),
+            Keypress::Scroll(12)
+        );
+        assert_eq!(t.scroll, 12);
+    }
+
+    #[test]
+    fn once_ended_any_key_steps_out() {
+        let sid = SessionId::from_str("abc12345").unwrap();
+        let mut t = Terminal::new(sid, Some(meta(Status::Exited(Some(0)), 0)), 80, 24);
+        t.handle_event(HostEvent::State {
+            ts: 0,
+            meta: meta(Status::Exited(Some(0)), 0),
+        });
+        assert_eq!(
+            t.press(&KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty())),
+            Keypress::StepOut
+        );
+    }
+
+    #[test]
+    fn paste_encoding_follows_modes_the_harness_set() {
+        let sid = SessionId::from_str("abc12345").unwrap();
+        let mut t = Terminal::new(sid, Some(meta(Status::Running, 5)), 80, 24);
+        assert_eq!(t.paste_bytes("hi"), b"hi".to_vec());
+        // The harness enabled bracketed paste on its output; input honors it.
+        t.emu.feed(b"\x1b[?2004h");
+        assert!(t.paste_bytes("hi").starts_with(b"\x1b[200~"));
     }
 }

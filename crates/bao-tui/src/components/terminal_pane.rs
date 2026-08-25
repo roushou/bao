@@ -3,17 +3,15 @@
 
 use std::collections::HashMap;
 
-use bao_client::{ConnWriter, HostEvent};
+use bao_client::HostEvent;
 use bao_core::types::{SessionId, TerminalSize};
 use crossterm::event::KeyEvent;
 use ratatui::{Frame, layout::Rect};
 
 use crate::{
-    action::Action,
     components::Component,
-    event::Event,
     state::{Ctx, Focus},
-    terminal::{Outcome, Terminal},
+    terminal::{Keypress, Terminal},
 };
 
 pub struct TerminalPane {
@@ -90,24 +88,19 @@ impl TerminalPane {
             .and_then(|t| t.set_viewport(cols, rows))
     }
 
-    pub async fn handle_key(&mut self, key: &KeyEvent, writer: &mut ConnWriter) -> Outcome {
-        let Some(sid) = self.active.clone() else {
-            return Outcome::None;
-        };
-        match self.terminals.get_mut(&sid) {
-            Some(t) => t.handle_key(key, writer).await,
-            None => Outcome::None,
-        }
+    /// Decide what a keystroke means for the active terminal — purely.
+    /// The caller applies effects (send bytes / step out) at the shell.
+    pub fn press(&mut self, key: &KeyEvent) -> Option<(SessionId, Keypress)> {
+        let sid = self.active.clone()?;
+        let kp = self.terminals.get_mut(&sid)?.press(key);
+        Some((sid, kp))
     }
 
-    /// Encode + forward a paste to the active terminal.
-    pub async fn paste(&mut self, text: &str, writer: &mut ConnWriter) {
-        let Some(sid) = self.active.clone() else {
-            return;
-        };
-        if let Some(t) = self.terminals.get_mut(&sid) {
-            t.paste(writer, text).await;
-        }
+    /// Encode a paste for the active terminal — purely.
+    pub fn paste_bytes(&self, text: &str) -> Option<(SessionId, Vec<u8>)> {
+        let sid = self.active.clone()?;
+        let bytes = self.terminals.get(&sid)?.paste_bytes(text);
+        Some((sid, bytes))
     }
 
     pub fn handle_event(&mut self, sid: &SessionId, msg: HostEvent) {
@@ -118,12 +111,9 @@ impl TerminalPane {
 }
 
 impl Component for TerminalPane {
-    fn handle_events(&mut self, event: Option<&Event>, _ctx: &Ctx) -> Action {
-        match event {
-            Some(Event::Key(key)) => Action::TerminalKey(*key),
-            _ => Action::Noop,
-        }
-    }
+    // No handle_events: terminal keys are decided by `press` at the dispatch
+    // shell (raw passthrough is not a cross-component intent). Only step-out
+    // crosses a boundary, and it does so as `Action::StepOut`.
 
     fn render(&mut self, f: &mut Frame, ctx: &Ctx, rect: Rect) {
         if let Some(sid) = self.active.clone() {
