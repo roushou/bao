@@ -45,4 +45,9 @@ impl Home {
     pub fn working_copies_dir(&self) -> PathBuf {
         self.root.join("working-copies")
     }
+
+    /// `<home>/daemon.pid` — where the running daemon records its PID.
+    pub fn daemon_pid_file(&self) -> PathBuf {
+        self.root.join("daemon.pid")
+    }
 }

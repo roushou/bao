@@ -8,6 +8,7 @@ pub mod error;
 pub mod harness;
 pub mod home;
 pub mod hostname;
+pub mod pid;
 pub mod registry;
 pub mod sandbox;
 pub mod screen;
