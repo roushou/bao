@@ -42,7 +42,7 @@ pub(crate) struct LoadedLog {
 pub(crate) struct RestoredIdentity {
     pub(crate) name: Option<String>,
     pub(crate) command: Command,
-    pub(crate) workspace: Workspace,
+    pub(crate) working_copy: WorkingCopy,
     pub(crate) created: u64,
     pub(crate) status: Status,
 }
@@ -181,7 +181,7 @@ pub(crate) struct StoredMeta {
     pub(crate) cwd: Option<PathBuf>,
     pub(crate) created: u64,
     pub(crate) name: Option<String>,
-    pub(crate) workspace: Option<Workspace>,
+    pub(crate) working_copy: Option<WorkingCopy>,
 }
 
 impl StoredMeta {
@@ -189,15 +189,15 @@ impl StoredMeta {
     /// Derived state (alert, snippets) is deliberately not persisted —
     /// it is re-derived from the log on restore.
     pub(crate) fn from_session(s: &Session) -> Self {
-        let workspace = s.workspace();
+        let working_copy = s.working_copy();
         StoredMeta {
             format: Some(META_FORMAT),
             command: s.command.display(),
             args: s.command.as_args().to_vec(),
-            cwd: Some(workspace.path.clone()),
+            cwd: Some(working_copy.path.clone()),
             created: s.created,
             name: s.name.lock().unwrap().clone(),
-            workspace: Some(workspace),
+            working_copy: Some(working_copy),
         }
     }
 }

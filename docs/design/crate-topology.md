@@ -24,7 +24,7 @@ bao          entrypoint — the binary (composition root)
 
 ```
 bao-core     pure model: Status, Alert, LifecycleEvent + FSM, SessionMeta,
-             EventKind/SessionEvent, Workspace/SandboxKind/SandboxSpec,
+             EventKind/SessionEvent, WorkingCopy/SandboxKind/SandboxSpec,
              value types, error (domain rules only)
 bao-protocol Rpc/Reply/FromHost/WireError/ChannelKind/PROTOCOL_VERSION,
              LaunchRequest/DaemonInfo/WireBytes (depends on core only)
@@ -32,7 +32,7 @@ bao-transport framing (FrameReader/FrameWriter) + Addr/DEFAULT_PORT (tokio)
 bao-client   the client (Conn/ConnWriter + HostEvent); wire envelopes stay private
 bao-daemon   session (live PTY/process/log/screen), manager (registry + saga),
              store (meta.json/events.log), sandbox (SandboxFactory seam +
-             Sandbox + SandboxBackend + WorkspaceStore; one file per backend:
+             Sandbox + SandboxBackend + WorkingCopyStore; one file per backend:
              InPlace/Worktree/Bubblewrap/Seatbelt), harness (Harness trait +
              Pi/Fallback), server
 bao-tui      the overview renderer
@@ -63,26 +63,26 @@ owned by neither; the daemon depends on the transport, never on the client.
 
 ## 3. The move map
 
-| From                                                        | To                                                                                                                                                                    |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bao-host`                                                  | `bao-daemon`                                                                                                                                                          |
-| `bao-agent` (Harness trait + Pi/Fallback)                   | `bao-daemon::harness`                                                                                                                                                 |
-| `bao-client` (framing + Conn)                               | `bao-transport` (framing) + `bao-client` (Conn)                                                                                                                       |
-| `bao-cli`                                                   | `bao`                                                                                                                                                                 |
-| `bao-core::session::Session` (live: PTY/process/log/screen) | `bao-daemon::session`                                                                                                                                                 |
-| `bao-core::session::Manager` (registry + saga)              | `bao-daemon::manager`                                                                                                                                                 |
-| `bao-core::session::SessionStore`/`StoredMeta`              | `bao-daemon::store`                                                                                                                                                   |
-| `bao-core::screen` (vt100)                                  | `bao-daemon`                                                                                                                                                          |
-| `bao-core::sandbox` impls + `IsolationBackend`              | `bao-daemon::sandbox` (`SandboxBackend` trait + `InPlace`/`Worktree`/`Bubblewrap`)                                                                                    |
-| `bao-core::protocol` (types)                                | `bao-protocol` (own crate — the wire contract)                                                                                                                        |
-| `bao-core::types::{LaunchRequest, DaemonInfo, WireBytes}`   | `bao-protocol`                                                                                                                                                        |
-| `bao-core::types::{Addr, DEFAULT_PORT}`                     | `bao-transport`                                                                                                                                                       |
-| `bao-wire::frame`                                           | `bao-transport`                                                                                                                                                       |
-| `bao-wire::client`                                          | `bao-client` (wire envelopes made private; typed `HostEvent` stream)                                                                                                  |
-| `bao-core::types::Hostname::local()` (I/O)                  | `bao-daemon::hostname`                                                                                                                                                |
-| `bao-core::types::SessionSpec`                              | `bao-daemon::session`                                                                                                                                                 |
-| `bao-core::error` (Pty/Spawn/Worktree/…)                    | split → `bao-core::error` (domain rules), `bao-daemon::error`, `bao-transport::error`, `bao-client::error`                                                            |
-| `bao-core` keeps                                            | `Status`, `Alert`, `LifecycleEvent`+FSM, `SessionMeta`, `EventKind`/`SessionEvent`, `Workspace`/`SandboxKind`/`SandboxSpec`, value types, `error` (domain rules only) |
+| From                                                        | To                                                                                                                                                                      |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bao-host`                                                  | `bao-daemon`                                                                                                                                                            |
+| `bao-agent` (Harness trait + Pi/Fallback)                   | `bao-daemon::harness`                                                                                                                                                   |
+| `bao-client` (framing + Conn)                               | `bao-transport` (framing) + `bao-client` (Conn)                                                                                                                         |
+| `bao-cli`                                                   | `bao`                                                                                                                                                                   |
+| `bao-core::session::Session` (live: PTY/process/log/screen) | `bao-daemon::session`                                                                                                                                                   |
+| `bao-core::session::Manager` (registry + saga)              | `bao-daemon::manager`                                                                                                                                                   |
+| `bao-core::session::SessionStore`/`StoredMeta`              | `bao-daemon::store`                                                                                                                                                     |
+| `bao-core::screen` (vt100)                                  | `bao-daemon`                                                                                                                                                            |
+| `bao-core::sandbox` impls + `IsolationBackend`              | `bao-daemon::sandbox` (`SandboxBackend` trait + `InPlace`/`Worktree`/`Bubblewrap`)                                                                                      |
+| `bao-core::protocol` (types)                                | `bao-protocol` (own crate — the wire contract)                                                                                                                          |
+| `bao-core::types::{LaunchRequest, DaemonInfo, WireBytes}`   | `bao-protocol`                                                                                                                                                          |
+| `bao-core::types::{Addr, DEFAULT_PORT}`                     | `bao-transport`                                                                                                                                                         |
+| `bao-wire::frame`                                           | `bao-transport`                                                                                                                                                         |
+| `bao-wire::client`                                          | `bao-client` (wire envelopes made private; typed `HostEvent` stream)                                                                                                    |
+| `bao-core::types::Hostname::local()` (I/O)                  | `bao-daemon::hostname`                                                                                                                                                  |
+| `bao-core::types::SessionSpec`                              | `bao-daemon::session`                                                                                                                                                   |
+| `bao-core::error` (Pty/Spawn/Worktree/…)                    | split → `bao-core::error` (domain rules), `bao-daemon::error`, `bao-transport::error`, `bao-client::error`                                                              |
+| `bao-core` keeps                                            | `Status`, `Alert`, `LifecycleEvent`+FSM, `SessionMeta`, `EventKind`/`SessionEvent`, `WorkingCopy`/`SandboxKind`/`SandboxSpec`, value types, `error` (domain rules only) |
 
 The key split the rest of the table serves: **the live `Session` is not a
 domain object; `SessionMeta` is.** Everything that produces `SessionMeta`
@@ -100,9 +100,11 @@ plus the state machine that decides its `Status` — is the domain's.
   is shared by both ends, the transport is shared plumbing, and the client is
   the only surface frontends see.
 - `IsolationBackend → SandboxBackend` (trait); the data struct `Sandbox →
-  Workspace`
-  (the isolated working copy). Impls: `InPlace`, `GitWorktree`. `SandboxKind`
-  and `SandboxSpec` keep their names.
+  WorkingCopy`
+  (the isolated working copy; later renamed again from `Workspace` when
+  _workspace_ became the user-declared grouping — see
+  [`workspaces.md`](workspaces.md)). Impls: `InPlace`, `GitWorktree`.
+  `SandboxKind` and `SandboxSpec` keep their names.
 - `bao-cli → bao` — the binary is `bao`, so the crate that produces it is `bao`.
 
 ## 5. The entrypoint (`bao`)
@@ -159,7 +161,7 @@ Each step ends with `cargo test --workspace` + clippy green.
 4. Fold harness + sandbox into `bao-daemon`: `bao-agent`'s `Harness` trait +
    impls into `bao-daemon::harness`; rename `IsolationBackend →
    SandboxBackend`,
-   `Sandbox` (data) → `Workspace`; impls into `bao-daemon::sandbox`.
+   `Sandbox` (data) → `WorkingCopy`; impls into `bao-daemon::sandbox`.
 5. Re-point frontends: `bao-tui` and `bao` depend only on `bao-core` +
    `bao-wire` (never `bao-daemon`).
 6. Update docs: `architecture.md`, the crate map, and `terminology.md` where the

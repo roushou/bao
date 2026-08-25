@@ -5,13 +5,13 @@
 use std::path::Path;
 
 use bao_core::{
-    sandbox::{SandboxKind, Workspace},
+    sandbox::{SandboxKind, WorkingCopy},
     types::SessionId,
 };
 
 use crate::error::Error;
 
-use super::{SandboxBackend, WorkspaceStore};
+use super::{SandboxBackend, WorkingCopyStore};
 
 #[cfg(target_os = "macos")]
 use super::worktree::{GitWorktree, teardown_worktree};
@@ -28,12 +28,12 @@ use std::{ffi::OsString, path::PathBuf, process::Command, sync::OnceLock};
 #[cfg(target_os = "macos")]
 #[derive(Debug)]
 pub struct Seatbelt {
-    store: WorkspaceStore,
+    store: WorkingCopyStore,
 }
 
 #[cfg(target_os = "macos")]
 impl Seatbelt {
-    pub(super) fn new(store: WorkspaceStore) -> Self {
+    pub(super) fn new(store: WorkingCopyStore) -> Self {
         Self { store }
     }
 }
@@ -44,7 +44,7 @@ impl SandboxBackend for Seatbelt {
         SandboxKind::Seatbelt
     }
 
-    fn prepare(&self, id: &SessionId, cwd: &Path) -> Result<Workspace, Error> {
+    fn prepare(&self, id: &SessionId, cwd: &Path) -> Result<WorkingCopy, Error> {
         if !seatbelt_available() {
             return Err(Error::SandboxUnavailable(SandboxKind::Seatbelt));
         }
@@ -52,7 +52,7 @@ impl SandboxBackend for Seatbelt {
         // the write confinement applies either way.
         let mut ws = GitWorktree::new(self.store.clone())
             .prepare(id, cwd)
-            .unwrap_or(Workspace {
+            .unwrap_or(WorkingCopy {
                 kind: SandboxKind::Seatbelt,
                 repo: None,
                 branch: None,
@@ -62,15 +62,19 @@ impl SandboxBackend for Seatbelt {
         Ok(ws)
     }
 
-    fn wrap_command(&self, workspace: &Workspace, cmd: &mut CommandBuilder) -> Result<(), Error> {
-        *cmd.get_argv_mut() = wrap_argv(&workspace.path, cmd.get_argv());
+    fn wrap_command(
+        &self,
+        working_copy: &WorkingCopy,
+        cmd: &mut CommandBuilder,
+    ) -> Result<(), Error> {
+        *cmd.get_argv_mut() = wrap_argv(&working_copy.path, cmd.get_argv());
         Ok(())
     }
 
-    fn teardown(&self, workspace: &Workspace) -> Result<(), Error> {
+    fn teardown(&self, working_copy: &WorkingCopy) -> Result<(), Error> {
         // The sandbox is per-process, so there is nothing to tear down beyond
         // the working copy.
-        teardown_worktree(workspace);
+        teardown_worktree(working_copy);
         Ok(())
     }
 }
@@ -83,7 +87,7 @@ pub struct Seatbelt;
 
 #[cfg(not(target_os = "macos"))]
 impl Seatbelt {
-    pub(super) fn new(_store: WorkspaceStore) -> Self {
+    pub(super) fn new(_store: WorkingCopyStore) -> Self {
         Self
     }
 }
@@ -94,11 +98,11 @@ impl SandboxBackend for Seatbelt {
         SandboxKind::Seatbelt
     }
 
-    fn prepare(&self, _id: &SessionId, _cwd: &Path) -> Result<Workspace, Error> {
+    fn prepare(&self, _id: &SessionId, _cwd: &Path) -> Result<WorkingCopy, Error> {
         Err(Error::SandboxUnavailable(SandboxKind::Seatbelt))
     }
 
-    fn teardown(&self, _workspace: &Workspace) -> Result<(), Error> {
+    fn teardown(&self, _workspace: &WorkingCopy) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -118,20 +122,20 @@ pub(super) fn seatbelt_available() -> bool {
 }
 
 /// The profile: allow everything, deny file writes, then re-allow writes to
-/// the workspace, `$HOME`, `$TMPDIR`, and `/dev`. Reads, network, and
+/// the working copy, `$HOME`, `$TMPDIR`, and `/dev`. Reads, network, and
 /// subprocess spawning stay allowed — the harness is a cloud-LLM client and
 /// needs them.
 ///
 /// Known first-cut limitations (shared with bubblewrap): `$HOME` is writable
 /// in full, so secrets under `$HOME` (`.ssh`, `.aws`, …) are not hidden; and
 /// a worktree's `git commit` writes to the *main* repo's `.git` (outside the
-/// workspace), so it is denied. Tightening both is future work.
+/// working copy), so it is denied. Tightening both is future work.
 #[cfg(target_os = "macos")]
 const PROFILE: &str = "\
 (version 1)\n\
 (allow default)\n\
 (deny file-write*)\n\
-(allow file-write* (subpath (param \"WORKSPACE\")))\n\
+(allow file-write* (subpath (param \"WORKING_COPY\")))\n\
 (allow file-write* (subpath (param \"HOME\")))\n\
 (allow file-write* (subpath (param \"TMPDIR\")))\n\
 (allow file-write* (subpath \"/dev\"))\n";
@@ -161,11 +165,11 @@ fn tmpdir() -> PathBuf {
 /// The `sandbox-exec` argv: `-D` params for the writable paths, `-p` with the
 /// profile, then the harness command verbatim.
 #[cfg(target_os = "macos")]
-fn wrap_argv(workspace: &Path, argv: &[OsString]) -> Vec<OsString> {
+fn wrap_argv(working_copy: &Path, argv: &[OsString]) -> Vec<OsString> {
     let mut out: Vec<OsString> = Vec::with_capacity(argv.len() + 8);
     out.push("sandbox-exec".into());
     for (key, val) in [
-        ("WORKSPACE", real(workspace)),
+        ("WORKING_COPY", real(working_copy)),
         ("HOME", real(&home_dir())),
         ("TMPDIR", real(&tmpdir())),
     ] {
@@ -215,7 +219,7 @@ mod tests {
         let ws = root.join("ws");
         std::fs::create_dir_all(&ws).unwrap();
 
-        // A write inside the workspace is allowed.
+        // A write inside the working copy is allowed.
         let ok = ws.join("ok.txt");
         let script = format!("echo hi > '{}'", ok.display());
         let argv = ["sh", "-c", script.as_str()]
@@ -227,10 +231,10 @@ mod tests {
             .args(&wrapped[1..])
             .status()
             .unwrap();
-        assert!(st.success(), "workspace write must succeed");
+        assert!(st.success(), "working_copy write must succeed");
         assert!(ok.exists());
 
-        // A write outside the workspace is denied.
+        // A write outside the working copy is denied.
         let deny = root.join("deny.txt");
         let script = format!("echo hi > '{}'", deny.display());
         let argv = ["sh", "-c", script.as_str()]
@@ -242,7 +246,7 @@ mod tests {
             .args(&wrapped[1..])
             .status()
             .unwrap();
-        assert!(!st.success(), "out-of-workspace write must be denied");
+        assert!(!st.success(), "out-of-working_copy write must be denied");
         assert!(!deny.exists());
 
         std::fs::remove_dir_all(&root).unwrap();

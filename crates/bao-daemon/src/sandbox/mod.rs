@@ -1,11 +1,11 @@
 //! Sandbox strategies: the [`SandboxBackend`] port, the [`Sandbox`] handle,
-//! the [`SandboxFactory`] seam, and the [`WorkspaceStore`]. Each adapter
+//! the [`SandboxFactory`] seam, and the [`WorkingCopyStore`]. Each adapter
 //! (`InPlace`, `GitWorktree`, `Bubblewrap`, `Seatbelt`) lives in its own file.
 
 use std::path::Path;
 
 use bao_core::{
-    sandbox::{SandboxKind, SandboxSpec, Workspace},
+    sandbox::{SandboxKind, SandboxSpec, WorkingCopy},
     types::SessionId,
 };
 use portable_pty::CommandBuilder;
@@ -24,27 +24,30 @@ pub(crate) mod fake;
 pub use bubblewrap::Bubblewrap;
 pub use inplace::InPlace;
 pub use seatbelt::Seatbelt;
-pub use store::WorkspaceStore;
+pub use store::WorkingCopyStore;
 pub use worktree::GitWorktree;
 
-/// A materialized sandbox: the serializable [`Workspace`] plus the backend
+/// A materialized sandbox: the serializable [`WorkingCopy`] plus the backend
 /// that created it (which may hold runtime state — a container id, a VM
 /// socket — invisible to the domain).
 #[derive(Debug)]
 pub struct Sandbox {
-    pub workspace: Workspace,
+    pub working_copy: WorkingCopy,
     backend: Box<dyn SandboxBackend>,
 }
 
 impl Sandbox {
-    pub(crate) fn new(workspace: Workspace, backend: Box<dyn SandboxBackend>) -> Self {
-        Sandbox { workspace, backend }
+    pub(crate) fn new(working_copy: WorkingCopy, backend: Box<dyn SandboxBackend>) -> Self {
+        Sandbox {
+            working_copy,
+            backend,
+        }
     }
 
     /// Materialize the requested sandbox kind into `store`. A kind that
     /// cannot be provided is an error — never a silent downgrade.
     pub fn create(
-        store: &WorkspaceStore,
+        store: &WorkingCopyStore,
         id: &SessionId,
         cwd: &Path,
         spec: &SandboxSpec,
@@ -52,20 +55,20 @@ impl Sandbox {
         prepare_with(store, spec.isolation, id, cwd)
     }
 
-    /// Re-create a backend from a persisted workspace (restore/resume).
-    pub(crate) fn from_workspace(store: &WorkspaceStore, workspace: Workspace) -> Sandbox {
-        let kind = workspace.kind;
-        Sandbox::new(workspace, backend(store, kind))
+    /// Re-create a backend from a persisted working copy (restore/resume).
+    pub(crate) fn from_workspace(store: &WorkingCopyStore, working_copy: WorkingCopy) -> Sandbox {
+        let kind = working_copy.kind;
+        Sandbox::new(working_copy, backend(store, kind))
     }
 
     /// Rewrite the harness command to launch inside this sandbox.
     pub fn wrap_command(&self, cmd: &mut CommandBuilder) -> Result<(), Error> {
-        self.backend.wrap_command(&self.workspace, cmd)
+        self.backend.wrap_command(&self.working_copy, cmd)
     }
 
     /// Tear the sandbox down (the launch saga's compensating step).
     pub fn teardown(&self) -> Result<(), Error> {
-        self.backend.teardown(&self.workspace)
+        self.backend.teardown(&self.working_copy)
     }
 }
 
@@ -75,7 +78,7 @@ impl Sandbox {
 pub trait SandboxFactory: Send + Sync {
     fn materialize(
         &self,
-        store: &WorkspaceStore,
+        store: &WorkingCopyStore,
         id: &SessionId,
         cwd: &Path,
         spec: &SandboxSpec,
@@ -90,7 +93,7 @@ pub struct RealSandboxFactory;
 impl SandboxFactory for RealSandboxFactory {
     fn materialize(
         &self,
-        store: &WorkspaceStore,
+        store: &WorkingCopyStore,
         id: &SessionId,
         cwd: &Path,
         spec: &SandboxSpec,
@@ -99,38 +102,42 @@ impl SandboxFactory for RealSandboxFactory {
     }
 }
 
-/// The capability to materialize, launch-in, and tear down a [`Workspace`].
+/// The capability to materialize, launch-in, and tear down a [`WorkingCopy`].
 /// One adapter per isolation mechanism; a new one (Landlock, Seatbelt, a
 /// container) is a new impl — the saga and the FSM don't change.
 pub trait SandboxBackend: Send + Sync + std::fmt::Debug {
     /// The isolation level this strategy provides.
     fn kind(&self) -> SandboxKind;
     /// Materialize the working copy.
-    fn prepare(&self, id: &SessionId, cwd: &Path) -> Result<Workspace, Error>;
+    fn prepare(&self, id: &SessionId, cwd: &Path) -> Result<WorkingCopy, Error>;
     /// Rewrite the harness command for launch inside this sandbox.
     /// Default: launch unchanged.
-    fn wrap_command(&self, workspace: &Workspace, cmd: &mut CommandBuilder) -> Result<(), Error> {
-        let _ = (workspace, cmd);
+    fn wrap_command(
+        &self,
+        working_copy: &WorkingCopy,
+        cmd: &mut CommandBuilder,
+    ) -> Result<(), Error> {
+        let _ = (working_copy, cmd);
         Ok(())
     }
     /// Undo [`Self::prepare`].
-    fn teardown(&self, workspace: &Workspace) -> Result<(), Error>;
+    fn teardown(&self, working_copy: &WorkingCopy) -> Result<(), Error>;
 }
 
 /// Materialize a sandbox of a specific kind.
 fn prepare_with(
-    store: &WorkspaceStore,
+    store: &WorkingCopyStore,
     kind: SandboxKind,
     id: &SessionId,
     cwd: &Path,
 ) -> Result<Sandbox, Error> {
     let backend = backend(store, kind);
-    let workspace = backend.prepare(id, cwd)?;
-    Ok(Sandbox::new(workspace, backend))
+    let working_copy = backend.prepare(id, cwd)?;
+    Ok(Sandbox::new(working_copy, backend))
 }
 
 /// Construct the backend for a kind.
-fn backend(store: &WorkspaceStore, kind: SandboxKind) -> Box<dyn SandboxBackend> {
+fn backend(store: &WorkingCopyStore, kind: SandboxKind) -> Box<dyn SandboxBackend> {
     match kind {
         SandboxKind::InPlace => Box::new(InPlace),
         SandboxKind::Worktree => Box::new(GitWorktree::new(store.clone())),
@@ -194,7 +201,7 @@ mod tests {
     fn worktree_is_isolated_and_removable() {
         let root = temp("worktree");
         let repo = make_repo(&root);
-        let store = WorkspaceStore::new(root.join("workspaces"));
+        let store = WorkingCopyStore::new(root.join("working-copies"));
         let sandbox = Sandbox::create(
             &store,
             &SessionId::from_str("abc12345").unwrap(),
@@ -202,7 +209,7 @@ mod tests {
             &SandboxSpec::default(),
         )
         .unwrap();
-        let ws = &sandbox.workspace;
+        let ws = &sandbox.working_copy;
         assert!(ws.isolated());
         assert_ne!(ws.path, repo);
         assert_eq!(ws.branch.as_deref(), Some("bao-abc12345"));
@@ -236,7 +243,7 @@ mod tests {
         let cwd = root.join("scratch");
         std::fs::create_dir_all(&cwd).unwrap();
         std::fs::write(cwd.join("notes.txt"), "mine").unwrap();
-        let store = WorkspaceStore::new(root.join("workspaces"));
+        let store = WorkingCopyStore::new(root.join("working-copies"));
         let sandbox = Sandbox::create(
             &store,
             &SessionId::from_str("deadbeef").unwrap(),
@@ -246,8 +253,8 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(!sandbox.workspace.isolated());
-        assert_eq!(sandbox.workspace.path, cwd);
+        assert!(!sandbox.working_copy.isolated());
+        assert_eq!(sandbox.working_copy.path, cwd);
         sandbox.teardown().unwrap();
         assert!(cwd.join("notes.txt").exists(), "in-place dir untouched");
         std::fs::remove_dir_all(&root).unwrap();
@@ -258,7 +265,7 @@ mod tests {
         let root = temp("requested");
         let cwd = root.join("scratch");
         std::fs::create_dir_all(&cwd).unwrap();
-        let store = WorkspaceStore::new(root.join("workspaces"));
+        let store = WorkingCopyStore::new(root.join("working-copies"));
         let spec = SandboxSpec {
             isolation: SandboxKind::Worktree,
         };

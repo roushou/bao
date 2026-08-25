@@ -29,13 +29,13 @@ use bao_core::{
     alert::{Alert, AlertInput, idle_secs},
     event::{EventKind, SessionEvent, fold_status},
     lifecycle::{LifecycleEvent, Transition},
-    sandbox::{SandboxKind, SandboxSpec, Workspace},
+    sandbox::{SandboxKind, SandboxSpec, WorkingCopy},
     types::{Clock, Command, SessionId, SessionMeta, Status, TerminalSize, now_ms},
 };
 
 use crate::{
     error::Error,
-    sandbox::{Sandbox, WorkspaceStore},
+    sandbox::{Sandbox, WorkingCopyStore},
     screen as vt_screen,
 };
 
@@ -46,7 +46,7 @@ pub struct SessionSpec {
     pub id: SessionId,
     pub name: Option<String>,
     pub command: Command,
-    pub workspace: Workspace,
+    pub working_copy: WorkingCopy,
     pub size: TerminalSize,
     /// Time source — system in production; tests inject a fake clock to
     /// drive idle-alert derivation.
@@ -294,7 +294,7 @@ mod tests {
 
         let dir = temp_root("meta-live");
         let m = Manager::open(&Home::new(&dir)).unwrap();
-        let store = WorkspaceStore::new(dir.join("workspaces"));
+        let store = WorkingCopyStore::new(dir.join("working-copies"));
         let sandbox = Sandbox::create(
             &store,
             &SessionId::from_str("live0001").unwrap(),
@@ -308,7 +308,7 @@ mod tests {
         let sess = m
             .create(
                 &command,
-                &sandbox.workspace.path,
+                &sandbox.working_copy.path,
                 TerminalSize { cols: 80, rows: 24 },
                 None,
                 &SandboxSpec {
@@ -349,7 +349,7 @@ mod tests {
             id: SessionId::from_str("clock0001").unwrap(),
             name: None,
             command: Command::parse("bash -c 'echo CLOCK_UP; sleep 30'").unwrap(),
-            workspace: Workspace {
+            working_copy: WorkingCopy {
                 kind: SandboxKind::InPlace,
                 repo: None,
                 branch: None,
@@ -487,7 +487,7 @@ mod tests {
             id: SessionId::from_str("resize0001").unwrap(),
             name: None,
             command: Command::parse("bash -c 'sleep 30'").unwrap(),
-            workspace: Workspace {
+            working_copy: WorkingCopy {
                 kind: SandboxKind::InPlace,
                 repo: None,
                 branch: None,
@@ -570,7 +570,7 @@ mod tests {
     async fn set_waiting_flows_into_meta_and_state_bus() {
         let dir = temp_root("waiting");
         let m = Manager::open(&Home::new(&dir)).unwrap();
-        let store = WorkspaceStore::new(dir.join("workspaces"));
+        let store = WorkingCopyStore::new(dir.join("working-copies"));
         let sandbox = Sandbox::create(
             &store,
             &SessionId::from_str("wait0001").unwrap(),
@@ -584,7 +584,7 @@ mod tests {
         let sess = m
             .create(
                 &command,
-                &sandbox.workspace.path,
+                &sandbox.working_copy.path,
                 TerminalSize { cols: 80, rows: 24 },
                 None,
                 &SandboxSpec {

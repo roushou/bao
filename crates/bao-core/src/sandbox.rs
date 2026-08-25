@@ -19,12 +19,12 @@ pub enum SandboxKind {
     Worktree,
     /// A `bubblewrap` namespace sandbox: the harness runs in its own
     /// user/pid/ipc/uts namespaces with a read-only system, a private
-    /// `/tmp`, and only its workspace writable. Stronger than a worktree;
+    /// `/tmp`, and only its working copy writable. Stronger than a worktree;
     /// the working copy underneath is still a git worktree when the launch
     /// directory is inside a repo.
     Bubblewrap,
     /// A macOS Seatbelt sandbox (`sandbox-exec`): the harness runs under a
-    /// profile that denies file writes except to the workspace, `$HOME`,
+    /// profile that denies file writes except to the working copy, `$HOME`,
     /// `$TMPDIR`, and `/dev`. Reads, network, and subprocess spawning stay
     /// allowed. The working copy underneath is a git worktree when the
     /// launch directory is inside a repo.
@@ -79,7 +79,7 @@ impl Default for SandboxSpec {
 /// any), and the isolation claim. Serialized into `meta.json` and shipped on
 /// the wire; this is the object the move slice will pack.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Workspace {
+pub struct WorkingCopy {
     pub kind: SandboxKind,
     /// Repo root (worktree-backed sandboxes only).
     pub repo: Option<PathBuf>,
@@ -89,7 +89,7 @@ pub struct Workspace {
     pub path: PathBuf,
 }
 
-impl Workspace {
+impl WorkingCopy {
     pub fn isolated(&self) -> bool {
         matches!(
             self.kind,
@@ -98,9 +98,9 @@ impl Workspace {
     }
 }
 
-impl Default for Workspace {
+impl Default for WorkingCopy {
     fn default() -> Self {
-        Workspace {
+        WorkingCopy {
             kind: SandboxKind::InPlace,
             repo: None,
             branch: None,

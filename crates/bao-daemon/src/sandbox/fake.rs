@@ -4,13 +4,13 @@
 use std::path::Path;
 
 use bao_core::{
-    sandbox::{SandboxKind, Workspace},
+    sandbox::{SandboxKind, WorkingCopy},
     types::SessionId,
 };
 
 use crate::error::Error;
 
-use super::{Sandbox, SandboxBackend, SandboxFactory, SandboxSpec, WorkspaceStore};
+use super::{Sandbox, SandboxBackend, SandboxFactory, SandboxSpec, WorkingCopyStore};
 
 /// A backend that materializes no working copy: `prepare` points at the cwd,
 /// and `teardown` is a no-op. `wrap_command` stays the trait default (launch
@@ -25,8 +25,8 @@ impl SandboxBackend for FakeBackend {
         self.kind
     }
 
-    fn prepare(&self, _id: &SessionId, cwd: &Path) -> Result<Workspace, Error> {
-        Ok(Workspace {
+    fn prepare(&self, _id: &SessionId, cwd: &Path) -> Result<WorkingCopy, Error> {
+        Ok(WorkingCopy {
             kind: self.kind,
             repo: None,
             branch: None,
@@ -34,7 +34,7 @@ impl SandboxBackend for FakeBackend {
         })
     }
 
-    fn teardown(&self, _workspace: &Workspace) -> Result<(), Error> {
+    fn teardown(&self, _workspace: &WorkingCopy) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -50,7 +50,7 @@ pub(crate) struct FakeSandboxFactory {
 impl SandboxFactory for FakeSandboxFactory {
     fn materialize(
         &self,
-        _store: &WorkspaceStore,
+        _store: &WorkingCopyStore,
         id: &SessionId,
         cwd: &Path,
         _spec: &SandboxSpec,
@@ -59,7 +59,7 @@ impl SandboxFactory for FakeSandboxFactory {
             return Err(Error::SandboxUnavailable(self.kind));
         }
         let backend = FakeBackend { kind: self.kind };
-        let workspace = backend.prepare(id, cwd)?;
-        Ok(Sandbox::new(workspace, Box::new(backend)))
+        let working_copy = backend.prepare(id, cwd)?;
+        Ok(Sandbox::new(working_copy, Box::new(backend)))
     }
 }

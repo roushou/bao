@@ -31,8 +31,8 @@ impl ListCmd {
                 s.id,
                 s.command.as_str().truncate(23),
                 s.status,
-                s.workspace.kind,
-                s.workspace.branch.as_deref().unwrap_or("").truncate(15),
+                s.working_copy.kind,
+                s.working_copy.branch.as_deref().unwrap_or("").truncate(15),
                 age,
                 s.cwd.display(),
             );

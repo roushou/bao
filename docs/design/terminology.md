@@ -1,4 +1,4 @@
-# Terminology: model, harness, session
+# Terminology: model, harness, session, workspace
 
 Pins the vocabulary so the
 wire, the invariants, and future views speak the same language.
@@ -46,6 +46,20 @@ A different axis, pinned to stop the drift between the docs and the wire:
 The docs' "daemon" is the process; the crate and wire say "host" (the role).
 `bao daemon` is the command that runs the daemon — a VPS deploy is just `bao daemon` on
 that machine.
+
+## Workspace vs working copy
+
+Two different things; never interchangeable:
+
+- A **workspace** is a user-declared target for sessions — a named alias plus
+  a root path (`myapp` → `~/dev/myapp`), possibly containing several repos
+  (`backend/`, `frontend/`). Registered per host with `bao ws add`. Sessions
+  are _aimed_ at workspaces. See [`workspaces.md`](workspaces.md).
+- A **working copy** is the isolated checkout one session runs in (the
+  materialized sandbox: a git worktree, or the user's own directory when
+  in-place). Formerly — confusingly — named `Workspace` in code; renamed.
+
+Hierarchy to memorize: **host → workspace → session → terminal**.
 
 ## Discipline
 

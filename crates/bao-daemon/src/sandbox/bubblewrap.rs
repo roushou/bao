@@ -5,13 +5,13 @@
 use std::path::Path;
 
 use bao_core::{
-    sandbox::{SandboxKind, Workspace},
+    sandbox::{SandboxKind, WorkingCopy},
     types::SessionId,
 };
 
 use crate::error::Error;
 
-use super::{SandboxBackend, WorkspaceStore};
+use super::{SandboxBackend, WorkingCopyStore};
 
 #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
 use super::worktree::{GitWorktree, teardown_worktree};
@@ -27,12 +27,12 @@ use std::{ffi::OsString, path::PathBuf, process::Command, sync::OnceLock};
 #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
 #[derive(Debug)]
 pub struct Bubblewrap {
-    store: WorkspaceStore,
+    store: WorkingCopyStore,
 }
 
 #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
 impl Bubblewrap {
-    pub(super) fn new(store: WorkspaceStore) -> Self {
+    pub(super) fn new(store: WorkingCopyStore) -> Self {
         Self { store }
     }
 }
@@ -43,7 +43,7 @@ impl SandboxBackend for Bubblewrap {
         SandboxKind::Bubblewrap
     }
 
-    fn prepare(&self, id: &SessionId, cwd: &Path) -> Result<Workspace, Error> {
+    fn prepare(&self, id: &SessionId, cwd: &Path) -> Result<WorkingCopy, Error> {
         if !bwrap_available() {
             return Err(Error::SandboxUnavailable(SandboxKind::Bubblewrap));
         }
@@ -51,7 +51,7 @@ impl SandboxBackend for Bubblewrap {
         // the namespace confinement applies either way.
         let mut ws = GitWorktree::new(self.store.clone())
             .prepare(id, cwd)
-            .unwrap_or(Workspace {
+            .unwrap_or(WorkingCopy {
                 kind: SandboxKind::Bubblewrap,
                 repo: None,
                 branch: None,
@@ -61,8 +61,12 @@ impl SandboxBackend for Bubblewrap {
         Ok(ws)
     }
 
-    fn wrap_command(&self, workspace: &Workspace, cmd: &mut CommandBuilder) -> Result<(), Error> {
-        let wrapped = wrap_argv(&workspace.path, cmd.get_argv());
+    fn wrap_command(
+        &self,
+        working_copy: &WorkingCopy,
+        cmd: &mut CommandBuilder,
+    ) -> Result<(), Error> {
+        let wrapped = wrap_argv(&working_copy.path, cmd.get_argv());
         *cmd.get_argv_mut() = wrapped;
         // bwrap creates its own session inside the namespace; the outer spawn
         // must not try to assign the PTY as the controlling terminal.
@@ -70,10 +74,10 @@ impl SandboxBackend for Bubblewrap {
         Ok(())
     }
 
-    fn teardown(&self, workspace: &Workspace) -> Result<(), Error> {
+    fn teardown(&self, working_copy: &WorkingCopy) -> Result<(), Error> {
         // bwrap is per-process, so there is nothing to tear down beyond the
         // working copy.
-        teardown_worktree(workspace);
+        teardown_worktree(working_copy);
         Ok(())
     }
 }
@@ -87,7 +91,7 @@ pub struct Bubblewrap;
 
 #[cfg(not(all(feature = "bubblewrap", target_os = "linux")))]
 impl Bubblewrap {
-    pub(super) fn new(_store: WorkspaceStore) -> Self {
+    pub(super) fn new(_store: WorkingCopyStore) -> Self {
         Self
     }
 }
@@ -98,11 +102,11 @@ impl SandboxBackend for Bubblewrap {
         SandboxKind::Bubblewrap
     }
 
-    fn prepare(&self, _id: &SessionId, _cwd: &Path) -> Result<Workspace, Error> {
+    fn prepare(&self, _id: &SessionId, _cwd: &Path) -> Result<WorkingCopy, Error> {
         Err(Error::SandboxUnavailable(SandboxKind::Bubblewrap))
     }
 
-    fn teardown(&self, _workspace: &Workspace) -> Result<(), Error> {
+    fn teardown(&self, _workspace: &WorkingCopy) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -125,7 +129,7 @@ pub(super) fn bwrap_available() -> bool {
 /// command follows verbatim.
 ///
 /// Confinement provided: user/pid/ipc/uts namespaces, a read-only system,
-/// a private `/tmp`, and only the workspace (plus `$HOME`, for the harness's
+/// a private `/tmp`, and only the working copy (plus `$HOME`, for the harness's
 /// own config) writable. Network is deliberately left enabled — the harness
 /// is a cloud-LLM client and needs it.
 ///
@@ -134,7 +138,7 @@ pub(super) fn bwrap_available() -> bool {
 /// Tightening that is a harness-level concern — the harness must declare the
 /// few state dirs it needs, and the rest of home can then be hidden.
 #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
-fn bwrap_prefix(workspace: &Path) -> Vec<OsString> {
+fn bwrap_prefix(working_copy: &Path) -> Vec<OsString> {
     let mut args: Vec<OsString> = vec![
         "bwrap".into(),
         "--unshare-user-try".into(),
@@ -164,7 +168,7 @@ fn bwrap_prefix(workspace: &Path) -> Vec<OsString> {
         }
     }
 
-    let ws = workspace.to_string_lossy();
+    let ws = working_copy.to_string_lossy();
     args.push("--bind".into());
     args.push(ws.as_ref().into());
     args.push(ws.as_ref().into());
@@ -196,8 +200,8 @@ fn ro_bind(args: &mut Vec<OsString>, path: &str) {
 }
 
 #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
-fn wrap_argv(workspace: &Path, argv: &[OsString]) -> Vec<OsString> {
-    let mut out = bwrap_prefix(workspace);
+fn wrap_argv(working_copy: &Path, argv: &[OsString]) -> Vec<OsString> {
+    let mut out = bwrap_prefix(working_copy);
     out.extend_from_slice(argv);
     out
 }

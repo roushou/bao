@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
-use bao_core::{sandbox::Workspace, types::Command};
+use bao_core::{sandbox::WorkingCopy, types::Command};
 
 use super::Harness;
 
@@ -28,9 +28,9 @@ impl Harness for Pi {
     }
 
     /// Extra args to relaunch pi with so it continues its conversation in
-    /// `workspace`. `None` when no session file exists (fresh launch, honest).
-    fn resume_args(&self, workspace: &Workspace) -> Option<Vec<String>> {
-        let file = self.latest_session_file(&workspace.path)?;
+    /// `working_copy`. `None` when no session file exists (fresh launch, honest).
+    fn resume_args(&self, working_copy: &WorkingCopy) -> Option<Vec<String>> {
+        let file = self.latest_session_file(&working_copy.path)?;
         Some(vec![
             "--session".to_string(),
             file.to_string_lossy().into_owned(),
@@ -42,8 +42,8 @@ impl Harness for Pi {
     /// than a tool call, a tool result, or the user's message. Derived from
     /// pi's own persisted session file, never guessed. `None` when there is
     /// no file to read (fresh launch, or not a pi-managed dir).
-    fn waiting_for_input(&self, workspace: &Workspace) -> Option<bool> {
-        let file = self.latest_session_file(&workspace.path)?;
+    fn waiting_for_input(&self, working_copy: &WorkingCopy) -> Option<bool> {
+        let file = self.latest_session_file(&working_copy.path)?;
         let raw = std::fs::read_to_string(&file).ok()?;
         waiting_from_log(&raw)
     }
@@ -127,11 +127,11 @@ mod tests {
     fn resume_args_is_none_without_session_files() {
         let pi = Pi;
         // A path that can never have a pi session dir under the real HOME.
-        let workspace = Workspace {
+        let working_copy = WorkingCopy {
             path: "/nonexistent/bao-test-xyz".into(),
-            ..Workspace::default()
+            ..WorkingCopy::default()
         };
-        assert_eq!(pi.resume_args(&workspace), None);
+        assert_eq!(pi.resume_args(&working_copy), None);
     }
 
     #[test]

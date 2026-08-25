@@ -6,7 +6,7 @@ use std::{fmt, path::PathBuf, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{error::Error, sandbox::Workspace};
+use crate::{error::Error, sandbox::WorkingCopy};
 
 /// Epoch milliseconds.
 pub fn now_ms() -> u64 {
@@ -284,9 +284,9 @@ pub struct SessionMeta {
     /// Exact argv.
     pub args: Command,
     pub cwd: PathBuf,
-    /// The workspace the session works in — where, its git identity, and the
+    /// The working copy the session runs in — where, its git identity, and the
     /// isolation claim.
-    pub workspace: Workspace,
+    pub working_copy: WorkingCopy,
     pub created: u64,
     /// Machine the session lives on (the daemon's hostname). The seed of
     /// location grouping.

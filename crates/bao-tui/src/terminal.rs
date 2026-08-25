@@ -381,7 +381,7 @@ mod tests {
 
     use bao_core::{
         alert::AlertInput,
-        sandbox::{SandboxKind, Workspace},
+        sandbox::{SandboxKind, WorkingCopy},
         types::{Command, Hostname},
     };
 
@@ -395,7 +395,7 @@ mod tests {
             command: "pi".to_string(),
             args: Command::from_args(vec!["pi".to_string()]),
             cwd: "/tmp".into(),
-            workspace: Workspace {
+            working_copy: WorkingCopy {
                 kind: SandboxKind::Worktree,
                 repo: None,
                 branch: Some("bao-abc12345".into()),

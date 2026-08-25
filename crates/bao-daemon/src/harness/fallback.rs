@@ -22,16 +22,16 @@ impl Harness for Fallback {
 
 #[cfg(test)]
 mod tests {
-    use bao_core::sandbox::Workspace;
+    use bao_core::sandbox::WorkingCopy;
 
     use super::*;
 
     #[test]
     fn fallback_is_honest_about_capabilities() {
         let f = Fallback;
-        assert_eq!(f.resume_args(&Workspace::default()), None);
-        assert_eq!(f.waiting_for_input(&Workspace::default()), None);
-        assert!(f.pack(&Workspace::default()).is_err());
-        assert!(f.unpack(&Workspace::default(), &[]).is_err());
+        assert_eq!(f.resume_args(&WorkingCopy::default()), None);
+        assert_eq!(f.waiting_for_input(&WorkingCopy::default()), None);
+        assert!(f.pack(&WorkingCopy::default()).is_err());
+        assert!(f.unpack(&WorkingCopy::default(), &[]).is_err());
     }
 }

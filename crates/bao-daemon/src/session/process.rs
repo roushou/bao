@@ -14,9 +14,9 @@ pub struct Session {
     /// The exact argv the session runs with.
     pub command: Command,
     /// The isolated working copy the session runs in. Mutated when the launch
-    /// saga materializes the workspace (provisional → real); everything else
-    /// reads it through [`Session::workspace`].
-    workspace: Mutex<Workspace>,
+    /// saga materializes the working copy (provisional → real); everything else
+    /// reads it through [`Session::working_copy`].
+    working_copy: Mutex<WorkingCopy>,
     /// The materialized sandbox this session runs in (`None` before the
     /// launch saga materializes it, or for a session restored without a
     /// rehydrated backend).
@@ -68,12 +68,12 @@ struct Process {
 }
 
 impl Process {
-    /// Open the PTY and spawn `command` in `workspace`, sandbox applied.
+    /// Open the PTY and spawn `command` in `working_copy`, sandbox applied.
     /// Returns the master reader for the caller's pump.
     fn open(
         &mut self,
         command: &Command,
-        workspace: &Workspace,
+        working_copy: &WorkingCopy,
         sandbox: Option<&Sandbox>,
         size: TerminalSize,
     ) -> Result<Box<dyn Read + Send>, Error> {
@@ -95,7 +95,7 @@ impl Process {
                 .map(|a| std::ffi::OsString::from(a.as_str()))
                 .collect(),
         );
-        cmd.cwd(&workspace.path);
+        cmd.cwd(&working_copy.path);
         cmd.env("TERM", "xterm-256color");
         if let Some(sb) = sandbox {
             sb.wrap_command(&mut cmd)?;
@@ -156,8 +156,8 @@ impl Process {
 }
 
 impl Session {
-    /// Register a session (identity + a provisional workspace) at `Preparing` —
-    /// no process yet. The launch saga materializes the workspace and spawns.
+    /// Register a session (identity + a provisional working copy) at `Preparing` —
+    /// no process yet. The launch saga materializes the working copy and spawns.
     pub(crate) fn register(spec: &SessionSpec, store: &SessionStore) -> Result<Arc<Self>, Error> {
         if spec.command.is_empty() {
             return Err(bao_core::error::Error::EmptyCommand.into());
@@ -171,8 +171,8 @@ impl Session {
             name: spec.name.clone(),
             command: spec.command.display(),
             args: spec.command.clone(),
-            cwd: spec.workspace.path.clone(),
-            workspace: spec.workspace.clone(),
+            cwd: spec.working_copy.path.clone(),
+            working_copy: spec.working_copy.clone(),
             created,
             host: crate::hostname::resolve(),
             status: Status::Preparing,
@@ -189,7 +189,7 @@ impl Session {
             id: spec.id.clone(),
             name: Mutex::new(spec.name.clone()),
             command: spec.command.clone(),
-            workspace: Mutex::new(spec.workspace.clone()),
+            working_copy: Mutex::new(spec.working_copy.clone()),
             sandbox: Mutex::new(None),
             created,
             status: Mutex::new(Status::Preparing),
@@ -247,11 +247,11 @@ impl Session {
         command: &Command,
         size: TerminalSize,
     ) -> Result<(), Error> {
-        let workspace = self.workspace();
+        let working_copy = self.working_copy();
         let mut reader = {
             let sandbox = self.sandbox.lock().unwrap();
             let mut process = self.process.lock().unwrap();
-            process.open(command, &workspace, sandbox.as_ref(), size)?
+            process.open(command, &working_copy, sandbox.as_ref(), size)?
         };
         // The process is up — Preparing → Starting on launch, Interrupted →
         // Starting on resume. Emitted before the pump starts so the first
@@ -353,18 +353,18 @@ impl Session {
         *self.status.lock().unwrap()
     }
 
-    /// The session's current workspace (a clone — the working copy may change
+    /// The session's current working copy (a clone — the working copy may change
     /// as the launch saga materializes it).
-    pub fn workspace(&self) -> Workspace {
-        self.workspace.lock().unwrap().clone()
+    pub fn working_copy(&self) -> WorkingCopy {
+        self.working_copy.lock().unwrap().clone()
     }
 
-    /// Replace the workspace — the launch saga's step 1 materializes the real
+    /// Replace the working copy — the launch saga's step 1 materializes the real
     /// working copy over the provisional one, then re-persists and publishes.
-    pub fn set_workspace(&self, workspace: Workspace) {
+    pub fn set_workspace(&self, working_copy: WorkingCopy) {
         {
-            let mut cur = self.workspace.lock().unwrap();
-            *cur = workspace;
+            let mut cur = self.working_copy.lock().unwrap();
+            *cur = working_copy;
         }
         self.persist_meta();
         self.publish_state();
@@ -460,14 +460,14 @@ impl Session {
         let now = self.clock.now_ms();
         let last_activity = *self.last_activity.lock().unwrap();
         let status = self.status();
-        let workspace = self.workspace();
+        let working_copy = self.working_copy();
         SessionMeta {
             id: self.id.clone(),
             name: self.name.lock().unwrap().clone(),
             command: self.command.display(),
             args: self.command.clone(),
-            cwd: workspace.path.clone(),
-            workspace,
+            cwd: working_copy.path.clone(),
+            working_copy,
             created: self.created,
             host: self.host.clone(),
             status,
@@ -555,7 +555,7 @@ impl Session {
                     } else {
                         Command::from_args(stored.args)
                     };
-                    let workspace = stored.workspace.unwrap_or(Workspace {
+                    let working_copy = stored.working_copy.unwrap_or(WorkingCopy {
                         kind: SandboxKind::InPlace,
                         repo: None,
                         branch: None,
@@ -568,7 +568,7 @@ impl Session {
                         RestoredIdentity {
                             name: stored.name,
                             command,
-                            workspace,
+                            working_copy,
                             created: stored.created,
                             status,
                         },
@@ -579,7 +579,7 @@ impl Session {
                 Ok(None) => {}
                 // Unreadable meta: salvage — keep the log, surface honestly.
                 Err(_) => {
-                    let workspace = Workspace {
+                    let working_copy = WorkingCopy {
                         kind: SandboxKind::InPlace,
                         repo: None,
                         branch: None,
@@ -591,7 +591,7 @@ impl Session {
                         RestoredIdentity {
                             name: None,
                             command: Command::default(),
-                            workspace,
+                            working_copy,
                             created: if loaded.first_ts > 0 {
                                 loaded.first_ts
                             } else {
@@ -618,7 +618,7 @@ impl Session {
         let RestoredIdentity {
             name,
             command,
-            workspace,
+            working_copy,
             created,
             status,
         } = identity;
@@ -640,8 +640,8 @@ impl Session {
             name: name.clone(),
             command: command.display(),
             args: command.clone(),
-            cwd: workspace.path.clone(),
-            workspace: workspace.clone(),
+            cwd: working_copy.path.clone(),
+            working_copy: working_copy.clone(),
             created,
             host: crate::hostname::resolve(),
             status,
@@ -662,7 +662,7 @@ impl Session {
             id,
             name: Mutex::new(name),
             command,
-            workspace: Mutex::new(workspace),
+            working_copy: Mutex::new(working_copy),
             sandbox: Mutex::new(None),
             created,
             status: Mutex::new(status),

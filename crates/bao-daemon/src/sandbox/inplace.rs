@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use bao_core::{
-    sandbox::{SandboxKind, Workspace},
+    sandbox::{SandboxKind, WorkingCopy},
     types::SessionId,
 };
 
@@ -20,8 +20,8 @@ impl SandboxBackend for InPlace {
         SandboxKind::InPlace
     }
 
-    fn prepare(&self, _id: &SessionId, cwd: &Path) -> Result<Workspace, Error> {
-        Ok(Workspace {
+    fn prepare(&self, _id: &SessionId, cwd: &Path) -> Result<WorkingCopy, Error> {
+        Ok(WorkingCopy {
             kind: SandboxKind::InPlace,
             repo: None,
             branch: None,
@@ -29,7 +29,7 @@ impl SandboxBackend for InPlace {
         })
     }
 
-    fn teardown(&self, _workspace: &Workspace) -> Result<(), Error> {
+    fn teardown(&self, _workspace: &WorkingCopy) -> Result<(), Error> {
         // The user's own directory is never touched.
         Ok(())
     }

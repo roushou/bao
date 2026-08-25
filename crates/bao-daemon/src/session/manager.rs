@@ -19,7 +19,7 @@ pub enum StateEvent {
 /// Registry of sessions known to this host.
 pub struct Manager {
     sessions: RwLock<HashMap<SessionId, Arc<Session>>>,
-    workspaces: WorkspaceStore,
+    working_copies: WorkingCopyStore,
     /// On-disk session store (versioned, atomically written, salvage-on-
     /// restore).
     store: SessionStore,
@@ -36,24 +36,24 @@ pub struct Manager {
 impl Manager {
     /// New registry rooted at the given directories (used by tests and the
     /// composition root; `open` derives them from a [`Home`]).
-    pub fn new(sessions_dir: PathBuf, workspaces_dir: PathBuf) -> Self {
+    pub fn new(sessions_dir: PathBuf, working_copies_dir: PathBuf) -> Self {
         Self::with_store(
             sessions_dir,
-            WorkspaceStore::new(workspaces_dir),
+            WorkingCopyStore::new(working_copies_dir),
             Arc::new(RealSandboxFactory),
         )
     }
 
     fn with_store(
         sessions_dir: PathBuf,
-        workspaces: WorkspaceStore,
+        working_copies: WorkingCopyStore,
         sandbox_factory: Arc<dyn SandboxFactory>,
     ) -> Self {
         std::fs::create_dir_all(&sessions_dir).ok();
         let (state_bus, _) = broadcast::channel(1024);
         Manager {
             sessions: RwLock::new(HashMap::new()),
-            workspaces,
+            working_copies,
             store: SessionStore::new(sessions_dir),
             state_bus,
             sandbox_factory,
@@ -72,7 +72,7 @@ impl Manager {
     ) -> Result<Self, Error> {
         let m = Self::with_store(
             home.sessions_dir(),
-            WorkspaceStore::new(home.workspaces_dir()),
+            WorkingCopyStore::new(home.working_copies_dir()),
             sandbox_factory,
         );
         m.load_existing()?;
@@ -87,8 +87,8 @@ impl Manager {
     fn load_existing(&self) -> Result<(), Error> {
         let restored = Session::restore_all(&self.store)?;
         for s in restored {
-            let workspace = s.workspace();
-            s.set_sandbox(Sandbox::from_workspace(&self.workspaces, workspace));
+            let working_copy = s.working_copy();
+            s.set_sandbox(Sandbox::from_workspace(&self.working_copies, working_copy));
             self.spawn_state_forwarder(&s);
             self.sessions.write().unwrap().insert(s.id.clone(), s);
         }
@@ -106,7 +106,7 @@ impl Manager {
         name: Option<String>,
     ) -> Result<Arc<Session>, Error> {
         let id = SessionId::generate();
-        let provisional = Workspace {
+        let provisional = WorkingCopy {
             kind: SandboxKind::InPlace,
             repo: None,
             branch: None,
@@ -116,7 +116,7 @@ impl Manager {
             id,
             name,
             command: command.clone(),
-            workspace: provisional,
+            working_copy: provisional,
             size,
             clock: Clock::system(),
         };
@@ -144,7 +144,7 @@ impl Manager {
         let sid = sess.id.clone();
         let result = self
             .sandbox_factory
-            .materialize(&self.workspaces, &sid, cwd, sandbox)
+            .materialize(&self.working_copies, &sid, cwd, sandbox)
             .and_then(|sb| self.attach_and_spawn(&sess, command, size, sb));
         if let Err(e) = result {
             self.fail_launch(&sid, Some(e.to_string()));
@@ -171,11 +171,11 @@ impl Manager {
         tokio::spawn(async move {
             let sid = task_sess.id.clone();
             let sid_for_sandbox = sid.clone();
-            let workspaces = m.workspaces.clone();
+            let working_copies = m.working_copies.clone();
             let factory = m.sandbox_factory.clone();
             // The blocking git worktree step runs off the async runtime.
             let sandbox_result = tokio::task::spawn_blocking(move || {
-                factory.materialize(&workspaces, &sid_for_sandbox, &cwd, &sandbox)
+                factory.materialize(&working_copies, &sid_for_sandbox, &cwd, &sandbox)
             })
             .await;
             let sb = match sandbox_result {
@@ -205,7 +205,7 @@ impl Manager {
         size: TerminalSize,
         sandbox: Sandbox,
     ) -> Result<(), Error> {
-        sess.set_workspace(sandbox.workspace.clone());
+        sess.set_workspace(sandbox.working_copy.clone());
         sess.set_sandbox(sandbox);
         sess.start_process(command, size)?;
         Ok(())

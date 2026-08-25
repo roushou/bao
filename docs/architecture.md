@@ -104,8 +104,8 @@ session's terminal. `WireError` is typed so clients branch on _kind_.
 
 One isolated working copy per session, so sessions don't step on each other.
 `SandboxSpec` (what the user asks) is materialized by `Sandbox::create` into a
-`Sandbox` — a `Workspace` plus the `SandboxBackend` that built it, placed in
-the `WorkspaceStore` — and the daemon **never silently delivers a weaker
+`Sandbox` — a `WorkingCopy` plus the `SandboxBackend` that built it, placed in
+the `WorkingCopyStore` — and the daemon **never silently delivers a weaker
 isolation than requested**.
 Worktrees (file isolation) are the default backend. `Bubblewrap` (Linux, behind
 the `bubblewrap` feature) and `Seatbelt` (macOS) are the process-sandboxing
@@ -158,4 +158,5 @@ spectacle · resilience of state. (Full text: `docs/03-principles.md`.)
   `panes.md`, `no-replay-attach.md`, `channels.md` (one logical channel per
   connection), `event-sourcing.md` (the session lifecycle FSM + backgrounded
   launch saga), `state-machines.md` (the FSM convention), `crate-topology.md`
-  (the crate/dependency boundaries).
+  (the crate/dependency boundaries), `workspaces.md` (workspaces — the targets
+  sessions are aimed at).

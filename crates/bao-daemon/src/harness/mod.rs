@@ -6,7 +6,7 @@
 //! `HarnessRegistry::KNOWN` (fallback last) — the contract test
 //! `every_known_harness_is_reachable` enforces the wiring.
 
-use bao_core::{sandbox::Workspace, types::Command};
+use bao_core::{sandbox::WorkingCopy, types::Command};
 
 use error::Error;
 
@@ -30,24 +30,24 @@ pub trait Harness: Send + Sync {
 
     /// Extra argv to relaunch with its conversation intact. `None` = honest
     /// fresh start (the harness persists whatever it persists).
-    fn resume_args(&self, _sandbox: &Workspace) -> Option<Vec<String>> {
+    fn resume_args(&self, _sandbox: &WorkingCopy) -> Option<Vec<String>> {
         None
     }
 
     /// Honest "is it waiting for the human?" `None` = we cannot tell.
     /// Future: feeds `SessionMeta.waiting_for_input`. Never guessed.
-    fn waiting_for_input(&self, _sandbox: &Workspace) -> Option<bool> {
+    fn waiting_for_input(&self, _sandbox: &WorkingCopy) -> Option<bool> {
         None
     }
 
     /// Serialize conversation state for relocation. Future: the move slice.
     /// Default = cannot pack (honest unsupported).
-    fn pack(&self, _sandbox: &Workspace) -> Result<Vec<u8>, Error> {
+    fn pack(&self, _sandbox: &WorkingCopy) -> Result<Vec<u8>, Error> {
         Err(Error::Unsupported("pack"))
     }
 
     /// Restore conversation state after relocation. Future: the move slice.
-    fn unpack(&self, _sandbox: &Workspace, _data: &[u8]) -> Result<(), Error> {
+    fn unpack(&self, _sandbox: &WorkingCopy, _data: &[u8]) -> Result<(), Error> {
         Err(Error::Unsupported("unpack"))
     }
 }

@@ -53,8 +53,8 @@ pub async fn serve(
                     // and the session only stores what it reports.
                     if s.status() == Status::Running {
                         let harness = HarnessRegistry::identify(&s.command);
-                        let workspace = s.workspace();
-                        s.set_waiting(harness.waiting_for_input(&workspace));
+                        let working_copy = s.working_copy();
+                        s.set_waiting(harness.waiting_for_input(&working_copy));
                     }
                     s.publish_state();
                 }
@@ -505,9 +505,9 @@ impl<R: AsyncRead + Unpin + Send> Connection<R> {
                     if command.is_empty() {
                         command = Command::parse("pi").unwrap_or_default();
                     }
-                    let workspace = sess.workspace();
+                    let working_copy = sess.working_copy();
                     if let Some(extra) =
-                        HarnessRegistry::identify(&sess.command).resume_args(&workspace)
+                        HarnessRegistry::identify(&sess.command).resume_args(&working_copy)
                     {
                         command = Command::from_args(
                             command.as_args().iter().cloned().chain(extra).collect(),
@@ -732,7 +732,7 @@ mod tests {
     #[tokio::test]
     async fn control_channel_e2e_no_daemon_binary() {
         let root = temp_root("ctrl-e2e");
-        let manager = Arc::new(Manager::new(root.clone(), root.join("workspaces")));
+        let manager = Arc::new(Manager::new(root.clone(), root.join("working-copies")));
         let (mut control, reply) = dial(&manager, ChannelKind::Control, 64 * 1024).await;
         assert!(matches!(reply.unwrap(), Reply::Ok), "control handshake");
 
@@ -795,7 +795,7 @@ mod tests {
     #[tokio::test]
     async fn watch_channel_streams_state_and_gone() {
         let root = temp_root("watch-e2e");
-        let manager = Arc::new(Manager::new(root.clone(), root.join("workspaces")));
+        let manager = Arc::new(Manager::new(root.clone(), root.join("working-copies")));
         let (mut control, reply) = dial(&manager, ChannelKind::Control, 64 * 1024).await;
         assert!(matches!(reply.unwrap(), Reply::Ok));
         let (mut watch, reply) = dial(&manager, ChannelKind::Watch, 64 * 1024).await;
@@ -859,7 +859,7 @@ mod tests {
     #[tokio::test]
     async fn attach_channel_streams_snapshot_and_live_output() {
         let root = temp_root("attach-e2e");
-        let manager = Arc::new(Manager::new(root.clone(), root.join("workspaces")));
+        let manager = Arc::new(Manager::new(root.clone(), root.join("working-copies")));
         let (mut control, reply) = dial(&manager, ChannelKind::Control, 64 * 1024).await;
         assert!(matches!(reply.unwrap(), Reply::Ok));
 
@@ -956,7 +956,7 @@ mod tests {
     #[tokio::test]
     async fn stalled_reader_does_not_block_other_channels() {
         let root = temp_root("isolation");
-        let manager = Arc::new(Manager::new(root.clone(), root.join("workspaces")));
+        let manager = Arc::new(Manager::new(root.clone(), root.join("working-copies")));
 
         // Channel A: control + a noisy session. After the launch ack we stop
         // reading entirely; with a 1 KiB duplex buffer the daemon's writer
@@ -1007,7 +1007,7 @@ mod tests {
     #[tokio::test]
     async fn connection_without_hello_is_dropped() {
         let root = temp_root("refusal");
-        let manager = Arc::new(Manager::new(root.clone(), root.join("workspaces")));
+        let manager = Arc::new(Manager::new(root.clone(), root.join("working-copies")));
         let (a, b) = duplex(4096);
         let m = manager.clone();
         tokio::spawn(async move {
@@ -1038,7 +1038,7 @@ mod tests {
     #[tokio::test]
     async fn garbage_first_frame_is_dropped() {
         let root = temp_root("refusal-garbage");
-        let manager = Arc::new(Manager::new(root.clone(), root.join("workspaces")));
+        let manager = Arc::new(Manager::new(root.clone(), root.join("working-copies")));
         let (a, mut raw) = duplex(4096);
         let m = manager.clone();
         tokio::spawn(async move {
@@ -1062,7 +1062,7 @@ mod tests {
     #[tokio::test]
     async fn attach_to_unknown_session_is_a_typed_refusal() {
         let root = temp_root("refusal-attach");
-        let manager = Arc::new(Manager::new(root.clone(), root.join("workspaces")));
+        let manager = Arc::new(Manager::new(root.clone(), root.join("working-copies")));
         let (_attach, reply) = dial(
             &manager,
             ChannelKind::Attach {
