@@ -20,6 +20,9 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 vt100 = "0.15"
 
+[dev-dependencies]
+bao-client = { workspace = true }
+
 [features]
 default = ["bubblewrap"]
 bubblewrap = []

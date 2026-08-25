@@ -4,6 +4,7 @@
 
 mod git;
 
+pub mod daemon;
 pub mod error;
 pub mod harness;
 pub mod home;
@@ -15,5 +16,5 @@ pub mod screen;
 pub mod server;
 pub mod session;
 
+pub use daemon::{Daemon, DaemonBuilder, RunningDaemon};
 pub use home::Home;
-pub use server::serve;

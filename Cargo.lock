@@ -119,6 +119,7 @@ dependencies = [
 name = "bao-daemon"
 version = "0.1.0"
 dependencies = [
+ "bao-client",
  "bao-core",
  "bao-protocol",
  "bao-transport",

@@ -16,8 +16,8 @@ launch consumes, under **one alias namespace**:
 ]
 ```
 
-- A **workspace** names *where* a session runs (a root directory).
-- A **profile** names *what* runs (an argv preset).
+- A **workspace** names _where_ a session runs (a root directory).
+- A **profile** names _what_ runs (an argv preset).
 
 Why one store: the two shared everything except their payload — persistence,
 load lifecycle, listing, alias rules, RPC choreography, CLI shape. Two
@@ -51,12 +51,12 @@ skipped honestly, not guessed.
 
 ## Mapping
 
-| Concept        | Wire / code                                        |
-| -------------- | -------------------------------------------------- |
-| The store      | `bao-daemon::registry::Registry`, `<home>/registry.json` |
-| An entry       | `bao-core::registry::RegistryEntry` / `EntryKind`  |
-| Mutate         | `Rpc::RegistryPut` / `Rpc::RegistryRemove`         |
-| List           | `Rpc::RegistryList` → `Reply::Entries`             |
-| Product nouns  | `bao workspace …`, `bao profile …` (thin fronts)   |
+| Concept       | Wire / code                                              |
+| ------------- | -------------------------------------------------------- |
+| The store     | `bao-daemon::registry::Registry`, `<home>/registry.json` |
+| An entry      | `bao-core::registry::RegistryEntry` / `EntryKind`        |
+| Mutate        | `Rpc::RegistryPut` / `Rpc::RegistryRemove`               |
+| List          | `Rpc::RegistryList` → `Reply::Entries`                   |
+| Product nouns | `bao workspace …`, `bao profile …` (thin fronts)         |
 
 [`EntryKind`]: ../crates/bao-core/src/registry.rs

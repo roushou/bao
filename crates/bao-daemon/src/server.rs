@@ -1,5 +1,7 @@
-//! The host daemon: accepts client connections and dispatches typed RPCs to
-//! the session manager, streaming live events to attached clients.
+//! The daemon's wire layer: accepts connections over any byte stream and
+//! dispatches typed RPCs to the session manager, streaming live events to
+//! attached clients. The server lifecycle ([`crate::Daemon`]) composes this
+//! over a real listener.
 
 use std::sync::Arc;
 
@@ -7,13 +9,9 @@ use bao_core::types::{Command, SessionId, Status, now_ms};
 use bao_protocol::{
     ChannelKind, DaemonInfo, FromHost, PROTOCOL_VERSION, Reply, Request, Rpc, WireBytes, WireError,
 };
-use bao_transport::{
-    Addr,
-    frame::{FrameReader, FrameWriter},
-};
+use bao_transport::frame::{FrameReader, FrameWriter};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::TcpListener,
     sync::mpsc,
 };
 
@@ -23,62 +21,6 @@ use crate::{
     session::{Manager, Session, StateEvent},
 };
 
-/// How often the daemon re-derives time-based facts (idle alert) and
-/// publishes them. Time moves even when sessions don't produce events, so a
-/// tick is what lets stateless views see "idle" appear without polling.
-const STATE_TICK_SECS: u64 = 5;
-
-pub async fn serve(
-    addr: Addr,
-    manager: Arc<Manager>,
-) -> Result<(Addr, tokio::task::JoinHandle<()>), Error> {
-    let listener = match addr {
-        Addr::Tcp { host, port } => TcpListener::bind((host, port)).await?,
-        Addr::Unix(_) => return Err(Error::TransportUnsupported("unix socket")),
-    };
-    let actual = Addr::local(listener.local_addr()?.port());
-
-    // Idle ticker: re-derive and publish state for every session on a clock,
-    // not only on events.
-    {
-        let m = manager.clone();
-        tokio::spawn(async move {
-            let mut tick = tokio::time::interval(std::time::Duration::from_secs(STATE_TICK_SECS));
-            tick.tick().await; // skip the immediate first tick (already published)
-            loop {
-                tick.tick().await;
-                for s in m.list() {
-                    // Status hooks: ask the harness what the session is doing.
-                    // Honest — the adapter returns None when it cannot tell,
-                    // and the session only stores what it reports.
-                    if s.status() == Status::Running {
-                        let harness = HarnessRegistry::identify(&s.command);
-                        let working_copy = s.working_copy();
-                        s.set_waiting(harness.waiting_for_input(&working_copy));
-                    }
-                    s.publish_state();
-                }
-            }
-        });
-    }
-
-    let mgr = manager.clone();
-    let handle = tokio::spawn(async move {
-        while let Ok((stream, _)) = listener.accept().await {
-            let m = mgr.clone();
-            tokio::spawn(async move {
-                let _ = accept(stream, m).await;
-            });
-        }
-    });
-    Ok((actual, handle))
-}
-
-/// Bounded capacity of a control channel's outbound queue: replies and
-/// subscribed session streams share it. Every send is awaited, so a slow
-/// reader backs up here and never buffers without bound.
-const CONTROL_OUT_CAP: usize = 4096;
-
 /// Accept one connection: read its channel handshake and serve only that
 /// channel until the peer closes. Cancellation is the socket closing — no
 /// per-channel bookkeeping on the daemon side.
@@ -86,7 +28,7 @@ const CONTROL_OUT_CAP: usize = 4096;
 /// Generic over the stream so tests can drive the full protocol in-process
 /// over `tokio::io::duplex` pairs (no daemon binary), and so a later unix
 /// transport plugs in as another `AsyncRead + AsyncWrite`.
-async fn accept<S>(stream: S, manager: Arc<Manager>) -> Result<(), Error>
+pub(crate) async fn accept<S>(stream: S, manager: Arc<Manager>) -> Result<(), Error>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -111,6 +53,11 @@ where
         ChannelKind::Attach { session } => run_attach(read, write, manager, id, session).await,
     }
 }
+
+/// Bounded capacity of a control channel's outbound queue: replies and
+/// subscribed session streams share it. Every send is awaited, so a slow
+/// reader backs up here and never buffers without bound.
+const CONTROL_OUT_CAP: usize = 4096;
 
 /// The RPC channel: a bounded outbound queue behind one writer task (the
 /// channel carries replies plus subscribed session streams), served until the

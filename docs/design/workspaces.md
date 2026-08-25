@@ -51,6 +51,7 @@ self-disambiguating; the product name is read by users every day.
 Workspaces live in **the registry** — one store shared with profiles, one
 alias namespace, upsert semantics. See [`registry.md`](registry.md); the
 product front door is `bao workspace add <alias> [path]`.
+
 - Declared by path, not inferred: no magic scanning of `$HOME`. Fragile
   inference was rejected.
 - A path only means something on the host that can see it, so registration is

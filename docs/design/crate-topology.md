@@ -34,7 +34,8 @@ bao-daemon   session (live PTY/process/log/screen), manager (registry + saga),
              store (meta.json/events.log), sandbox (SandboxFactory seam +
              Sandbox + SandboxBackend + WorkingCopyStore; one file per backend:
              InPlace/Worktree/Bubblewrap/Seatbelt), harness (Harness trait +
-             Pi/Fallback), server
+             Pi/Fallback), server (accept loop), daemon (lifecycle:
+             builder → start → shutdown)
 bao-tui      the overview renderer
 bao          main, CLI dispatch, daemon-process management, Context
 ```

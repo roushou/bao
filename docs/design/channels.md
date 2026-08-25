@@ -59,13 +59,14 @@ client                          daemon
 
 ## 3. The daemon
 
-`serve()` is an accept loop that reads the handshake and dispatches to a
-dedicated handler task per channel. A channel's lifetime is its socket's —
-closing it cancels the handler. The daemon keeps no per-client registry and
-no shared outbound queue; each channel owns its writes. A control channel
-tracks only the event-stream forwarders for sessions it launched or resumed
-(aborted when the channel closes); a watch or attach channel owns no state
-at all.
+The daemon lifecycle (`Daemon` via `DaemonBuilder`) binds a listener and
+spawns an accept loop; each connection reads its channel handshake and is
+dispatched to a dedicated handler task per channel. A channel's lifetime is
+its socket's — closing it cancels the handler. The daemon keeps no per-client
+registry and no shared outbound queue; each channel owns its writes. A
+control channel tracks only the event-stream forwarders for sessions it
+launched or resumed (aborted when the channel closes); a watch or attach
+channel owns no state at all.
 
 ## 4. The client
 

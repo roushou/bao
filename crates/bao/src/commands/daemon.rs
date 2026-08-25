@@ -2,13 +2,12 @@
 
 use std::{
     process,
-    sync::Arc,
     time::{Duration, Instant},
 };
 
 use anyhow::{Result, bail};
 use bao_core::types::Status;
-use bao_daemon::{pid::PidFile, session::Manager};
+use bao_daemon::{DaemonBuilder, pid::PidFile};
 use clap::Subcommand;
 
 use super::Context;
@@ -40,8 +39,14 @@ impl DaemonCmd {
         // before touching any other state.
         let _pid = PidFile::acquire(ctx.home.daemon_pid_file())
             .map_err(|e| anyhow::anyhow!("bao daemon: {e}; not starting another"))?;
-        let manager = Arc::new(Manager::open(&ctx.home)?);
-        let restored = manager.list();
+
+        // Build binds the listener and restores sessions — fail fast here,
+        // before anything is serving.
+        let daemon = DaemonBuilder::new(ctx.home.clone(), ctx.addr.clone())
+            .build()
+            .await?;
+
+        let restored = daemon.manager().list();
         if !restored.is_empty() {
             eprintln!(
                 "bao daemon: restored {} session(s) from disk ({} interrupted)",
@@ -52,20 +57,21 @@ impl DaemonCmd {
                     .count()
             );
         }
-        let (actual, handle) = bao_daemon::serve(ctx.addr.clone(), manager.clone()).await?;
+        let sessions_dir = daemon.manager().sessions_dir().to_path_buf();
+        let mut running = daemon.start();
         eprintln!(
-            "bao daemon: host {} · listening on {actual} (sessions in {})",
+            "bao daemon: host {} · listening on {} (sessions in {})",
             bao_daemon::hostname::resolve(),
-            manager.sessions_dir().display()
+            running.addr(),
+            sessions_dir.display()
         );
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
                 eprintln!("bao daemon: shutting down, stopping sessions…");
-                manager.kill_all();
-                manager.flush_all().await;
             }
-            _ = handle => {}
+            _ = running.accept_ended() => {}
         }
+        running.shutdown().await;
         Ok(())
     }
 }
