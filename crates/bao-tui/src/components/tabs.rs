@@ -10,7 +10,8 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::{components::Component, state::Ctx, theme};
+use crate::components::{Component, Ctx};
+use crate::theme;
 
 pub struct Tabs;
 

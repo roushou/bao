@@ -76,11 +76,17 @@ the PTY says. `⌃q` unwinds: fullscreen → docked → rail focus.
 ```
 on key:
   1. overlays (palette/help/filter/prompt/confirm) handle their own keys
-  2. else route to the focused pane:
-       Rail     -> rail.handle_key(key)      -> Action
-       Terminal -> terminal.handle_key(key)  -> Action (raw bytes forwarded)
-  3. the app (the `Overview`) performs the returned Action
+  2. else the keymap resolves for the focused scope:
+       Rail     -> keys::Keymap::resolve(Rail, key)    -> Action (applied by the Overview)
+       Terminal -> Terminal::press(key) -> Keypress;   (pure decision —
+                   StepOut crosses a boundary as Action::StepOut, Send bytes
+                   are delivered by the caller at the shell)
+  3. the app performs the resulting Action
 ```
+
+The bindings live in one declarative table (`bao-tui/src/keys.rs`); help and
+footer hints render from it. Text entry (filter input, prompts) and raw
+passthrough stay outside the table by design.
 
 Global keys are deliberately absent (except resize, which is not a key):
 every key is owned by exactly one pane. A later pane (inspect, log, map)
@@ -88,9 +94,11 @@ drops in with its own keymap and zero collisions.
 
 ## 4. Decisions
 
-- **Raw input = re-encoded crossterm events + verbatim paste**, not a raw
-  stdin read. Every common key maps to the exact byte sequence; paste passes
-  through untouched. (Reading the raw stdin fd directly is the faithful
-  refinement for exotic keys — a documented follow-up.)
+- **Raw input = re-encoded crossterm events**, encoded by `term/encode.rs`
+  to the exact byte sequence a terminal would send — honoring the modes the
+  harness set on its output (application cursor keys, bracketed paste).
+  Paste is wrapped iff the harness asked for it. (Reading the raw stdin fd
+  directly is the faithful refinement for exotic keys — a documented
+  follow-up.)
 - **`PgUp/PgDn` scroll Bao's scrollback**, a deliberate tradeoff: harnesses
   rarely need them; the arrows stay with the harness.

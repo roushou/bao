@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 use crate::{
     error::Error,
     overview::Overview,
-    terminal::{Keypress, Terminal},
+    term::{Keypress, Terminal},
 };
 
 /// The two full-screen surfaces the app switches between. Sizes differ

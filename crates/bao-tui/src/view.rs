@@ -1,6 +1,6 @@
-//! The model: typed view data and its pure derivations. No I/O, no rendering.
-
-use std::time::Instant;
+//! View models: typed session data and its pure derivations, built from the
+//! daemon's `SessionMeta` facts. No I/O, no rendering — components and the
+//! overview render these as-is.
 
 use bao_core::{
     alert::Alert,
@@ -239,72 +239,6 @@ pub struct TabView {
     pub glyph: char,
     pub style: Style,
     pub active: bool,
-}
-
-/// Which pane owns the keyboard.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Focus {
-    Rail,
-    Terminal,
-}
-
-/// A pending text input.
-#[derive(Debug, Clone)]
-pub struct Prompt {
-    pub label: &'static str,
-    pub input: String,
-    pub action: PromptAction,
-}
-
-#[derive(Debug, Clone)]
-pub enum PromptAction {
-    Create,
-    Rename(SessionId),
-}
-
-/// One row the palette can act on.
-#[derive(Debug, Clone)]
-pub enum PaletteEntry {
-    Session(SessionId),
-    Create {
-        name: Option<String>,
-    },
-    Action {
-        verb: &'static str,
-        glyph: char,
-        id: SessionId,
-    },
-}
-
-/// Shared read-only state handed to components during render. Borrowed from
-/// disjoint `Overview` fields so components can be driven mutably alongside
-/// it — nothing here is cloned per frame except the rail-owned bits.
-pub struct Ctx<'a> {
-    pub rows: &'a [Row],
-    pub host: &'a str,
-    pub focus: Focus,
-    pub selection: Option<SessionId>,
-    /// The open terminals, in the order they were opened — the tab bar is
-    /// their echo, never the navigator.
-    pub tabs: &'a [TabView],
-    pub filter: String,
-    pub filtering: bool,
-    pub status_line: &'a str,
-    pub toast: Option<&'a str>,
-    pub help_open: bool,
-    pub palette_open: bool,
-}
-
-/// A transient action toast that fades after a few seconds.
-pub struct Toast {
-    pub text: String,
-    pub at: Instant,
-}
-
-impl Toast {
-    pub fn alive(&self, secs: u64) -> bool {
-        self.at.elapsed() < std::time::Duration::from_secs(secs)
-    }
 }
 
 #[cfg(test)]

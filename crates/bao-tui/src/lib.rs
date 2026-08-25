@@ -11,10 +11,9 @@ mod event;
 mod keys;
 mod overview;
 mod signal;
-mod state;
 mod term;
-mod terminal;
 mod theme;
 mod tui;
+mod view;
 
 pub use tui::Tui;

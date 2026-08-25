@@ -13,10 +13,8 @@ use bao_client::HostEvent;
 use bao_core::types::{SessionId, SessionMeta, Status, TerminalSize};
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{
-    signal,
-    term::{Emu, Encoder},
-};
+use super::{Emu, Encoder};
+use crate::signal;
 
 /// What one keypress means to the terminal model — decided purely (no I/O,
 /// no connection), applied by the caller at the shell. `StepOut` crosses a

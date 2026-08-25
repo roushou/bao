@@ -10,6 +10,7 @@
 
 pub mod decode;
 pub mod encode;
+pub mod live;
 
 /// Terminal modes the harness set on its output stream (DECSET/DECRST).
 /// The neutral contract between the decode and encode halves: populated by
@@ -24,3 +25,4 @@ pub struct Modes {
 
 pub use decode::Emu;
 pub use encode::Encoder;
+pub use live::{End, Keypress, Terminal};

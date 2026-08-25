@@ -16,8 +16,8 @@ use ratatui::{
 
 use crate::{
     components::Component,
-    state::{Ctx, Focus},
-    terminal::{Keypress, Terminal},
+    components::{Ctx, Focus},
+    term::{Keypress, Terminal},
 };
 
 /// Render one live terminal inside `rect`: the title bar (signal + name +
@@ -55,14 +55,14 @@ pub(crate) fn render_terminal(f: &mut Frame, rect: Rect, focused: bool, t: &Term
     ];
     if let Some(end) = &t.ended {
         let msg = match end {
-            crate::terminal::End::Exited(code) => format!(
+            crate::term::End::Exited(code) => format!(
                 " — exited{}",
                 code.map(|c| format!(" (code {c})")).unwrap_or_default()
             ),
-            crate::terminal::End::Interrupted => {
+            crate::term::End::Interrupted => {
                 " — interrupted (process gone, history kept)".to_string()
             }
-            crate::terminal::End::Gone { reason } => match reason {
+            crate::term::End::Gone { reason } => match reason {
                 Some(r) => format!(" — launch failed: {r}"),
                 None => " — session removed".to_string(),
             },
@@ -80,15 +80,15 @@ pub(crate) fn render_terminal(f: &mut Frame, rect: Rect, focused: bool, t: &Term
     // End-of-session banner over the emulator.
     if let Some(end) = &t.ended {
         let msg = match end {
-            crate::terminal::End::Exited(code) => format!(
+            crate::term::End::Exited(code) => format!(
                 " session exited{} — press any key to step out ",
                 code.map(|c| format!(" (code {c})")).unwrap_or_default()
             ),
-            crate::terminal::End::Interrupted => {
+            crate::term::End::Interrupted => {
                 " session interrupted — the session process is gone (host restarted); history preserved — press any key to step out "
                     .to_string()
             }
-            crate::terminal::End::Gone { reason } => match reason {
+            crate::term::End::Gone { reason } => match reason {
                 Some(r) => format!(" launch failed: {r} — press any key to exit "),
                 None => " session removed — press any key to exit ".to_string(),
             },

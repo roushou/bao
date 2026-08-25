@@ -12,7 +12,10 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::{components::Component, state::Ctx, theme};
+use crate::{
+    components::{Component, Ctx},
+    theme,
+};
 
 pub struct Header {
     flash: Option<(SessionId, Instant)>,

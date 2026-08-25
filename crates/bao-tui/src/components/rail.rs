@@ -13,10 +13,11 @@ use ratatui::{
 
 use crate::{
     action::Action,
+    components::Ctx,
     components::{Component, pad_trunc},
     event::Event,
-    state::{self, Ctx, Group, Row},
     theme,
+    view::{Group, Row, group_rows},
 };
 
 pub struct Rail {
@@ -76,7 +77,7 @@ impl Rail {
     /// flattened. Group headers are display-only — never selectable.
     fn visible_indices(&self, rows: &[Row]) -> Vec<usize> {
         let mut out = Vec::new();
-        for group in state::group_rows(&self.filtered(rows)) {
+        for group in group_rows(&self.filtered(rows)) {
             for r in &group.rows {
                 if let Some(i) = rows.iter().position(|x| x.id == r.id) {
                     out.push(i);
@@ -203,7 +204,7 @@ impl Component for Rail {
         let mut lines = vec![Line::from(title)];
         let cw = (rect.width as usize).saturating_sub(2);
         let cap = (rect.height as usize).saturating_sub(3);
-        'groups: for group in state::group_rows(&self.filtered(ctx.rows)) {
+        'groups: for group in group_rows(&self.filtered(ctx.rows)) {
             if lines.len() >= cap {
                 break;
             }

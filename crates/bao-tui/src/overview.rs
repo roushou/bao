@@ -16,12 +16,15 @@ use tokio::sync::mpsc;
 
 use crate::{
     action::Action,
-    components::{Component, Components},
+    components::{
+        self, Component, Components, Ctx, Focus,
+        footer::{PromptAction, Toast},
+    },
     error::Error,
     event::Event,
     keys,
-    state::{Ctx, Focus, Group, PromptAction, Row, Toast, sort_rows},
-    terminal::Terminal,
+    term::Terminal,
+    view::{Group, Row, sort_rows},
 };
 
 const WIDE_MIN_COLS: u16 = 110;
@@ -32,7 +35,7 @@ pub struct Overview {
     host: String,
     focus: Focus,
     status_line: String,
-    flash: Option<Toast>,
+    flash: Option<components::footer::Toast>,
     should_quit: bool,
     components: Components,
     writer: ConnWriter,
@@ -402,17 +405,17 @@ impl Overview {
             return;
         };
         match keypress {
-            crate::terminal::Keypress::StepOut => {
+            crate::term::Keypress::StepOut => {
                 self.focus = Focus::Rail;
                 self.components.terminal_pane.set_fullscreen(false);
             }
-            crate::terminal::Keypress::Send(bytes) => {
+            crate::term::Keypress::Send(bytes) => {
                 if let Some(w) = self.twriter.as_mut() {
                     let _ = w.input(&sid, bytes).await;
                 }
             }
             // Scroll was already applied to local state by `press`.
-            crate::terminal::Keypress::Scroll(_) | crate::terminal::Keypress::Ignore => {}
+            crate::term::Keypress::Scroll(_) | crate::term::Keypress::Ignore => {}
         }
     }
 
@@ -535,14 +538,14 @@ impl Overview {
             return;
         };
         match entry {
-            crate::state::PaletteEntry::Session(id) => {
+            crate::components::palette::PaletteEntry::Session(id) => {
                 self.components.rail.set_selection(Some(id.clone()));
                 self.focus = Focus::Terminal;
                 self.components.terminal_pane.set_fullscreen(true);
                 self.ensure_terminal(&id).await;
             }
-            crate::state::PaletteEntry::Create { name } => self.create(name).await,
-            crate::state::PaletteEntry::Action { verb, id, .. } => {
+            crate::components::palette::PaletteEntry::Create { name } => self.create(name).await,
+            crate::components::palette::PaletteEntry::Action { verb, id, .. } => {
                 self.components.rail.set_selection(Some(id.clone()));
                 match verb {
                     "resume" => {
@@ -691,14 +694,14 @@ impl Overview {
 
     /// The tab bar's model: every open terminal, in open order, echoed as
     /// glyph + title. Pure derivation from the pane's order and the rows.
-    fn tab_views(&self) -> Vec<crate::state::TabView> {
+    fn tab_views(&self) -> Vec<crate::view::TabView> {
         self.components
             .terminal_pane
             .open()
             .iter()
             .map(|sid| {
                 let row = self.rows.iter().find(|r| &r.id == sid);
-                crate::state::TabView {
+                crate::view::TabView {
                     title: match row {
                         Some(r) if !r.name.is_empty() => r.name.clone(),
                         _ => sid.to_string(),

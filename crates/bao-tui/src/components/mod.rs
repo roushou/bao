@@ -1,6 +1,6 @@
-//! The component system: a [`Component`] trait (one struct per surface, each
-//! owning its state) and the aggregate [`Components`] the [`App`](crate::app::App)
-//! holds.
+//! The component system: the [`Component`] contract (one struct per surface,
+//! each owning its state), its [`Ctx`] snapshot parameter, and the aggregate
+//! [`Components`] the overview holds.
 
 pub mod footer;
 pub mod header;
@@ -17,7 +17,13 @@ use ratatui::{
     text::{Line, Span},
 };
 
-use crate::{action::Action, event::Event, state::Ctx};
+use bao_core::types::SessionId;
+
+use crate::{
+    action::Action,
+    event::Event,
+    view::{Row, TabView},
+};
 
 /// A UI surface: owns its state, renders into a rect, and maps events to
 /// cross-cutting [`Action`]s.
@@ -26,6 +32,32 @@ pub trait Component {
     fn handle_events(&mut self, _event: Option<&Event>, _ctx: &Ctx) -> Action {
         Action::Noop
     }
+}
+
+/// Shared read-only state handed to components during render. Borrowed from
+/// disjoint `Overview` fields so components can be driven mutably alongside
+/// it — nothing here is cloned per frame except the rail-owned bits.
+pub struct Ctx<'a> {
+    pub rows: &'a [Row],
+    pub host: &'a str,
+    pub focus: Focus,
+    pub selection: Option<SessionId>,
+    /// The open terminals, in the order they were opened — the tab bar is
+    /// their echo, never the navigator.
+    pub tabs: &'a [TabView],
+    pub filter: String,
+    pub filtering: bool,
+    pub status_line: &'a str,
+    pub toast: Option<&'a str>,
+    pub help_open: bool,
+    pub palette_open: bool,
+}
+
+/// Which pane owns the keyboard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Focus {
+    Rail,
+    Terminal,
 }
 
 /// The overview's surfaces.

@@ -40,8 +40,10 @@ bao (the binary) ──┬── bao-daemon ── bao-transport ── bao-prot
 - **`bao-daemon`** — the supervisor: owns the live PTY process, the event
   log, and the sandbox/harness adapters (the only crate that touches the OS).
 - **`bao-tui`** — the overview you see in the terminal: ratatui
-  components (rail, terminal, footer, palette, help), the status language,
-  theming.
+  components (rail, terminal pane, footer, tabs, palette, help), the pure
+  view models (`view.rs`), the keymap (`keys.rs`), and `term/` — the
+  terminal model pair (decode: bytes → screen; encode: events → bytes) with
+  the live driver between them. The status language, theming.
 - **`bao`** — the binary (composition root); the only crate allowed `anyhow`
   (libraries use typed `thiserror` errors).
 

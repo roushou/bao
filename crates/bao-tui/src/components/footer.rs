@@ -1,6 +1,8 @@
 //! The bottom command line: contextual hints, the rm confirmation, prompts,
 //! and feedback. Owns the prompt and confirm state.
 
+use std::time::{Duration, Instant};
+
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     Frame,
@@ -10,13 +12,41 @@ use ratatui::{
     widgets::Paragraph,
 };
 
+use bao_core::types::SessionId;
+
 use crate::{
     action::Action,
-    components::Component,
+    components::{Component, Ctx, Focus},
     event::Event,
     keys::{Keymap, Scope},
-    state::{Ctx, Focus, Prompt, PromptAction},
 };
+
+/// Which pending prompt a submitted input resolves to.
+#[derive(Debug, Clone)]
+pub enum PromptAction {
+    Create,
+    Rename(SessionId),
+}
+
+/// A pending text input.
+#[derive(Debug, Clone)]
+pub struct Prompt {
+    pub label: &'static str,
+    pub input: String,
+    pub action: PromptAction,
+}
+
+/// A transient action toast that fades after a few seconds.
+pub struct Toast {
+    pub text: String,
+    pub at: Instant,
+}
+
+impl Toast {
+    pub fn alive(&self, secs: u64) -> bool {
+        self.at.elapsed() < Duration::from_secs(secs)
+    }
+}
 
 pub struct Footer {
     prompt: Option<Prompt>,

@@ -1,5 +1,6 @@
 //! The quick-switch palette: a bordered overlay that resolves sessions and
-//! verbs from a query. Owns its query + selection.
+//! verbs from a query. Owns its query + selection — and [`PaletteEntry`],
+//! its own result vocabulary.
 
 use bao_core::types::SessionId;
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -13,10 +14,24 @@ use ratatui::{
 
 use crate::{
     action::Action,
-    components::{Component, pad_trunc, rule},
+    components::{Component, Ctx, pad_trunc, rule},
     event::Event,
-    state::{Ctx, PaletteEntry, Row},
+    view::Row,
 };
+
+/// One row the palette can act on.
+#[derive(Debug, Clone)]
+pub enum PaletteEntry {
+    Session(SessionId),
+    Create {
+        name: Option<String>,
+    },
+    Action {
+        verb: &'static str,
+        glyph: char,
+        id: SessionId,
+    },
+}
 
 pub struct Palette {
     open: bool,

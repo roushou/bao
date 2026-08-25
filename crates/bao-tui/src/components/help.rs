@@ -10,9 +10,8 @@ use ratatui::{
 
 use crate::{
     action::Action,
-    components::{Component, pad_trunc},
+    components::{Component, Ctx, pad_trunc},
     event::Event,
-    state::Ctx,
 };
 
 pub struct Help {
