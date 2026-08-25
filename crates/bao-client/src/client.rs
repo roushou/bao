@@ -162,10 +162,10 @@ impl Conn {
                         }
                     }
                     Ok(Some(f)) => {
-                        if let Some(ev) = host_event(f) {
-                            if reader_events_tx.send(ev).is_err() {
-                                break;
-                            }
+                        if let Some(ev) = host_event(f)
+                            && reader_events_tx.send(ev).is_err()
+                        {
+                            break;
                         }
                     }
                     Ok(None) => {
@@ -584,10 +584,10 @@ fn spawn_channel_reader(events_tx: &mpsc::UnboundedSender<HostEvent>, chan: Chan
         loop {
             match reader.read().await {
                 Ok(Some(frame)) => {
-                    if let Some(ev) = host_event(frame) {
-                        if events_tx.send(ev).is_err() {
-                            return;
-                        }
+                    if let Some(ev) = host_event(frame)
+                        && events_tx.send(ev).is_err()
+                    {
+                        return;
                     }
                 }
                 Ok(None) => {

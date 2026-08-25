@@ -86,15 +86,15 @@ impl Component for Footer {
     fn handle_events(&mut self, event: Option<&Event>, ctx: &Ctx) -> Action {
         // Remove confirmation.
         if self.confirm_rm {
-            if let Some(Event::Key(key)) = event {
-                if key.code == KeyCode::Char('y') {
-                    self.confirm_rm = false;
-                    return ctx
-                        .selection
-                        .clone()
-                        .map(Action::Rm)
-                        .unwrap_or(Action::Noop);
-                }
+            if let Some(Event::Key(key)) = event
+                && key.code == KeyCode::Char('y')
+            {
+                self.confirm_rm = false;
+                return ctx
+                    .selection
+                    .clone()
+                    .map(Action::Rm)
+                    .unwrap_or(Action::Noop);
             }
             self.confirm_rm = false;
             return Action::Noop;

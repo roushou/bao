@@ -204,10 +204,10 @@ impl Component for TerminalPane {
     // crosses a boundary, and it does so as `Action::StepOut`.
 
     fn render(&mut self, f: &mut Frame, ctx: &Ctx, rect: Rect) {
-        if let Some(sid) = self.active.clone() {
-            if let Some(t) = self.terminals.get(&sid) {
-                render_terminal(f, rect, ctx.focus == Focus::Terminal, t);
-            }
+        if let Some(sid) = self.active.clone()
+            && let Some(t) = self.terminals.get(&sid)
+        {
+            render_terminal(f, rect, ctx.focus == Focus::Terminal, t);
         }
     }
 }

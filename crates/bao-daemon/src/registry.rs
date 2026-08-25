@@ -48,31 +48,30 @@ impl Registry {
         let mut folded = false;
 
         let ws_path = home_root.join("workspaces.json");
-        if let Ok(raw) = std::fs::read_to_string(&ws_path) {
-            if let Ok(list) = serde_json::from_str::<Vec<LegacyWorkspace>>(&raw) {
-                for w in list {
-                    if let Ok(e) = RegistryEntry::workspace(&w.alias, &w.root) {
-                        self.entries.push(e);
-                        folded = true;
-                    }
+        if let Ok(raw) = std::fs::read_to_string(&ws_path)
+            && let Ok(list) = serde_json::from_str::<Vec<LegacyWorkspace>>(&raw)
+        {
+            for w in list {
+                if let Ok(e) = RegistryEntry::workspace(&w.alias, &w.root) {
+                    self.entries.push(e);
+                    folded = true;
                 }
             }
         }
 
         let pf_path = home_root.join("profiles.json");
-        if let Ok(raw) = std::fs::read_to_string(&pf_path) {
-            if let Some(obj) = serde_json::from_str::<serde_json::Value>(&raw)
+        if let Ok(raw) = std::fs::read_to_string(&pf_path)
+            && let Some(obj) = serde_json::from_str::<serde_json::Value>(&raw)
                 .ok()
                 .and_then(|v| v.as_object().cloned())
-            {
-                for (name, val) in obj {
-                    let Some(cmd) = val.as_str() else { continue };
-                    // Unparseable legacy commands are skipped honestly, not guessed.
-                    let argv: Vec<String> = cmd.split_whitespace().map(String::from).collect();
-                    if let Ok(e) = RegistryEntry::profile(&name, argv) {
-                        self.entries.push(e);
-                        folded = true;
-                    }
+        {
+            for (name, val) in obj {
+                let Some(cmd) = val.as_str() else { continue };
+                // Unparseable legacy commands are skipped honestly, not guessed.
+                let argv: Vec<String> = cmd.split_whitespace().map(String::from).collect();
+                if let Ok(e) = RegistryEntry::profile(&name, argv) {
+                    self.entries.push(e);
+                    folded = true;
                 }
             }
         }

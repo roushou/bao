@@ -877,11 +877,11 @@ mod tests {
                 .await
                 .expect("watch stream must not stall")
                 .expect("watch channel closed early");
-            if let FromHost::State { meta: m, .. } = frame {
-                if m.id == meta.id {
-                    seen = true;
-                    break;
-                }
+            if let FromHost::State { meta: m, .. } = frame
+                && m.id == meta.id
+            {
+                seen = true;
+                break;
             }
         }
         assert!(seen, "launched session never appeared on the watch channel");

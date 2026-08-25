@@ -265,10 +265,9 @@ async fn launch_detach_works_without_a_terminal() {
         if let Some(s) = sessions
             .iter()
             .find(|s| s.id.as_str() == sid && s.name.as_deref() == Some("detached"))
+            && s.status == bao_core::types::Status::Running
         {
-            if s.status == bao_core::types::Status::Running {
-                break s.clone();
-            }
+            break s.clone();
         }
         assert!(
             std::time::Instant::now() < deadline,

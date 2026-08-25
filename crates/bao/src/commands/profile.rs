@@ -52,12 +52,12 @@ impl ProfileCmd {
             }
             ProfileSubCmd::Rm { name } => {
                 let entries = conn.registry_list().await?;
-                if let Some(e) = entries.iter().find(|e| e.alias == *name) {
-                    if !e.is_profile() {
-                        anyhow::bail!(
-                            "'{name}' is a workspace, not a profile — see `bao workspace rm`"
-                        );
-                    }
+                if let Some(e) = entries.iter().find(|e| e.alias == *name)
+                    && !e.is_profile()
+                {
+                    anyhow::bail!(
+                        "'{name}' is a workspace, not a profile — see `bao workspace rm`"
+                    );
                 }
                 conn.registry_remove(name).await?;
                 println!("forgot '{name}'");
