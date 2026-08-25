@@ -184,9 +184,15 @@ impl Terminal {
         if self.ended.is_some() {
             return Outcome::StepOut;
         }
-        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        // Step-out is the table's one exception to passthrough — resolved
+        // here so the attached view and the overview share it.
+        if crate::keys::Keymap::defaults()
+            .resolve(crate::keys::Scope::Terminal, k)
+            .is_some()
+        {
+            return Outcome::StepOut;
+        }
         match k.code {
-            KeyCode::Char('q') if ctrl => Outcome::StepOut,
             KeyCode::PageUp => {
                 self.scroll += 12;
                 self.emu.set_scroll(self.scroll);

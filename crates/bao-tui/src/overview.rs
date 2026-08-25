@@ -19,6 +19,7 @@ use crate::{
     components::{Component, Components},
     error::Error,
     event::Event,
+    keys,
     state::{Ctx, Focus, Group, PromptAction, Row, Toast, sort_rows},
     terminal::Terminal,
 };
@@ -137,6 +138,8 @@ impl Overview {
     async fn dispatch_key(&mut self, key: crossterm::event::KeyEvent) {
         let event = Event::Key(key);
         let tabs = self.tab_views();
+        // Routing order is the panes contract: modal overlays, then text
+        // entry, then the keymap for whatever scope owns the keyboard.
         let action = {
             let ctx = make_ctx(
                 &self.rows,
@@ -162,12 +165,19 @@ impl Overview {
                 self.components.footer.handle_events(Some(&event), &ctx)
             } else if self.components.rail.filtering() {
                 self.components.rail.handle_events(Some(&event), &ctx)
-            } else if self.focus == Focus::Terminal {
-                self.components
-                    .terminal_pane
-                    .handle_events(Some(&event), &ctx)
             } else {
-                self.components.rail.handle_events(Some(&event), &ctx)
+                let scope = if self.focus == Focus::Terminal {
+                    keys::Scope::Terminal
+                } else {
+                    keys::Scope::Rail
+                };
+                match keys::Keymap::defaults().resolve(scope, &key) {
+                    Some(action) => action,
+                    // Not a binding: the terminal forwards raw bytes; the
+                    // rail has nothing to do with it.
+                    None if scope == keys::Scope::Terminal => Action::TerminalKey(key),
+                    None => Action::Noop,
+                }
             }
         };
         self.apply(action).await;
@@ -182,6 +192,16 @@ impl Overview {
         match action {
             Action::Noop => {}
             Action::Quit => self.should_quit = true,
+            Action::MoveUp
+            | Action::MoveDown
+            | Action::PageUp
+            | Action::PageDown
+            | Action::First
+            | Action::Last => {
+                let a = action;
+                self.components.rail.apply_cursor(&self.rows, &a);
+            }
+            Action::StartFilter => self.components.rail.start_filter(),
             Action::Open => {
                 self.focus = Focus::Terminal;
                 self.components.terminal_pane.set_fullscreen(true);
@@ -195,6 +215,10 @@ impl Overview {
                 if let Some(sid) = self.components.rail.selection().cloned() {
                     self.ensure_terminal(&sid).await;
                 }
+            }
+            Action::StepOut => {
+                self.focus = Focus::Rail;
+                self.components.terminal_pane.set_fullscreen(false);
             }
             Action::Resume => self.resume_selected().await,
             Action::Stop => self.stop_selected().await,

@@ -6,6 +6,13 @@ time, and each pane defines its own keybindings so they can never overlap.
 This is the tmux/neovim model — and it is what lets each pane grow more
 powerful without the others losing keys.
 
+The bindings themselves live in one declarative table (`bao-tui/src/keys.rs`):
+key → action → label → help group. Routing resolves against that table; help
+and footer hints render from it, and its tests assert no two bindings in a
+scope share a key — this section's "never overlap" is an executed assertion,
+not prose. Text entry (filter input, prompts) and raw terminal passthrough
+deliberately stay outside the table.
+
 ## 1. The model
 
 ```

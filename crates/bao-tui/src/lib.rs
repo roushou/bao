@@ -9,6 +9,7 @@ mod action;
 mod components;
 mod emu;
 mod event;
+mod keys;
 mod overview;
 mod signal;
 mod state;

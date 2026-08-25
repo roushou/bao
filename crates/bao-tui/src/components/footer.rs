@@ -14,10 +14,9 @@ use crate::{
     action::Action,
     components::Component,
     event::Event,
+    keys::{Keymap, Scope},
     state::{Ctx, Focus, Prompt, PromptAction},
 };
-
-const HINTS: &str = "↑/↓ move · Enter fullscreen · Tab type · ⌃p jump · ? keys";
 
 pub struct Footer {
     prompt: Option<Prompt>,
@@ -131,6 +130,38 @@ impl Footer {
         }
     }
 
+    /// The browse hints, derived from the keymap so a rebind rewrites the
+    /// footer. Pairs collapse ("j/k move").
+    fn hints(km: &Keymap) -> String {
+        let k = |a: &Action| km.display_of(Scope::Rail, a);
+        let pair = |a: &Action, b: &Action, label: &str| match (k(a), k(b)) {
+            (Some(x), Some(y)) if x == y => format!("{x} {label}"),
+            (Some(x), Some(y)) if x.to_lowercase() == y.to_lowercase() => {
+                format!("{x}/{y} {label}")
+            }
+            _ => String::new(),
+        };
+        let mut parts = vec![pair(&Action::MoveUp, &Action::MoveDown, "move")];
+        if let Some(key) = k(&Action::Open) {
+            parts.push(format!("{key} fullscreen"));
+        }
+        if let Some(key) = k(&Action::FocusTerminal) {
+            parts.push(format!("{key} type"));
+        }
+        if let Some(key) = k(&Action::OpenPalette) {
+            parts.push(format!("{key} jump"));
+        }
+        if let Some(key) = k(&Action::OpenHelp) {
+            parts.push(format!("{key} keys"));
+        }
+        parts
+            .iter()
+            .filter(|p| !p.is_empty())
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" · ")
+    }
+
     fn line(&self, ctx: &Ctx, w: u16) -> Line<'static> {
         if ctx.filtering {
             let n = ctx.rows.len();
@@ -199,7 +230,10 @@ impl Footer {
             ),
         };
 
-        let mut spans = vec![Span::styled(HINTS, Style::default().fg(Color::DarkGray))];
+        let mut spans = vec![Span::styled(
+            Self::hints(Keymap::defaults()),
+            Style::default().fg(Color::DarkGray),
+        )];
         if !confirm.is_empty() {
             spans.push(Span::styled(confirm, Style::default().fg(Color::Yellow)));
         }

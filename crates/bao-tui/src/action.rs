@@ -11,6 +11,16 @@ pub enum Action {
     Open,
     /// Focus the selected session's terminal, docked.
     FocusTerminal,
+    /// Sidebar cursor movement — routed from the keymap, applied by the rail.
+    MoveUp,
+    MoveDown,
+    PageUp,
+    PageDown,
+    First,
+    Last,
+    StartFilter,
+    /// Leave the terminal: back to the rail (`⌃q`, or any key when ended).
+    StepOut,
     /// Verbs against the selected session.
     Resume,
     Stop,

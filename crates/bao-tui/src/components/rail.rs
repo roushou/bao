@@ -116,92 +116,58 @@ impl Rail {
         self.selection = Some(ids[new].clone());
     }
 
-    fn select_first(&mut self, rows: &[Row]) {
-        self.selection = self.visible_ids(rows).into_iter().next();
+    /// Apply a routed cursor [`Action`]. The keymap owns key→action; the
+    /// rail only owns what the cursor does.
+    pub fn apply_cursor(&mut self, rows: &[Row], action: &Action) {
+        match action {
+            Action::MoveUp => self.move_selection(rows, -1),
+            Action::MoveDown => self.move_selection(rows, 1),
+            Action::PageUp => self.move_selection(rows, -10),
+            Action::PageDown => self.move_selection(rows, 10),
+            Action::First => self.selection = self.visible_ids(rows).into_iter().next(),
+            Action::Last => self.selection = self.visible_ids(rows).into_iter().last(),
+            _ => {}
+        }
     }
 
-    fn select_last(&mut self, rows: &[Row]) {
-        self.selection = self.visible_ids(rows).into_iter().last();
+    pub fn start_filter(&mut self) {
+        self.filtering = true;
     }
 }
 
 impl Component for Rail {
     fn handle_events(&mut self, event: Option<&Event>, ctx: &Ctx) -> Action {
-        // The filter input owns the keyboard when active.
-        if self.filtering {
-            let Some(Event::Key(key)) = event else {
-                return Action::Noop;
-            };
-            let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-            return match key.code {
-                KeyCode::Esc => {
-                    self.filter.clear();
-                    self.filtering = false;
-                    self.reconcile(ctx.rows);
-                    Action::Noop
-                }
-                KeyCode::Enter => {
-                    self.filtering = false;
-                    self.reconcile(ctx.rows);
-                    Action::Noop
-                }
-                KeyCode::Backspace => {
-                    self.filter.pop();
-                    self.reconcile(ctx.rows);
-                    Action::Noop
-                }
-                KeyCode::Char(c) if !ctrl => {
-                    self.filter.push(c);
-                    self.reconcile(ctx.rows);
-                    Action::Noop
-                }
-                _ => Action::Noop,
-            };
+        // Only text entry lives here. Command keys resolve through the
+        // keymap in the overview — the table is the single source of truth.
+        if !self.filtering {
+            return Action::Noop;
         }
-
         let Some(Event::Key(key)) = event else {
             return Action::Noop;
         };
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.move_selection(ctx.rows, -1);
+            KeyCode::Esc => {
+                self.filter.clear();
+                self.filtering = false;
+                self.reconcile(ctx.rows);
                 Action::Noop
             }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.move_selection(ctx.rows, 1);
+            KeyCode::Enter => {
+                self.filtering = false;
+                self.reconcile(ctx.rows);
                 Action::Noop
             }
-            KeyCode::PageUp => {
-                self.move_selection(ctx.rows, -10);
+            KeyCode::Backspace => {
+                self.filter.pop();
+                self.reconcile(ctx.rows);
                 Action::Noop
             }
-            KeyCode::PageDown => {
-                self.move_selection(ctx.rows, 10);
+            KeyCode::Char(c) if !ctrl => {
+                self.filter.push(c);
+                self.reconcile(ctx.rows);
                 Action::Noop
             }
-            KeyCode::Char('g') => {
-                self.select_first(ctx.rows);
-                Action::Noop
-            }
-            KeyCode::Char('G') => {
-                self.select_last(ctx.rows);
-                Action::Noop
-            }
-            KeyCode::Char('/') => {
-                self.filtering = true;
-                Action::Noop
-            }
-            KeyCode::Tab => Action::FocusTerminal,
-            KeyCode::Enter => Action::Open,
-            KeyCode::Char('?') => Action::OpenHelp,
-            KeyCode::Char('p') if ctrl => Action::OpenPalette,
-            KeyCode::Char('q') if ctrl => Action::Quit,
-            KeyCode::Char('r') => Action::Resume,
-            KeyCode::Char('s') => Action::Stop,
-            KeyCode::Char('d') => Action::Remove,
-            KeyCode::Char('c') => Action::Create,
-            KeyCode::Char('n') => Action::Rename,
             _ => Action::Noop,
         }
     }
