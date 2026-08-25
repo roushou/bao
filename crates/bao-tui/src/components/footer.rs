@@ -162,7 +162,7 @@ impl Footer {
             .join(" · ")
     }
 
-    fn line(&self, ctx: &Ctx, w: u16) -> Line<'static> {
+    fn line<'a>(&self, ctx: &Ctx<'a>, w: u16) -> Line<'a> {
         if ctx.filtering {
             let n = ctx.rows.len();
             let label = if ctx.filter.is_empty() {
@@ -222,12 +222,9 @@ impl Footer {
             ));
         }
 
-        let feedback = match &ctx.toast {
+        let feedback = match ctx.toast {
             Some(m) => Span::styled(format!("» {m}"), Style::default().fg(Color::LightBlue)),
-            None => Span::styled(
-                ctx.status_line.clone(),
-                Style::default().fg(Color::DarkGray),
-            ),
+            None => Span::styled(ctx.status_line, Style::default().fg(Color::DarkGray)),
         };
 
         let mut spans = vec![Span::styled(

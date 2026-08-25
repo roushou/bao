@@ -7,13 +7,12 @@ pub mod error;
 
 mod action;
 mod components;
-mod emu;
 mod event;
-mod input;
 mod keys;
 mod overview;
 mod signal;
 mod state;
+mod term;
 mod terminal;
 mod theme;
 mod tui;

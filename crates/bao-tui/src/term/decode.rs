@@ -9,16 +9,7 @@ use ratatui::{
 
 const SCROLLBACK: usize = 10_000;
 
-/// Terminal modes the harness set on its output stream (DECSET/DECRST).
-/// The input encoder honors these — state transmitted by the harness,
-/// never guessed by us.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct Modes {
-    /// Application cursor keys (DECCKM, `?1`): arrows/Home/End send SS3.
-    pub app_cursor: bool,
-    /// Bracketed paste (`?2004`): pastes are wrapped in `ESC [ 200 ~ …`.
-    pub bracketed_paste: bool,
-}
+use super::Modes;
 
 /// Scan a raw output chunk for private mode set/reset and update `modes`.
 /// Recognizes `ESC [ ? <params> h/l`; combined parameters (e.g.

@@ -1,5 +1,5 @@
 //! The keyboard side of the terminal model: crossterm events → the exact
-//! bytes a legacy xterm would have sent. The mirror of [`crate::emu`] (which
+//! bytes a legacy xterm would have sent. The mirror of [`super::decode`] (which
 //! decodes PTY bytes → screen); the two meet over the *modes* the harness
 //! itself set on its output stream — application cursor keys (DECCKM) and
 //! bracketed paste — which we honor rather than guess.
@@ -10,7 +10,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::emu::Modes;
+use super::Modes;
 
 /// Legacy encodings for non-character keys, normal (cursor) mode. Pure data,
 /// auditable against any xterm reference.
@@ -49,12 +49,12 @@ const NAMED_NORMAL_CURSORS: &[(KeyCode, &[u8])] = &[
 /// The keyboard encoder for one session, reading the modes its emulator
 /// observed. Cheap to construct; holds nothing but the modes reference.
 #[derive(Debug, Clone, Copy)]
-pub struct Encoder<'a> {
-    modes: &'a Modes,
+pub struct Encoder {
+    modes: Modes,
 }
 
-impl<'a> Encoder<'a> {
-    pub fn new(modes: &'a Modes) -> Self {
+impl Encoder {
+    pub fn new(modes: Modes) -> Self {
         Encoder { modes }
     }
 
@@ -129,7 +129,7 @@ mod tests {
         KeyEvent::new(code, mods)
     }
 
-    fn enc_with(modes: &Modes) -> Encoder<'_> {
+    fn enc(modes: Modes) -> Encoder {
         Encoder::new(modes)
     }
 
@@ -137,15 +137,15 @@ mod tests {
     fn characters_pass_through_as_utf8() {
         let m = Modes::default();
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Char('a'), KeyModifiers::NONE)),
+            enc(m).key(&ev(KeyCode::Char('a'), KeyModifiers::NONE)),
             Some(b"a".to_vec())
         );
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Char('é'), KeyModifiers::NONE)),
+            enc(m).key(&ev(KeyCode::Char('é'), KeyModifiers::NONE)),
             Some("é".as_bytes().to_vec())
         );
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Char('A'), KeyModifiers::SHIFT)),
+            enc(m).key(&ev(KeyCode::Char('A'), KeyModifiers::SHIFT)),
             Some(b"A".to_vec())
         );
     }
@@ -155,18 +155,18 @@ mod tests {
         let m = Modes::default();
         for (i, c) in ('a'..='z').enumerate() {
             assert_eq!(
-                enc_with(&m).key(&ev(KeyCode::Char(c), KeyModifiers::CONTROL)),
+                enc(m).key(&ev(KeyCode::Char(c), KeyModifiers::CONTROL)),
                 Some(vec![i as u8 + 1]),
                 "ctrl+{c}"
             );
         }
         // Uppercase normalizes; non-letters have no legacy encoding.
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Char('C'), KeyModifiers::CONTROL)),
+            enc(m).key(&ev(KeyCode::Char('C'), KeyModifiers::CONTROL)),
             Some(vec![3])
         );
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Char('2'), KeyModifiers::CONTROL)),
+            enc(m).key(&ev(KeyCode::Char('2'), KeyModifiers::CONTROL)),
             None
         );
     }
@@ -175,7 +175,7 @@ mod tests {
     fn meta_prefixes_esc() {
         let m = Modes::default();
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Char('x'), KeyModifiers::ALT)),
+            enc(m).key(&ev(KeyCode::Char('x'), KeyModifiers::ALT)),
             Some(b"\x1bx".to_vec())
         );
     }
@@ -184,22 +184,19 @@ mod tests {
     fn named_keys_in_normal_mode() {
         let m = Modes::default();
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Enter, KeyModifiers::NONE)),
+            enc(m).key(&ev(KeyCode::Enter, KeyModifiers::NONE)),
             Some(b"\r".to_vec())
         );
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Up, KeyModifiers::NONE)),
+            enc(m).key(&ev(KeyCode::Up, KeyModifiers::NONE)),
             Some(b"\x1b[A".to_vec())
         );
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Delete, KeyModifiers::NONE)),
+            enc(m).key(&ev(KeyCode::Delete, KeyModifiers::NONE)),
             Some(b"\x1b[3~".to_vec())
         );
         // Not a key a terminal sends.
-        assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::F(5), KeyModifiers::NONE)),
-            None
-        );
+        assert_eq!(enc(m).key(&ev(KeyCode::F(5), KeyModifiers::NONE)), None);
     }
 
     #[test]
@@ -209,20 +206,20 @@ mod tests {
             bracketed_paste: false,
         };
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Up, KeyModifiers::NONE)),
+            enc(m).key(&ev(KeyCode::Up, KeyModifiers::NONE)),
             Some(b"\x1bOA".to_vec())
         );
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Home, KeyModifiers::NONE)),
+            enc(m).key(&ev(KeyCode::Home, KeyModifiers::NONE)),
             Some(b"\x1bOH".to_vec())
         );
         // Keys the mode doesn't touch keep their encoding.
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Enter, KeyModifiers::NONE)),
+            enc(m).key(&ev(KeyCode::Enter, KeyModifiers::NONE)),
             Some(b"\r".to_vec())
         );
         assert_eq!(
-            enc_with(&m).key(&ev(KeyCode::Delete, KeyModifiers::NONE)),
+            enc(m).key(&ev(KeyCode::Delete, KeyModifiers::NONE)),
             Some(b"\x1b[3~".to_vec())
         );
     }
@@ -230,11 +227,11 @@ mod tests {
     #[test]
     fn paste_wraps_only_when_bracketed() {
         let off = Modes::default();
-        assert_eq!(enc_with(&off).paste("hi\nthere"), b"hi\nthere".to_vec());
+        assert_eq!(enc(off).paste("hi\nthere"), b"hi\nthere".to_vec());
         let on = Modes {
             app_cursor: false,
             bracketed_paste: true,
         };
-        assert_eq!(enc_with(&on).paste("hi"), b"\x1b[200~hi\x1b[201~".to_vec());
+        assert_eq!(enc(on).paste("hi"), b"\x1b[200~hi\x1b[201~".to_vec());
     }
 }

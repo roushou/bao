@@ -146,22 +146,33 @@ impl Overview {
         // Routing order is the panes contract: modal overlays, then text
         // entry, then the keymap for whatever scope owns the keyboard.
         let action = {
-            let ctx = make_ctx(
-                &self.rows,
-                &self.host,
-                self.focus,
-                self.components.rail.selection().cloned(),
-                &tabs,
-                self.components.rail.filter().to_string(),
-                self.components.rail.filtering(),
-                self.status_line.clone(),
-                self.flash
+            // Destructured so the snapshot's borrows (rows, host, status_line,
+            // flash) are visibly disjoint from the components mutated below.
+            let Self {
+                rows,
+                host,
+                focus,
+                status_line,
+                flash,
+                components,
+                ..
+            } = self;
+            let ctx = Ctx {
+                rows,
+                host,
+                focus: *focus,
+                selection: components.rail.selection().cloned(),
+                tabs: &tabs,
+                filter: components.rail.filter().to_string(),
+                filtering: components.rail.filtering(),
+                status_line,
+                toast: flash
                     .as_ref()
                     .filter(|t| t.alive(4))
-                    .map(|t| t.text.clone()),
-                self.components.help.is_open(),
-                self.components.palette.is_open(),
-            );
+                    .map(|t| t.text.as_str()),
+                help_open: components.help.is_open(),
+                palette_open: components.palette.is_open(),
+            };
             if self.components.help.is_open() {
                 self.components.help.handle_events(Some(&event), &ctx)
             } else if self.components.palette.is_open() {
@@ -251,25 +262,34 @@ impl Overview {
         }
     }
 
-    fn render(&mut self, f: &mut Frame, cols: u16, rows: u16) {
+    fn render(&mut self, f: &mut Frame, cols: u16, height: u16) {
         let tabs = self.tab_views();
-        let ctx = make_ctx(
-            &self.rows,
-            &self.host,
-            self.focus,
-            self.components.rail.selection().cloned(),
-            &tabs,
-            self.components.rail.filter().to_string(),
-            self.components.rail.filtering(),
-            self.status_line.clone(),
-            self.flash
+        let Self {
+            rows,
+            host,
+            focus,
+            status_line,
+            flash,
+            components,
+            ..
+        } = self;
+        let ctx = Ctx {
+            rows,
+            host,
+            focus: *focus,
+            selection: components.rail.selection().cloned(),
+            tabs: &tabs,
+            filter: components.rail.filter().to_string(),
+            filtering: components.rail.filtering(),
+            status_line,
+            toast: flash
                 .as_ref()
                 .filter(|t| t.alive(4))
-                .map(|t| t.text.clone()),
-            self.components.help.is_open(),
-            self.components.palette.is_open(),
-        );
-        let l = layout(cols, rows);
+                .map(|t| t.text.as_str()),
+            help_open: components.help.is_open(),
+            palette_open: components.palette.is_open(),
+        };
+        let l = layout(cols, height);
 
         self.components.header.render(f, &ctx, l.header);
         f.render_widget(
@@ -280,13 +300,13 @@ impl Overview {
 
         if self.components.palette.is_open() {
             render_body(&mut self.components, f, &ctx, &l);
-            let r = overlay(cols, rows, 72, 6, 18);
+            let r = overlay(cols, height, 72, 6, 18);
             self.components.palette.render(f, &ctx, r);
         } else if self.components.help.is_open() {
             render_body(&mut self.components, f, &ctx, &l);
-            let r = overlay(cols, rows, 66, 8, 20);
+            let r = overlay(cols, height, 66, 8, 20);
             self.components.help.render(f, &ctx, r);
-        } else if self.rows.is_empty() {
+        } else if ctx.rows.is_empty() {
             f.render_widget(
                 Paragraph::new(empty_lines(l.body.width, l.body.height)),
                 l.body,
@@ -781,35 +801,6 @@ fn render_body(components: &mut Components, f: &mut Frame, ctx: &Ctx, l: &Layout
 
 /// Build the shared read-only context, borrowing only the two fields that
 /// stay live (rows + host) so components can be borrowed mutably alongside it.
-#[allow(clippy::too_many_arguments)]
-fn make_ctx<'a>(
-    rows: &'a [Row],
-    host: &'a str,
-    focus: Focus,
-    selection: Option<SessionId>,
-    tabs: &'a [crate::state::TabView],
-    filter: String,
-    filtering: bool,
-    status_line: String,
-    toast: Option<String>,
-    help_open: bool,
-    palette_open: bool,
-) -> Ctx<'a> {
-    Ctx {
-        rows,
-        host,
-        focus,
-        selection,
-        tabs,
-        filter,
-        filtering,
-        status_line,
-        toast,
-        help_open,
-        palette_open,
-    }
-}
-
 fn empty_lines(w: u16, h: u16) -> Vec<ratatui::text::Line<'static>> {
     use ratatui::{
         style::{Color, Modifier, Style},

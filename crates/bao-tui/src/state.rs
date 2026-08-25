@@ -276,7 +276,9 @@ pub enum PaletteEntry {
     },
 }
 
-/// Shared read-only state handed to components during render.
+/// Shared read-only state handed to components during render. Borrowed from
+/// disjoint `Overview` fields so components can be driven mutably alongside
+/// it — nothing here is cloned per frame except the rail-owned bits.
 pub struct Ctx<'a> {
     pub rows: &'a [Row],
     pub host: &'a str,
@@ -287,8 +289,8 @@ pub struct Ctx<'a> {
     pub tabs: &'a [TabView],
     pub filter: String,
     pub filtering: bool,
-    pub status_line: String,
-    pub toast: Option<String>,
+    pub status_line: &'a str,
+    pub toast: Option<&'a str>,
     pub help_open: bool,
     pub palette_open: bool,
 }

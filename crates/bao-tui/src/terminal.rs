@@ -23,7 +23,11 @@ use ratatui::{
 };
 use tokio::sync::mpsc;
 
-use crate::{emu::Emu, error::Error, signal};
+use crate::{
+    error::Error,
+    signal,
+    term::{Emu, Encoder},
+};
 
 /// What one keypress means to the terminal model — decided purely (no I/O,
 /// no connection), applied by the caller at the shell. `StepOut` crosses a
@@ -178,7 +182,7 @@ impl Terminal {
             }
             _ => {
                 let modes = self.emu.modes();
-                match crate::input::Encoder::new(&modes).key(k) {
+                match Encoder::new(modes).key(k) {
                     Some(bytes) => Keypress::Send(bytes),
                     None => Keypress::Ignore,
                 }
@@ -190,7 +194,7 @@ impl Terminal {
     /// iff it asked for it). Pure; the caller sends the bytes.
     pub fn paste_bytes(&self, text: &str) -> Vec<u8> {
         let modes = self.emu.modes();
-        crate::input::Encoder::new(&modes).paste(text)
+        Encoder::new(modes).paste(text)
     }
 
     /// Resize the emulator's viewport. Returns the new size when it actually
