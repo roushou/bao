@@ -161,4 +161,5 @@ spectacle · resilience of state. (Full text: `docs/03-principles.md`.)
   connection), `event-sourcing.md` (the session lifecycle FSM + backgrounded
   launch saga), `state-machines.md` (the FSM convention), `crate-topology.md`
   (the crate/dependency boundaries), `workspaces.md` (workspaces — the targets
-  sessions are aimed at).
+  sessions are aimed at), `registry.md` (the one store of named things
+  launches consume).

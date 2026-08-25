@@ -28,10 +28,12 @@ Bao supervises — exactly one per Bao session.
 
 | Concept                       | Wire / code                                                 | Product / docs           |
 | ----------------------------- | ----------------------------------------------------------- | ------------------------ |
+| Named things launches consume | `<home>/registry.json`, `Rpc::Registry*`, `RegistryEntry`   | the registry             |
+| A launch target (named root)  | registry entry (`EntryKind::Workspace`), `bao workspace …`  | workspace                |
 | The running unit of work      | session (`SessionId`, `SessionMeta`)                        | session                  |
 | The tool inside it            | `Harness` trait (daemon adapter: `Pi`, `Fallback`)          | harness                  |
 | The command the session runs  | `SessionMeta.command` (display) + `SessionMeta.args` (argv) | command                  |
-| A named launch preset (alias) | `profiles.json`, `bao profiles`, `--profile`                | profile                  |
+| A named launch preset (alias) | registry entry (`EntryKind::Profile`), `--profile` | profile                  |
 | The model inside the harness  | —                                                           | model (invisible to Bao) |
 
 ## Host vs daemon

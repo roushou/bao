@@ -9,7 +9,7 @@ mod daemon;
 mod info;
 mod launch;
 mod list;
-mod profiles;
+mod profile;
 mod rename;
 mod resume;
 mod rm;
@@ -17,17 +17,13 @@ mod stop;
 mod workspace;
 
 use std::{
-    io::IsTerminal,
-    os::unix::process::CommandExt,
-    path::{Path, PathBuf},
-    str::FromStr,
-    time::Duration,
+    io::IsTerminal, os::unix::process::CommandExt, path::PathBuf, str::FromStr, time::Duration,
 };
 
 use anyhow::Result;
 pub use attach::AttachCmd;
 use bao_client::Conn;
-use bao_core::types::{Command, SessionId, TerminalSize};
+use bao_core::types::{SessionId, TerminalSize};
 use bao_daemon::Home;
 use bao_transport::{Addr, DEFAULT_PORT};
 use clap::{Parser, Subcommand};
@@ -35,7 +31,7 @@ pub use daemon::DaemonCmd;
 pub use info::InfoCmd;
 pub use launch::LaunchCmd;
 pub use list::ListCmd;
-pub use profiles::ProfilesCmd;
+pub use profile::ProfileCmd;
 pub use rename::RenameCmd;
 pub use resume::ResumeCmd;
 pub use rm::RmCmd;
@@ -69,16 +65,14 @@ pub enum Cmd {
     Info(InfoCmd),
     Stop(StopCmd),
     Rm(RmCmd),
-    Profiles(ProfilesCmd),
+    Profile(ProfileCmd),
     Workspace(WorkspaceCmd),
 }
 
-/// Shared invocation state: resolved home, daemon address, and the loaded
-/// profiles. Computed once, passed to every command's `run`.
+/// Shared invocation state: resolved home and daemon address. Computed once, passed to every command's `run`.
 pub struct Context {
     home: Home,
     addr: Addr,
-    profiles: ProfileMap,
 }
 
 /// Resolve the parsed CLI into invocation state. Borrowed (`&Cli`) because
@@ -93,11 +87,9 @@ impl From<&Cli> for Context {
             .port
             .or_else(|| std::env::var("BAO_PORT").ok().and_then(|p| p.parse().ok()))
             .unwrap_or(DEFAULT_PORT);
-        let profiles = ProfileMap::load(&root);
         Context {
             addr: Addr::local(port),
             home: Home::new(&root),
-            profiles,
         }
     }
 }
@@ -157,46 +149,6 @@ impl Context {
     }
 }
 
-/// Named launch profiles: name -> launch command. Built-in default is `pi`; a
-/// user-supplied `profiles.json` at the bao home overrides/adds entries.
-pub struct ProfileMap {
-    entries: Vec<(String, Command)>,
-}
-
-impl ProfileMap {
-    fn load(home: &Path) -> Self {
-        let mut entries = vec![("pi".to_string(), Command::parse("pi").unwrap())];
-        if let Ok(raw) = std::fs::read_to_string(home.join("profiles.json")) {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
-                if let Some(obj) = v.as_object() {
-                    for (k, val) in obj {
-                        if let Some(cmd) = val.as_str() {
-                            if let Ok(command) = Command::parse(cmd) {
-                                entries.push((k.clone(), command));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        ProfileMap { entries }
-    }
-
-    fn get(&self, name: &str) -> Option<&Command> {
-        self.entries.iter().find(|(n, _)| n == name).map(|(_, c)| c)
-    }
-
-    fn list(&self) -> Vec<(String, String)> {
-        let mut out: Vec<(String, String)> = self
-            .entries
-            .iter()
-            .map(|(n, c)| (n.clone(), c.display()))
-            .collect();
-        out.sort();
-        out
-    }
-}
-
 impl Cli {
     /// Resolve the invocation and route it to its command. With no command,
     /// `bao` opens the overview — the primary interface.
@@ -223,7 +175,7 @@ impl Cli {
             Some(Cmd::Info(c)) => c.run(&ctx).await,
             Some(Cmd::Stop(c)) => c.run(&ctx).await,
             Some(Cmd::Rm(c)) => c.run(&ctx).await,
-            Some(Cmd::Profiles(c)) => c.run(&ctx).await,
+            Some(Cmd::Profile(c)) => c.run(&ctx).await,
             Some(Cmd::Workspace(c)) => c.run(&ctx).await,
         }
     }

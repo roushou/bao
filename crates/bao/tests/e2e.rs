@@ -44,6 +44,8 @@ async fn two_clients_share_one_live_session() {
                 Some(Command::parse(cmd).unwrap()),
                 Some(scratch),
                 None,
+                None,
+                None,
                 TerminalSize {
                     cols: 120,
                     rows: 40,
@@ -120,6 +122,8 @@ async fn watch_receives_state_and_never_bytes() {
                 Some(Command::parse("bash -c 'echo STATE_HELLO; sleep 3'").unwrap()),
                 Some(scratch),
                 None,
+                None,
+                None,
                 TerminalSize {
                     cols: 120,
                     rows: 40,
@@ -182,6 +186,8 @@ async fn rename_updates_session_name() {
             .launch(
                 Some(Command::parse("bash -c 'echo RENAME_ME; sleep 3'").unwrap()),
                 Some(scratch),
+                None,
+                None,
                 Some("old".to_string()),
                 TerminalSize {
                     cols: 120,
@@ -344,6 +350,8 @@ async fn failed_backgrounded_launch_signals_gone_on_attach_stream() {
         .launch(
             Some(Command::parse("bash -c 'echo hi'").unwrap()),
             Some(scratch),
+            None,
+            None,
             Some("doomed".to_string()),
             TerminalSize {
                 cols: 120,

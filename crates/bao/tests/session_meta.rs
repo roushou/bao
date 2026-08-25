@@ -26,6 +26,8 @@ async fn list_meta_carries_activity_facts() {
                 .unwrap(),
             ),
             Some(scratch),
+            None,
+            None,
             Some("watcher".to_string()),
             TerminalSize {
                 cols: 120,

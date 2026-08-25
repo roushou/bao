@@ -11,6 +11,6 @@ pub mod alert;
 pub mod error;
 pub mod event;
 pub mod lifecycle;
+pub mod registry;
 pub mod sandbox;
 pub mod types;
-pub mod workspace;

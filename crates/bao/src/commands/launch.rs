@@ -45,19 +45,12 @@ impl LaunchCmd {
                 "`bao launch` needs a terminal — run it inside a real TTY (or use --detach)"
             );
         }
-        let command = match &self.profile {
-            Some(h) => ctx
-                .profiles
-                .get(h)
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("unknown profile '{h}' — see `bao profiles`"))?,
-            None => match &self.cmd {
-                Some(c) => Command::parse(c)?,
-                None => match std::env::var("BAO_HARNESS_COMMAND") {
-                    Ok(c) => Command::parse(&c)?,
-                    Err(_) => Command::parse("pi")?,
-                },
-            },
+        // The command is whatever was explicitly said here; `--profile` is
+        // sent as an alias and resolved host-side (explicit > profile > default).
+        let command = match (&self.cmd, std::env::var("BAO_HARNESS_COMMAND")) {
+            (Some(c), _) => Some(Command::parse(c)?),
+            (None, Ok(c)) => Some(Command::parse(&c)?),
+            (None, Err(_)) => None,
         };
         let dir = self
             .dir
@@ -74,13 +67,25 @@ impl LaunchCmd {
         let target = match &self.workspace {
             Some(ws) => Some(ws.clone()),
             None if !self.detach && std::io::stdin().is_terminal() => {
-                let workspaces = conn.workspace_list().await?;
-                match workspaces.as_slice() {
+                let entries = conn.registry_list().await?;
+                let listed: Vec<_> = entries
+                    .iter()
+                    .filter(|e| e.is_workspace())
+                    .cloned()
+                    .collect();
+                match listed.as_slice() {
                     [] => None,
                     listed => {
                         println!("aim at:");
                         for (i, w) in listed.iter().enumerate() {
-                            println!("  {}  {}  ({})", i + 1, w.alias, w.root.display());
+                            println!(
+                                "  {}  {}  ({})",
+                                i + 1,
+                                w.alias,
+                                w.root()
+                                    .map(|p| p.display().to_string())
+                                    .unwrap_or_default()
+                            );
                         }
                         print!("workspace [1-{}, or Enter for current dir]: ", listed.len());
                         use std::io::Write as _;
@@ -104,39 +109,29 @@ impl LaunchCmd {
             None => None,
         };
 
-        let meta = match &target {
-            Some(ws) => {
-                eprintln!("bao: launching `{command}` in workspace {ws}");
-                conn.launch_in(
-                    ws,
-                    Some(command),
-                    self.name.clone(),
-                    ctx.terminal_size(),
-                    SandboxSpec {
-                        isolation: self.isolation,
-                    },
-                )
-                .await?
-            }
-            None => {
-                eprintln!(
-                    "bao: launching `{command}` in {}",
-                    dir.as_ref()
-                        .map(|d| d.display().to_string())
-                        .unwrap_or_default()
-                );
-                conn.launch(
-                    Some(command),
-                    dir,
-                    self.name.clone(),
-                    ctx.terminal_size(),
-                    SandboxSpec {
-                        isolation: self.isolation,
-                    },
-                )
-                .await?
-            }
-        };
+        if let Some(ws) = &target {
+            eprintln!("bao: launching in workspace {ws}");
+        } else {
+            eprintln!(
+                "bao: launching in {}",
+                dir.as_ref()
+                    .map(|d| d.display().to_string())
+                    .unwrap_or_default()
+            );
+        }
+        let meta = conn
+            .launch(
+                command,
+                dir,
+                target.as_deref(),
+                self.profile.as_deref(),
+                self.name.clone(),
+                ctx.terminal_size(),
+                SandboxSpec {
+                    isolation: self.isolation,
+                },
+            )
+            .await?;
         let sid = meta.id.clone();
         if self.detach {
             println!("{sid}");

@@ -42,6 +42,10 @@ pub enum Error {
     Worktree(String),
     #[error("unknown workspace '{0}' — see `bao workspace list`")]
     UnknownWorkspace(String),
+    #[error("unknown profile '{0}' — see `bao profile list`")]
+    UnknownProfile(String),
+    #[error("unknown alias '{0}' — see `bao workspace list` / `bao profile list`")]
+    UnknownAlias(String),
     #[error("workspace '{0}' is already registered")]
     DuplicateWorkspace(String),
     #[error("bad workspace root '{0}': {1}")]
@@ -70,12 +74,14 @@ impl From<&Error> for WireError {
             Error::UnknownWorkspace(alias) => WireError::UnknownWorkspace {
                 alias: alias.clone(),
             },
+            Error::UnknownProfile(name) => WireError::UnknownProfile { name: name.clone() },
             // User-correctable: they asked for something the daemon can't or
             // won't do given the current state.
             Error::ResumeNotInterrupted(_)
             | Error::NotAGitRepo
             | Error::TransportUnsupported(_)
             | Error::DuplicateWorkspace(_)
+            | Error::UnknownAlias(_)
             | Error::BadWorkspacePath(_, _)
             | Error::WorkspacePathTaken(_, _) => WireError::BadRequest {
                 message: e.to_string(),

@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use bao_client::{Conn, Error};
 use bao_core::{
+    registry::RegistryEntry,
     sandbox::{SandboxKind, SandboxSpec},
     types::{Command, TerminalSize},
 };
@@ -39,16 +40,21 @@ async fn workspace_targeted_launch_runs_at_workspace_root() {
         let mut conn = Conn::connect(&addr).await.unwrap();
 
         // Register: alias → root (the daemon canonicalizes the path).
-        let ws = conn.workspace_add("app", &scratch.join("app")).await.unwrap();
-        assert_eq!(ws.alias, "app");
-        assert!(ws.root.is_absolute());
+        conn.registry_put(RegistryEntry::workspace("app", scratch.join("app")).unwrap())
+            .await
+            .unwrap();
+        let listed = conn.registry_list().await.unwrap();
+        let ws = listed.iter().find(|e| e.alias == "app").unwrap();
+        assert!(ws.root().expect("workspace entry").is_absolute());
 
         // A launch aimed at the workspace runs at its root — no dir sent,
         // no client-side knowledge of paths required.
         let meta = conn
-            .launch_in(
-                "app",
-                Some(Command::parse("bash -c 'sleep 30'").unwrap()),
+            .launch(
+                None,
+                None,
+                Some("app"),
+                None,
                 None,
                 SIZE,
                 in_place(),
@@ -56,7 +62,7 @@ async fn workspace_targeted_launch_runs_at_workspace_root() {
             .await
             .unwrap();
         assert!(
-            meta.working_copy.path.starts_with(&ws.root),
+            meta.working_copy.path.starts_with(ws.root().unwrap()),
             "session must run inside the workspace root: {}",
             meta.working_copy.path.display()
         );
@@ -65,7 +71,7 @@ async fn workspace_targeted_launch_runs_at_workspace_root() {
 
         // An unknown alias is a typed refusal.
         let err = conn
-            .launch_in("nope", None, None, SIZE, in_place())
+            .launch(None, None, Some("nope"), None, None, SIZE, in_place())
             .await
             .unwrap_err();
         assert!(
@@ -73,7 +79,51 @@ async fn workspace_targeted_launch_runs_at_workspace_root() {
             "expected UnknownWorkspace, got {err:?}"
         );
 
-        conn.stop(&meta.id).await.unwrap();
+        // A named profile resolves host-side to its argv.
+        conn.registry_put(
+            RegistryEntry::profile(
+                "sleeper",
+                vec!["bash".into(), "-c".into(), "sleep 30".into()],
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+        let via_profile = conn
+            .launch(None, None, None, Some("sleeper"), None, SIZE, in_place())
+            .await
+            .unwrap();
+        assert!(
+            via_profile.command.starts_with("bash"),
+            "profile must supply the command: {}",
+            via_profile.command
+        );
+        // Explicit command beats the profile — most explicit wins.
+        let explicit = conn
+            .launch(
+                Some(Command::parse("bash -c 'sleep 30'").unwrap()),
+                None,
+                None,
+                Some("sleeper"),
+                None,
+                SIZE,
+                in_place(),
+            )
+            .await
+            .unwrap();
+        assert!(explicit.command.contains("sleep 30"));
+        conn.stop(&via_profile.id).await.unwrap();
+        conn.stop(&explicit.id).await.unwrap();
+
+        // An unknown profile is a typed refusal.
+        let err = conn
+            .launch(None, None, None, Some("nope"), None, SIZE, in_place())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::Rpc(ref e) if matches!(e, bao_protocol::WireError::UnknownProfile { .. })),
+            "expected UnknownProfile, got {err:?}"
+        );
     })
     .await;
     let _ = host.kill().await;
@@ -84,15 +134,17 @@ async fn workspace_targeted_launch_runs_at_workspace_root() {
     let mut host = common::start_host(&home, port).await;
     let second = tokio::time::timeout(Duration::from_secs(15), async {
         let mut conn = Conn::connect(&addr).await.unwrap();
-        let list = conn.workspace_list().await.unwrap();
-        assert_eq!(list.len(), 1, "registry must survive a restart");
-        assert_eq!(list[0].alias, "app");
-        assert!(list[0].root.starts_with(&scratch));
-        assert!(list[0].root.starts_with(&scratch));
+        let list = conn.registry_list().await.unwrap();
+        assert_eq!(list.len(), 2, "registry must survive a restart");
+        let app = list.iter().find(|e| e.alias == "app").expect("app entry");
+        assert!(app.root().unwrap().starts_with(&scratch));
+        assert!(list.iter().any(|e| e.alias == "sleeper"));
 
         // Forget; sessions already launched against it are untouched.
-        conn.workspace_remove("app").await.unwrap();
-        assert!(conn.workspace_list().await.unwrap().is_empty());
+        conn.registry_remove("app").await.unwrap();
+        let list = conn.registry_list().await.unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].alias, "sleeper");
     })
     .await;
     let _ = host.kill().await;

@@ -2,15 +2,13 @@
 //! daemon→client, with `Reply` payloads. The JSON shape is an implementation
 //! detail of serde; nothing is matched as a string on the Rust side.
 
-use std::path::PathBuf;
-
 use serde::{Deserialize, Serialize};
 
 use bao_core::{
     event::{EventKind, SessionEvent},
+    registry::RegistryEntry,
     sandbox::SandboxKind,
     types::{SessionId, SessionMeta, Status, TerminalSize},
-    workspace::Workspace,
 };
 
 use crate::types::{DaemonInfo, LaunchRequest, WireBytes};
@@ -85,16 +83,16 @@ pub enum Rpc {
     Rm {
         session: SessionId,
     },
-    /// List this host's registered workspaces.
-    WorkspaceList,
-    /// Register a workspace: alias → root path (must exist on this host).
-    WorkspaceAdd {
-        alias: String,
-        path: PathBuf,
+    /// List this host's registry entries (workspaces + profiles).
+    RegistryList,
+    /// Insert or replace an entry by alias (upsert). Validated host-side:
+    /// workspace roots must exist here; profile argv must be a command.
+    RegistryPut {
+        entry: RegistryEntry,
     },
-    /// Forget a workspace by alias. Sessions already launched against it
-    /// are untouched.
-    WorkspaceRemove {
+    /// Forget an entry by alias. Sessions already launched against it are
+    /// untouched.
+    RegistryRemove {
         alias: String,
     },
 }
@@ -127,13 +125,9 @@ pub enum Reply {
         /// fresh emulator to render the terminal's state without replay.
         screen: WireBytes,
     },
-    /// The workspace just registered.
-    Workspace {
-        workspace: Workspace,
-    },
-    /// All workspaces registered on this host, sorted by alias.
-    Workspaces {
-        workspaces: Vec<Workspace>,
+    /// All registry entries on this host, sorted by alias.
+    Entries {
+        entries: Vec<RegistryEntry>,
     },
     Ok,
 }
@@ -196,6 +190,10 @@ pub enum WireError {
     UnknownWorkspace {
         alias: String,
     },
+    /// No profile registered under this name on this host.
+    UnknownProfile {
+        name: String,
+    },
     Ambiguous {
         query: String,
         ids: usize,
@@ -222,6 +220,9 @@ impl std::fmt::Display for WireError {
             WireError::NotFound { query } => write!(f, "no session matches '{query}'"),
             WireError::UnknownWorkspace { alias } => {
                 write!(f, "unknown workspace '{alias}' — see `bao workspace list`")
+            }
+            WireError::UnknownProfile { name } => {
+                write!(f, "unknown profile '{name}' — see `bao profile list`")
             }
             WireError::Ambiguous { query, ids, names } => write!(
                 f,

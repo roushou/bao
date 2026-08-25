@@ -48,15 +48,15 @@ self-disambiguating; the product name is read by users every day.
 
 ## Registration
 
-- `bao workspace add <path>` registers a workspace: alias + resolved root path,
-  stored daemon-side in `<home>/workspaces.json` (alongside `profiles.json`).
-  `bao workspace rm/list` manage the registry.
+Workspaces live in **the registry** — one store shared with profiles, one
+alias namespace, upsert semantics. See [`registry.md`](registry.md); the
+product front door is `bao workspace add <alias> [path]`.
 - Declared by path, not inferred: no magic scanning of `$HOME`. Fragile
   inference was rejected.
 - A path only means something on the host that can see it, so registration is
-  **per-host**: `bao workspace add` registers on the daemon whose machine resolves
-  the path. Aliases are how clients target workspaces without knowing hosts;
-  alias collision across hosts is an error surfaced at launch time, never
+  **per-host**: `bao workspace add` registers on the daemon whose machine
+  resolves the path. Aliases are how clients target workspaces without knowing
+  hosts; collision across hosts is an error surfaced at launch time, never
   silently resolved.
 
 ## Targeting
@@ -124,7 +124,7 @@ TUI catches up.
 - **workspace** for the grouping; sandbox type renamed to **working copy**
   (dir: `working-copies/`) so the word stays unambiguous.
 - Registration by explicit path, per host; aliases are the client-facing
-  handle.
+  handle; one shared registry with profiles (upsert semantics).
 - Launch targets a workspace; cwd loses its privileged role.
 - Sidebar/tab-bar/main layout; tabs are chrome, selection lives in the
   sidebar.

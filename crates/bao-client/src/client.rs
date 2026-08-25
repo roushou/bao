@@ -6,14 +6,14 @@
 
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
 use bao_core::{
+    registry::RegistryEntry,
     sandbox::SandboxSpec,
     types::{Command, Hostname, SessionId, SessionMeta, TerminalSize},
-    workspace::Workspace,
 };
 use bao_protocol::{
     ChannelKind, DaemonInfo, FromHost, LaunchRequest, PROTOCOL_VERSION, Reply, Request, Rpc,
@@ -239,49 +239,24 @@ impl Conn {
         self.writer.watch().await
     }
 
-    /// Launch a session. `command`/`dir` of `None` defer to the daemon's
-    /// defaults (`pi`, the daemon's cwd).
+    /// Launch a session. Everything optional defers to the daemon:
+    /// `command`/`profile` resolve host-side (explicit > profile > default),
+    /// `dir` falls back to the daemon's cwd, `workspace` targets a
+    /// registered root wherever you are.
+    #[allow(clippy::too_many_arguments)]
     pub async fn launch(
         &mut self,
         command: Option<Command>,
         dir: Option<PathBuf>,
-        name: Option<String>,
-        size: TerminalSize,
-        sandbox: SandboxSpec,
-    ) -> Result<SessionMeta, Error> {
-        self.writer.launch(command, dir, name, size, sandbox).await
-    }
-
-    /// Launch a session targeted at a registered workspace: the daemon
-    /// resolves the alias against this host's registry and runs the session
-    /// at the workspace's root.
-    pub async fn launch_in(
-        &mut self,
-        workspace: &str,
-        command: Option<Command>,
+        workspace: Option<&str>,
+        profile: Option<&str>,
         name: Option<String>,
         size: TerminalSize,
         sandbox: SandboxSpec,
     ) -> Result<SessionMeta, Error> {
         self.writer
-            .launch_in(workspace, command, name, size, sandbox)
+            .launch(command, dir, workspace, profile, name, size, sandbox)
             .await
-    }
-
-    /// All workspaces registered on this host, sorted by alias.
-    pub async fn workspace_list(&mut self) -> Result<Vec<Workspace>, Error> {
-        self.writer.workspace_list().await
-    }
-
-    /// Register a workspace on this host (alias → root path).
-    pub async fn workspace_add(&mut self, alias: &str, path: &Path) -> Result<Workspace, Error> {
-        self.writer.workspace_add(alias, path).await
-    }
-
-    /// Forget a workspace by alias. Sessions already launched against it are
-    /// untouched.
-    pub async fn workspace_remove(&mut self, alias: &str) -> Result<(), Error> {
-        self.writer.workspace_remove(alias).await
     }
 
     /// Attach to a session's terminal on its own channel: returns the
@@ -292,6 +267,22 @@ impl Conn {
         session: &SessionId,
     ) -> Result<(SessionMeta, u64, Vec<u8>), Error> {
         self.writer.attach(session).await
+    }
+
+    /// All registry entries on this host, sorted by alias.
+    pub async fn registry_list(&mut self) -> Result<Vec<RegistryEntry>, Error> {
+        self.writer.registry_list().await
+    }
+
+    /// Insert or replace a registry entry on this host (upsert by alias).
+    pub async fn registry_put(&mut self, entry: RegistryEntry) -> Result<(), Error> {
+        self.writer.registry_put(entry).await
+    }
+
+    /// Forget a registry entry by alias. Sessions already launched against
+    /// it are untouched.
+    pub async fn registry_remove(&mut self, alias: &str) -> Result<(), Error> {
+        self.writer.registry_remove(alias).await
     }
 
     pub async fn input(
@@ -376,10 +367,13 @@ impl ConnWriter {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn launch(
         &mut self,
         command: Option<Command>,
         dir: Option<PathBuf>,
+        workspace: Option<&str>,
+        profile: Option<&str>,
         name: Option<String>,
         size: TerminalSize,
         sandbox: SandboxSpec,
@@ -388,7 +382,8 @@ impl ConnWriter {
             .call(Rpc::Launch(LaunchRequest {
                 command,
                 dir,
-                workspace: None,
+                workspace: workspace.map(String::from),
+                profile: profile.map(String::from),
                 name,
                 size,
                 sandbox,
@@ -400,55 +395,23 @@ impl ConnWriter {
         }
     }
 
-    /// Launch targeted at a registered workspace (the daemon resolves the
-    /// alias; the client never needs the path).
-    pub async fn launch_in(
-        &mut self,
-        workspace: &str,
-        command: Option<Command>,
-        name: Option<String>,
-        size: TerminalSize,
-        sandbox: SandboxSpec,
-    ) -> Result<SessionMeta, Error> {
-        match self
-            .call(Rpc::Launch(LaunchRequest {
-                command,
-                dir: None,
-                workspace: Some(workspace.to_string()),
-                name,
-                size,
-                sandbox,
-            }))
-            .await?
-        {
-            Reply::Launch { session } => Ok(session),
+    pub async fn registry_list(&mut self) -> Result<Vec<RegistryEntry>, Error> {
+        match self.call(Rpc::RegistryList).await? {
+            Reply::Entries { entries } => Ok(entries),
             _ => Err(Error::UnexpectedReply),
         }
     }
 
-    pub async fn workspace_list(&mut self) -> Result<Vec<Workspace>, Error> {
-        match self.call(Rpc::WorkspaceList).await? {
-            Reply::Workspaces { workspaces } => Ok(workspaces),
+    pub async fn registry_put(&mut self, entry: RegistryEntry) -> Result<(), Error> {
+        match self.call(Rpc::RegistryPut { entry }).await? {
+            Reply::Ok => Ok(()),
             _ => Err(Error::UnexpectedReply),
         }
     }
 
-    pub async fn workspace_add(&mut self, alias: &str, path: &Path) -> Result<Workspace, Error> {
+    pub async fn registry_remove(&mut self, alias: &str) -> Result<(), Error> {
         match self
-            .call(Rpc::WorkspaceAdd {
-                alias: alias.to_string(),
-                path: path.to_path_buf(),
-            })
-            .await?
-        {
-            Reply::Workspace { workspace } => Ok(workspace),
-            _ => Err(Error::UnexpectedReply),
-        }
-    }
-
-    pub async fn workspace_remove(&mut self, alias: &str) -> Result<(), Error> {
-        match self
-            .call(Rpc::WorkspaceRemove {
+            .call(Rpc::RegistryRemove {
                 alias: alias.to_string(),
             })
             .await?
@@ -458,6 +421,9 @@ impl ConnWriter {
         }
     }
 
+    /// Attach to a session's terminal on its own channel: returns the
+    /// consistent (seq, screen) snapshot; live bytes arrive on the shared
+    /// event stream.
     pub async fn attach(
         &mut self,
         session: &SessionId,
@@ -545,6 +511,7 @@ impl ConnWriter {
         }
     }
 
+    /// Rename a session (`None` clears its name).
     pub async fn rename(&mut self, session: &SessionId, name: Option<String>) -> Result<(), Error> {
         match self
             .call(Rpc::Rename {

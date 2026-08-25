@@ -20,10 +20,10 @@ pub enum StateEvent {
 pub struct Manager {
     sessions: RwLock<HashMap<SessionId, Arc<Session>>>,
     working_copies: WorkingCopyStore,
-    /// Registered launch targets (`workspaces.json`). Sessions are aimed at
-    /// workspaces; the registry is daemon-side because a path only means
-    /// something on the host that can see it.
-    workspaces: RwLock<crate::workspace::WorkspaceRegistry>,
+    /// The launch registry (`registry.json`): workspace targets and profile
+    /// presets, one alias namespace. Daemon-side because a path or command
+    /// only means something on the host that runs it.
+    registry: RwLock<crate::registry::Registry>,
     /// On-disk session store (versioned, atomically written, salvage-on-
     /// restore).
     store: SessionStore,
@@ -58,7 +58,7 @@ impl Manager {
         Manager {
             sessions: RwLock::new(HashMap::new()),
             working_copies,
-            workspaces: RwLock::new(crate::workspace::WorkspaceRegistry::in_memory()),
+            registry: RwLock::new(crate::registry::Registry::in_memory()),
             store: SessionStore::new(sessions_dir),
             state_bus,
             sandbox_factory,
@@ -80,7 +80,7 @@ impl Manager {
             WorkingCopyStore::new(home.working_copies_dir()),
             sandbox_factory,
         );
-        *m.workspaces.write().unwrap() = crate::workspace::WorkspaceRegistry::load(home.root())?;
+        *m.registry.write().unwrap() = crate::registry::Registry::load(home.root())?;
         m.load_existing()?;
         Ok(m)
     }
@@ -90,18 +90,16 @@ impl Manager {
         self.store.dir()
     }
 
-    /// The workspace registry (read): resolve aliases, list targets.
-    pub fn workspaces(
-        &self,
-    ) -> std::sync::RwLockReadGuard<'_, crate::workspace::WorkspaceRegistry> {
-        self.workspaces.read().unwrap()
+    /// The launch registry (read): resolve workspace/profile aliases.
+    pub fn registry(&self) -> std::sync::RwLockReadGuard<'_, crate::registry::Registry> {
+        self.registry.read().unwrap()
     }
 
-    /// The workspace registry (write): register and forget launch targets.
-    pub(crate) fn workspaces_mut(
+    /// The launch registry (write): register and forget entries.
+    pub(crate) fn registry_mut(
         &self,
-    ) -> std::sync::RwLockWriteGuard<'_, crate::workspace::WorkspaceRegistry> {
-        self.workspaces.write().unwrap()
+    ) -> std::sync::RwLockWriteGuard<'_, crate::registry::Registry> {
+        self.registry.write().unwrap()
     }
 
     fn load_existing(&self) -> Result<(), Error> {

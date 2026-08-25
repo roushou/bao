@@ -24,6 +24,8 @@ async fn interrupted_session_can_be_resumed() {
         .launch(
             Some(Command::parse(cmd).unwrap()),
             Some(scratch),
+            None,
+            None,
             Some("worker".to_string()),
             TerminalSize {
                 cols: 120,

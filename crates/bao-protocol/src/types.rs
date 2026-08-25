@@ -62,6 +62,10 @@ pub struct LaunchRequest {
     /// client happens to be. Takes precedence over `dir`.
     #[serde(default)]
     pub workspace: Option<String>,
+    /// Launch preset: a registered profile alias, resolved host-side to the
+    /// command it names. Precedence: explicit `command` > profile > default.
+    #[serde(default)]
+    pub profile: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]

@@ -53,6 +53,8 @@ async fn two_agents_share_a_repo_without_stepping_on_each_other() {
         .launch(
             Some(Command::parse(&launcher("A > marker.txt; echo READY_A")).unwrap()),
             Some(repo.clone()),
+            None,
+            None,
             Some("alpha".to_string()),
             TerminalSize {
                 cols: 120,
@@ -70,6 +72,8 @@ async fn two_agents_share_a_repo_without_stepping_on_each_other() {
         .launch(
             Some(Command::parse(&launcher("echo READY_B")).unwrap()),
             Some(repo.clone()),
+            None,
+            None,
             Some("beta".to_string()),
             TerminalSize {
                 cols: 120,

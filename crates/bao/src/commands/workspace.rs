@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use bao_core::registry::RegistryEntry;
 use clap::{Args, Subcommand};
 
 use super::Context;
@@ -47,15 +48,29 @@ impl WorkspaceCmd {
                     .ok_or_else(|| {
                         anyhow::anyhow!("no directory given and no current directory")
                     })?;
-                let ws = conn.workspace_add(&add.alias, &path).await?;
-                println!("{} → {}", ws.alias, ws.root.display());
+                conn.registry_put(RegistryEntry::workspace(&add.alias, path)?)
+                    .await?;
+                println!("registered '{}' — `bao launch {}`", add.alias, add.alias);
             }
             WorkspaceSubCmd::Rm { alias } => {
-                conn.workspace_remove(alias).await?;
+                let entries = conn.registry_list().await?;
+                if let Some(e) = entries.iter().find(|e| e.alias == *alias) {
+                    if !e.is_workspace() {
+                        anyhow::bail!(
+                            "'{alias}' is a profile, not a workspace — see `bao profile rm`"
+                        );
+                    }
+                }
+                conn.registry_remove(alias).await?;
                 println!("forgot '{alias}'");
             }
             WorkspaceSubCmd::List => {
-                let workspaces = conn.workspace_list().await?;
+                let workspaces: Vec<_> = conn
+                    .registry_list()
+                    .await?
+                    .into_iter()
+                    .filter(|e| e.is_workspace())
+                    .collect();
                 if workspaces.is_empty() {
                     println!(
                         "no workspaces registered on this host — `bao workspace add <alias> [path]`"
@@ -64,7 +79,14 @@ impl WorkspaceCmd {
                     let width = workspaces.iter().map(|w| w.alias.len()).max().unwrap_or(0);
                     println!("{:<width$}  ROOT", "ALIAS", width = width);
                     for w in workspaces {
-                        println!("{:<width$}  {}", w.alias, w.root.display(), width = width);
+                        println!(
+                            "{:<width$}  {}",
+                            w.alias,
+                            w.root()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_default(),
+                            width = width
+                        );
                     }
                 }
             }

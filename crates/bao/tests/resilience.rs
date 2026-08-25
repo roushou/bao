@@ -24,6 +24,8 @@ async fn session_survives_daemon_restart() {
             Some(Command::parse(cmd).unwrap()),
             Some(scratch),
             None,
+            None,
+            None,
             TerminalSize {
                 cols: 120,
                 rows: 40,

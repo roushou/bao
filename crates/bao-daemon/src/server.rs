@@ -456,14 +456,22 @@ impl<R: AsyncRead + Unpin + Send> Connection<R> {
                 .await?;
             }
             Rpc::Launch(launch) => {
+                // Precedence: explicit command > named profile > default.
+                // The most explicit thing the user said wins.
                 let command = match launch.command {
                     Some(c) => c,
-                    None => match Command::parse("pi") {
-                        Ok(c) => c,
-                        Err(e) => {
-                            self.err(id, e).await?;
-                            return Ok(());
+                    None => match &launch.profile {
+                        Some(name) => {
+                            let argv = self.manager.registry().resolve_profile(name);
+                            match argv {
+                                Some(argv) => Command::from_args(argv),
+                                None => {
+                                    self.err(id, Error::UnknownProfile(name.clone())).await?;
+                                    return Ok(());
+                                }
+                            }
                         }
+                        None => Command::parse("pi")?,
                     },
                 };
                 // A targeted launch names its workspace; the daemon resolves
@@ -471,11 +479,7 @@ impl<R: AsyncRead + Unpin + Send> Connection<R> {
                 // raw dir — targeting is the intent, the path is a detail.
                 let (dir, workspace) = match &launch.workspace {
                     Some(ws) => {
-                        let resolved = self
-                            .manager
-                            .workspaces()
-                            .resolve(ws)
-                            .map(|w| w.root.clone());
+                        let resolved = self.manager.registry().resolve_workspace(ws);
                         match resolved {
                             Some(d) => (Some(d), Some(ws.clone())),
                             None => {
@@ -594,25 +598,25 @@ impl<R: AsyncRead + Unpin + Send> Connection<R> {
                 Ok(()) => self.reply(id, Reply::Ok).await?,
                 Err(e) => self.err(id, e).await?,
             },
-            Rpc::WorkspaceList => {
-                let workspaces = self
+            Rpc::RegistryList => {
+                let entries = self
                     .manager
-                    .workspaces()
+                    .registry()
                     .list()
                     .into_iter()
                     .cloned()
                     .collect();
-                self.reply(id, Reply::Workspaces { workspaces }).await?;
+                self.reply(id, Reply::Entries { entries }).await?;
             }
-            Rpc::WorkspaceAdd { alias, path } => {
-                let result = self.manager.workspaces_mut().add(&alias, &path);
+            Rpc::RegistryPut { entry } => {
+                let result = self.manager.registry_mut().put(entry);
                 match result {
-                    Ok(workspace) => self.reply(id, Reply::Workspace { workspace }).await?,
+                    Ok(()) => self.reply(id, Reply::Ok).await?,
                     Err(e) => self.err(id, e).await?,
                 }
             }
-            Rpc::WorkspaceRemove { alias } => {
-                let result = self.manager.workspaces_mut().remove(&alias);
+            Rpc::RegistryRemove { alias } => {
+                let result = self.manager.registry_mut().remove(&alias);
                 match result {
                     Ok(()) => self.reply(id, Reply::Ok).await?,
                     Err(e) => self.err(id, e).await?,
@@ -680,6 +684,7 @@ mod tests {
     };
 
     use bao_core::{
+        registry::RegistryEntry,
         sandbox::{SandboxKind, SandboxSpec},
         types::{Command, SessionId, TerminalSize},
     };
@@ -702,6 +707,7 @@ mod tests {
             command: Some(Command::parse(command).unwrap()),
             dir: Some(dir.to_path_buf()),
             workspace: None,
+            profile: None,
             name: None,
             size: TerminalSize::default(),
             sandbox: SandboxSpec {
@@ -1127,36 +1133,36 @@ mod tests {
         assert!(matches!(err, WireError::NotFound { .. }));
     }
 
-    /// Workspaces: register → list → targeted launch lands in the
-    /// workspace's root → unknown alias is a typed refusal → remove.
+    /// The registry: register → list → targeted launch lands in the
+    /// workspace's root → unknown aliases are typed refusals → upsert
+    /// replaces by alias → remove.
     #[tokio::test]
-    async fn workspaces_register_target_and_remove() {
+    async fn registry_entries_target_launches_and_upsert() {
         let root = temp_root("workspaces");
         std::fs::create_dir_all(root.join("app")).unwrap();
         let manager = Arc::new(Manager::new(root.clone(), root.join("working-copies")));
         let (mut control, _) = dial(&manager, ChannelKind::Control, 64 * 1024).await;
 
-        // Register.
-        let Reply::Workspace { workspace } = control
-            .call(Rpc::WorkspaceAdd {
-                alias: "myapp".into(),
-                path: root.join("app"),
+        control
+            .call(Rpc::RegistryPut {
+                entry: RegistryEntry::workspace("myapp", root.join("app")).unwrap(),
             })
             .await
-            .unwrap()
-        else {
-            panic!("expected Workspace");
-        };
-        assert_eq!(workspace.alias, "myapp");
-        assert!(workspace.root.is_absolute());
+            .unwrap();
+        control
+            .call(Rpc::RegistryPut {
+                entry: RegistryEntry::profile("review", vec!["pi".into()]).unwrap(),
+            })
+            .await
+            .unwrap();
 
-        // List shows it.
-        let Reply::Workspaces { workspaces } = control.call(Rpc::WorkspaceList).await.unwrap()
-        else {
-            panic!("expected Workspaces");
+        // List shows both, sorted.
+        let Reply::Entries { entries } = control.call(Rpc::RegistryList).await.unwrap() else {
+            panic!("expected Entries");
         };
-        assert_eq!(workspaces.len(), 1);
-        assert_eq!(workspaces[0].alias, "myapp");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].alias, "myapp");
+        assert_eq!(entries[1].alias, "review");
 
         // A launch aimed at the workspace runs at its root — no dir sent.
         let launched = match control
@@ -1164,10 +1170,11 @@ mod tests {
                 command: Some(Command::parse("bash -c 'sleep 5'").unwrap()),
                 dir: None,
                 workspace: Some("myapp".into()),
+                profile: None,
                 name: None,
                 size: TerminalSize::default(),
-                sandbox: bao_core::sandbox::SandboxSpec {
-                    isolation: bao_core::sandbox::SandboxKind::InPlace,
+                sandbox: SandboxSpec {
+                    isolation: SandboxKind::InPlace,
                 },
             }))
             .await
@@ -1176,36 +1183,77 @@ mod tests {
             Reply::Launch { session } => session,
             other => panic!("expected Launch, got {other:?}"),
         };
-        assert!(launched.working_copy.path.starts_with(&workspace.root));
+        let ws_root = root.join("app").canonicalize().unwrap();
+        assert!(launched.working_copy.path.starts_with(ws_root));
+        assert_eq!(launched.workspace.as_deref(), Some("myapp"));
 
-        // An unknown alias is a typed refusal, not a guess.
+        // Unknown aliases are typed refusals, not guesses.
         let err = control
             .call(Rpc::Launch(LaunchRequest {
-                command: Some(Command::parse("bash -c 'sleep 5'").unwrap()),
+                command: None,
                 dir: None,
                 workspace: Some("nope".into()),
+                profile: None,
                 name: None,
                 size: TerminalSize::default(),
-                sandbox: bao_core::sandbox::SandboxSpec {
-                    isolation: bao_core::sandbox::SandboxKind::InPlace,
+                sandbox: SandboxSpec {
+                    isolation: SandboxKind::InPlace,
                 },
             }))
             .await
             .expect_err("unknown workspace must refuse");
         assert!(matches!(err, WireError::UnknownWorkspace { .. }));
 
-        // Remove; the alias stops resolving. The session itself is untouched.
+        let err = control
+            .call(Rpc::Launch(LaunchRequest {
+                command: None,
+                dir: None,
+                workspace: None,
+                profile: Some("nowhere".into()),
+                name: None,
+                size: TerminalSize::default(),
+                sandbox: SandboxSpec {
+                    isolation: SandboxKind::InPlace,
+                },
+            }))
+            .await
+            .expect_err("unknown profile must refuse");
+        assert!(matches!(err, WireError::UnknownProfile { .. }));
+
+        // Upsert replaces by alias without erroring or duplicating.
         control
-            .call(Rpc::WorkspaceRemove {
+            .call(Rpc::RegistryPut {
+                entry: RegistryEntry::profile(
+                    "myapp",
+                    vec!["bash".into(), "-c".into(), "sleep 9".into()],
+                )
+                .unwrap(),
+            })
+            .await
+            .unwrap();
+        let Reply::Entries { entries } = control.call(Rpc::RegistryList).await.unwrap() else {
+            panic!("expected Entries");
+        };
+        assert_eq!(entries.len(), 2);
+        assert!(
+            entries
+                .iter()
+                .find(|e| e.alias == "myapp")
+                .unwrap()
+                .is_profile()
+        );
+
+        // Remove; sessions already launched are untouched.
+        control
+            .call(Rpc::RegistryRemove {
                 alias: "myapp".into(),
             })
             .await
             .unwrap();
-        let Reply::Workspaces { workspaces } = control.call(Rpc::WorkspaceList).await.unwrap()
-        else {
-            panic!("expected Workspaces");
+        let Reply::Entries { entries } = control.call(Rpc::RegistryList).await.unwrap() else {
+            panic!("expected Entries");
         };
-        assert!(workspaces.is_empty());
+        assert_eq!(entries.len(), 1);
         manager.kill_all();
     }
 }

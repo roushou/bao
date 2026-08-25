@@ -490,30 +490,18 @@ impl Overview {
         // Aim at the selected session's workspace when there is one — new
         // sessions land next to what you're already watching.
         let target = self.selected_row().and_then(|r| r.meta.workspace.clone());
-        let result = match &target {
-            Some(ws) => {
-                self.writer
-                    .launch_in(
-                        ws,
-                        None,
-                        name,
-                        TerminalSize::default(),
-                        SandboxSpec::default(),
-                    )
-                    .await
-            }
-            None => {
-                self.writer
-                    .launch(
-                        None,
-                        None,
-                        name,
-                        TerminalSize::default(),
-                        SandboxSpec::default(),
-                    )
-                    .await
-            }
-        };
+        let result = self
+            .writer
+            .launch(
+                None,
+                None,
+                target.as_deref(),
+                None,
+                name,
+                TerminalSize::default(),
+                SandboxSpec::default(),
+            )
+            .await;
         match result {
             Ok(session) => {
                 // Select + dock the new session so its boot is visible in the
