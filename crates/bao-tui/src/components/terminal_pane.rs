@@ -6,13 +6,101 @@ use std::collections::HashMap;
 use bao_client::HostEvent;
 use bao_core::types::{SessionId, TerminalSize};
 use crossterm::event::KeyEvent;
-use ratatui::{Frame, layout::Rect};
+use ratatui::{
+    Frame,
+    layout::Rect,
+    style::{Color, Modifier, Style},
+    text::{Line, Span, Text},
+    widgets::Paragraph,
+};
 
 use crate::{
     components::Component,
     state::{Ctx, Focus},
     terminal::{Keypress, Terminal},
 };
+
+/// Render one live terminal inside `rect`: the title bar (signal + name +
+/// ended note) over the emulator's screen, with the end-of-session banner
+/// laid on top. Presentation only — every decision lives in [`Terminal`].
+pub(crate) fn render_terminal(f: &mut Frame, rect: Rect, focused: bool, t: &Terminal) {
+    if rect.height < 3 {
+        f.render_widget(
+            Paragraph::new("terminal too small"),
+            Rect::new(rect.x, rect.y, rect.width, 1),
+        );
+        return;
+    }
+    let w = rect.width;
+    let title_y = rect.y;
+    let emu_rect = Rect::new(rect.x, rect.y + 1, w, rect.height.saturating_sub(1));
+
+    let sig = t.signal();
+    let name = if t.name.is_empty() {
+        t.sid.to_string()
+    } else {
+        t.name.clone()
+    };
+    let mut spans = vec![
+        Span::styled(
+            if focused { "▍ " } else { "  " },
+            Style::default().fg(Color::LightBlue),
+        ),
+        Span::styled(sig.glyph.to_string(), sig.style),
+        Span::styled(" ", Style::default()),
+        Span::styled(
+            format!("{name} · {}", sig.text),
+            sig.style.add_modifier(Modifier::BOLD),
+        ),
+    ];
+    if let Some(end) = &t.ended {
+        let msg = match end {
+            crate::terminal::End::Exited(code) => format!(
+                " — exited{}",
+                code.map(|c| format!(" (code {c})")).unwrap_or_default()
+            ),
+            crate::terminal::End::Interrupted => {
+                " — interrupted (process gone, history kept)".to_string()
+            }
+            crate::terminal::End::Gone { reason } => match reason {
+                Some(r) => format!(" — launch failed: {r}"),
+                None => " — session removed".to_string(),
+            },
+        };
+        spans.push(Span::styled(msg, Style::default().fg(Color::Yellow)));
+    }
+    f.render_widget(
+        Paragraph::new(Line::from(spans)),
+        Rect::new(rect.x, title_y, w, 1),
+    );
+
+    // The emulator is the screen — no borders, no input line.
+    f.render_widget(Paragraph::new(Text::from(t.emu.render())), emu_rect);
+
+    // End-of-session banner over the emulator.
+    if let Some(end) = &t.ended {
+        let msg = match end {
+            crate::terminal::End::Exited(code) => format!(
+                " session exited{} — press any key to step out ",
+                code.map(|c| format!(" (code {c})")).unwrap_or_default()
+            ),
+            crate::terminal::End::Interrupted => {
+                " session interrupted — the session process is gone (host restarted); history preserved — press any key to step out "
+                    .to_string()
+            }
+            crate::terminal::End::Gone { reason } => match reason {
+                Some(r) => format!(" launch failed: {r} — press any key to exit "),
+                None => " session removed — press any key to exit ".to_string(),
+            },
+        };
+        let banner = Paragraph::new(Text::from(msg)).style(Style::default().fg(Color::Yellow));
+        let mid_y = emu_rect.y + emu_rect.height.saturating_sub(1).saturating_sub(2);
+        f.render_widget(
+            banner,
+            Rect::new(emu_rect.x + 1, mid_y, emu_rect.width.saturating_sub(2), 1),
+        );
+    }
+}
 
 pub struct TerminalPane {
     terminals: HashMap<SessionId, Terminal>,
@@ -118,7 +206,7 @@ impl Component for TerminalPane {
     fn render(&mut self, f: &mut Frame, ctx: &Ctx, rect: Rect) {
         if let Some(sid) = self.active.clone() {
             if let Some(t) = self.terminals.get(&sid) {
-                t.draw_in(f, rect, ctx.focus == Focus::Terminal);
+                render_terminal(f, rect, ctx.focus == Focus::Terminal, t);
             }
         }
     }
