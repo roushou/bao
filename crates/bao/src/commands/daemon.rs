@@ -33,6 +33,9 @@ impl DaemonCmd {
         if matches!(self.cmd, Some(DaemonCommand::Stop)) {
             return stop(ctx);
         }
+        // The daemon owns the home layout: make sure it exists before the
+        // PID file (or anything else) needs a place inside it.
+        std::fs::create_dir_all(ctx.home.root())?;
         // Holding the PID lock is what makes this *the* daemon: acquire it
         // before touching any other state.
         let _pid = PidFile::acquire(ctx.home.daemon_pid_file())
