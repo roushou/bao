@@ -469,22 +469,22 @@ impl<R: AsyncRead + Unpin + Send> Connection<R> {
                 // A targeted launch names its workspace; the daemon resolves
                 // the alias against this host's registry. Alias wins over a
                 // raw dir — targeting is the intent, the path is a detail.
-                let dir = match &launch.workspace {
+                let (dir, workspace) = match &launch.workspace {
                     Some(ws) => {
-                        let root = self
+                        let resolved = self
                             .manager
                             .workspaces()
                             .resolve(ws)
                             .map(|w| w.root.clone());
-                        match root {
-                            Some(d) => Some(d),
+                        match resolved {
+                            Some(d) => (Some(d), Some(ws.clone())),
                             None => {
                                 self.err(id, Error::UnknownWorkspace(ws.clone())).await?;
                                 return Ok(());
                             }
                         }
                     }
-                    None => launch.dir,
+                    None => (launch.dir, None),
                 };
                 let cwd = match dir {
                     Some(d) if d.is_dir() => d,
@@ -503,7 +503,14 @@ impl<R: AsyncRead + Unpin + Send> Connection<R> {
                 };
                 match self
                     .manager
-                    .launch(command, cwd, launch.size, launch.name, launch.sandbox)
+                    .launch(
+                        command,
+                        cwd,
+                        launch.size,
+                        launch.name,
+                        workspace,
+                        launch.sandbox,
+                    )
                     .await
                 {
                     Ok(sess) => {

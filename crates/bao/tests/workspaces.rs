@@ -60,6 +60,8 @@ async fn workspace_targeted_launch_runs_at_workspace_root() {
             "session must run inside the workspace root: {}",
             meta.working_copy.path.display()
         );
+        // The session remembers its target — views group on this.
+        assert_eq!(meta.workspace.as_deref(), Some("app"));
 
         // An unknown alias is a typed refusal.
         let err = conn
@@ -85,6 +87,7 @@ async fn workspace_targeted_launch_runs_at_workspace_root() {
         let list = conn.workspace_list().await.unwrap();
         assert_eq!(list.len(), 1, "registry must survive a restart");
         assert_eq!(list[0].alias, "app");
+        assert!(list[0].root.starts_with(&scratch));
         assert!(list[0].root.starts_with(&scratch));
 
         // Forget; sessions already launched against it are untouched.

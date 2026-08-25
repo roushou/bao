@@ -7,6 +7,7 @@ pub mod header;
 pub mod help;
 pub mod palette;
 pub mod rail;
+pub mod tabs;
 pub mod terminal_pane;
 
 use ratatui::{
@@ -31,6 +32,7 @@ pub trait Component {
 pub struct Components {
     pub header: header::Header,
     pub rail: rail::Rail,
+    pub tabs: tabs::Tabs,
     pub footer: footer::Footer,
     pub palette: palette::Palette,
     pub help: help::Help,
@@ -42,6 +44,7 @@ impl Components {
         Components {
             header: header::Header::new(),
             rail: rail::Rail::new(),
+            tabs: tabs::Tabs::new(),
             footer: footer::Footer::new(),
             palette: palette::Palette::new(),
             help: help::Help::new(),

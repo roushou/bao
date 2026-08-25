@@ -186,6 +186,61 @@ pub fn sort_rows(rows: &mut [Row]) {
     rows.sort_by_key(|r| (r.group.order(), r.inner_rank(), r.age_secs));
 }
 
+/// The sidebar label for sessions launched at a raw directory — honest about
+/// having no registered target.
+pub const UNGROUPED: &str = "unassigned";
+
+/// One workspace's slice of the sidebar: its sessions in severity order,
+/// plus whether any of them needs the human.
+pub struct WorkspaceGroup {
+    pub name: String,
+    pub needs_attention: bool,
+    pub rows: Vec<Row>,
+}
+
+/// Group sessions by their launch target: named workspaces alphabetically,
+/// unassigned last. Order within a group is whatever order the rows arrived
+/// in (the severity sort). Pure derivation — views render this as-is.
+pub fn group_rows(rows: &[Row]) -> Vec<WorkspaceGroup> {
+    let mut groups: Vec<WorkspaceGroup> = Vec::new();
+    for row in rows {
+        let name = row
+            .meta
+            .workspace
+            .clone()
+            .unwrap_or_else(|| UNGROUPED.to_string());
+        match groups.iter_mut().find(|g| g.name == name) {
+            Some(g) => g.rows.push(row.clone()),
+            None => groups.push(WorkspaceGroup {
+                name,
+                needs_attention: false,
+                rows: vec![row.clone()],
+            }),
+        }
+    }
+    for g in &mut groups {
+        g.needs_attention = g.rows.iter().any(|r| r.group == Group::NeedsYou);
+    }
+    groups.sort_by(|a, b| {
+        let un = |g: &WorkspaceGroup| g.name == UNGROUPED;
+        match (un(a), un(b)) {
+            (true, false) => std::cmp::Ordering::Greater,
+            (false, true) => std::cmp::Ordering::Less,
+            _ => a.name.cmp(&b.name),
+        }
+    });
+    groups
+}
+
+/// One tab in the top bar: an open terminal, echoed as glyph + title.
+#[derive(Debug, Clone)]
+pub struct TabView {
+    pub title: String,
+    pub glyph: char,
+    pub style: Style,
+    pub active: bool,
+}
+
 /// Which pane owns the keyboard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
@@ -227,6 +282,9 @@ pub struct Ctx<'a> {
     pub host: &'a str,
     pub focus: Focus,
     pub selection: Option<SessionId>,
+    /// The open terminals, in the order they were opened — the tab bar is
+    /// their echo, never the navigator.
+    pub tabs: &'a [TabView],
     pub filter: String,
     pub filtering: bool,
     pub status_line: String,
@@ -273,6 +331,7 @@ mod tests {
                 branch: Some("bao-abc12345".into()),
                 path: "/tmp/tree".into(),
             },
+            workspace: None,
             created: now - 60_000,
             host: Hostname::parse("localhost").unwrap(),
             status,
@@ -350,5 +409,40 @@ mod tests {
         assert_eq!(rows[1].name, "interrupted");
         assert_eq!(rows[2].name, "running");
         assert_eq!(rows[3].name, "done");
+    }
+
+    fn in_workspace(mut m: SessionMeta, ws: &str) -> Row {
+        m.workspace = Some(ws.to_string());
+        Row::from_meta(&m)
+    }
+
+    #[test]
+    fn groups_by_workspace_alphabetical_unassigned_last() {
+        let mut m = meta(Status::Running, 5);
+        let rows = vec![
+            in_workspace(m.clone(), "zeta"),
+            {
+                m.id = SessionId::from_str("abc12346").unwrap();
+                in_workspace(m.clone(), "alpha")
+            },
+            {
+                m.id = SessionId::from_str("abc12347").unwrap();
+                m.workspace = None;
+                Row::from_meta(&m)
+            },
+        ];
+        let groups = group_rows(&rows);
+        let names: Vec<&str> = groups.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(names, vec!["alpha", "zeta", UNGROUPED]);
+        assert!(!groups[0].needs_attention);
+    }
+
+    #[test]
+    fn group_needs_attention_when_any_row_does() {
+        let mut m = meta(Status::Interrupted, 0);
+        let rows = vec![in_workspace(m.clone(), "app")];
+        m.id = SessionId::from_str("abc12348").unwrap();
+        let groups = group_rows(&rows);
+        assert!(groups[0].needs_attention);
     }
 }

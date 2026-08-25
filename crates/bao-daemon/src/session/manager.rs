@@ -124,6 +124,7 @@ impl Manager {
         cwd: &Path,
         size: TerminalSize,
         name: Option<String>,
+        workspace: Option<String>,
     ) -> Result<Arc<Session>, Error> {
         let id = SessionId::generate();
         let provisional = WorkingCopy {
@@ -137,6 +138,7 @@ impl Manager {
             name,
             command: command.clone(),
             working_copy: provisional,
+            workspace,
             size,
             clock: Clock::system(),
         };
@@ -158,9 +160,10 @@ impl Manager {
         cwd: &Path,
         size: TerminalSize,
         name: Option<String>,
+        workspace: Option<String>,
         sandbox: &SandboxSpec,
     ) -> Result<Arc<Session>, Error> {
-        let sess = self.begin_launch(command, cwd, size, name)?;
+        let sess = self.begin_launch(command, cwd, size, name, workspace)?;
         let sid = sess.id.clone();
         let result = self
             .sandbox_factory
@@ -183,9 +186,10 @@ impl Manager {
         cwd: PathBuf,
         size: TerminalSize,
         name: Option<String>,
+        workspace: Option<String>,
         sandbox: SandboxSpec,
     ) -> Result<Arc<Session>, Error> {
-        let sess = self.begin_launch(&command, &cwd, size, name)?;
+        let sess = self.begin_launch(&command, &cwd, size, name, workspace)?;
         let m = self.clone();
         let task_sess = sess.clone();
         tokio::spawn(async move {

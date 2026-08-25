@@ -47,6 +47,8 @@ pub struct SessionSpec {
     pub name: Option<String>,
     pub command: Command,
     pub working_copy: WorkingCopy,
+    /// The registered workspace alias the launch was aimed at.
+    pub workspace: Option<String>,
     pub size: TerminalSize,
     /// Time source — system in production; tests inject a fake clock to
     /// drive idle-alert derivation.
@@ -311,6 +313,7 @@ mod tests {
                 &sandbox.working_copy.path,
                 TerminalSize { cols: 80, rows: 24 },
                 None,
+                None,
                 &SandboxSpec {
                     isolation: SandboxKind::InPlace,
                 },
@@ -355,6 +358,7 @@ mod tests {
                 branch: None,
                 path: dir.clone(),
             },
+            workspace: None,
             size: TerminalSize { cols: 80, rows: 24 },
             clock,
         };
@@ -493,6 +497,7 @@ mod tests {
                 branch: None,
                 path: dir.clone(),
             },
+            workspace: None,
             size: TerminalSize { cols: 80, rows: 24 },
             clock: Clock::system(),
         };
@@ -587,6 +592,7 @@ mod tests {
                 &sandbox.working_copy.path,
                 TerminalSize { cols: 80, rows: 24 },
                 None,
+                None,
                 &SandboxSpec {
                     isolation: SandboxKind::InPlace,
                 },
@@ -646,6 +652,7 @@ mod tests {
             &command,
             &dir,
             TerminalSize { cols: 80, rows: 24 },
+            None,
             None,
             &spec,
         ) {

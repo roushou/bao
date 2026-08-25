@@ -88,8 +88,10 @@ scope for the first slice.
 
 - **Sidebar** replaces the Rail's flat list: workspaces as groups, their
   agents nested beneath, severity ladder intact. It owns navigation focus.
-- **Tab bar** is chrome, not a pane — the visual echo of the open agents of
-  the selected workspace. Selection lives in the sidebar; tabs own no keys.
+- **Tab bar** is chrome, not a pane — the visual echo of the open terminals,
+  in open order, glyph + title each. It owns no keys; selection lives in the
+  sidebar (and palette). Scoped-per-workspace tabs were rejected: they would
+  churn on every sidebar navigation, and a tab bar's value is standing still.
 - **Main view** is today's Terminal pane untouched. Focus contract survives:
   exactly one focused pane, keys never overlap.
 

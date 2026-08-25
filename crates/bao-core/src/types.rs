@@ -287,6 +287,11 @@ pub struct SessionMeta {
     /// The working copy the session runs in — where, its git identity, and the
     /// isolation claim.
     pub working_copy: WorkingCopy,
+    /// The registered workspace this session was aimed at (its alias).
+    /// `None` when launched at a raw directory — grouping in views follows
+    /// this; the path never does.
+    #[serde(default)]
+    pub workspace: Option<String>,
     pub created: u64,
     /// Machine the session lives on (the daemon's hostname). The seed of
     /// location grouping.

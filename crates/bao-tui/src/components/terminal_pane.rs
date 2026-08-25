@@ -18,6 +18,8 @@ use crate::{
 
 pub struct TerminalPane {
     terminals: HashMap<SessionId, Terminal>,
+    /// Open order — the tab bar echoes this, never the HashMap's chaos.
+    order: Vec<SessionId>,
     active: Option<SessionId>,
     fullscreen: bool,
 }
@@ -26,6 +28,7 @@ impl TerminalPane {
     pub fn new() -> Self {
         TerminalPane {
             terminals: HashMap::new(),
+            order: Vec::new(),
             active: None,
             fullscreen: false,
         }
@@ -33,6 +36,10 @@ impl TerminalPane {
 
     pub fn set_active(&mut self, sid: Option<SessionId>) {
         self.active = sid;
+    }
+
+    pub fn active(&self) -> Option<&SessionId> {
+        self.active.as_ref()
     }
 
     pub fn fullscreen(&self) -> bool {
@@ -48,16 +55,27 @@ impl TerminalPane {
     }
 
     pub fn insert(&mut self, terminal: Terminal) {
-        self.terminals.insert(terminal.sid.clone(), terminal);
+        let sid = terminal.sid.clone();
+        self.terminals.insert(sid.clone(), terminal);
+        if !self.order.contains(&sid) {
+            self.order.push(sid);
+        }
     }
 
     pub fn remove(&mut self, sid: &SessionId) {
         self.terminals.remove(sid);
+        self.order.retain(|x| x != sid);
     }
 
     pub fn clear(&mut self) {
         self.terminals.clear();
+        self.order.clear();
         self.active = None;
+    }
+
+    /// The open terminals in open order (the tab bar's source).
+    pub fn open(&self) -> &[SessionId] {
+        &self.order
     }
 
     /// Resize a cached terminal's viewport; returns the new size if it moved.

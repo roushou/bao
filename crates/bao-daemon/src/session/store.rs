@@ -43,6 +43,7 @@ pub(crate) struct RestoredIdentity {
     pub(crate) name: Option<String>,
     pub(crate) command: Command,
     pub(crate) working_copy: WorkingCopy,
+    pub(crate) workspace: Option<String>,
     pub(crate) created: u64,
     pub(crate) status: Status,
 }
@@ -182,6 +183,7 @@ pub(crate) struct StoredMeta {
     pub(crate) created: u64,
     pub(crate) name: Option<String>,
     pub(crate) working_copy: Option<WorkingCopy>,
+    pub(crate) workspace: Option<String>,
 }
 
 impl StoredMeta {
@@ -198,6 +200,7 @@ impl StoredMeta {
             created: s.created,
             name: s.name.lock().unwrap().clone(),
             working_copy: Some(working_copy),
+            workspace: s.workspace(),
         }
     }
 }

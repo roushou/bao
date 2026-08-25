@@ -15,7 +15,7 @@ use crate::{
     action::Action,
     components::{Component, pad_trunc},
     event::Event,
-    state::{Ctx, Group, Row},
+    state::{self, Ctx, Group, Row},
     theme,
 };
 
@@ -72,15 +72,18 @@ impl Rail {
             .collect()
     }
 
+    /// Visible sessions in sidebar order: grouped by workspace, groups
+    /// flattened. Group headers are display-only — never selectable.
     fn visible_indices(&self, rows: &[Row]) -> Vec<usize> {
-        if self.filter.is_empty() {
-            return (0..rows.len()).collect();
+        let mut out = Vec::new();
+        for group in state::group_rows(&self.filtered(rows)) {
+            for r in &group.rows {
+                if let Some(i) = rows.iter().position(|x| x.id == r.id) {
+                    out.push(i);
+                }
+            }
         }
-        rows.iter()
-            .enumerate()
-            .filter(|(_, r)| self.matches(r))
-            .map(|(i, _)| i)
-            .collect()
+        out
     }
 
     fn matches(&self, row: &Row) -> bool {
@@ -211,7 +214,7 @@ impl Component for Rail {
             .count();
 
         let mut title = vec![Span::styled(
-            format!(" sessions ({}) ", vis.len()),
+            format!(" workspaces ({}) ", vis.len()),
             Style::default()
                 .fg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
@@ -233,15 +236,56 @@ impl Component for Rail {
 
         let mut lines = vec![Line::from(title)];
         let cw = (rect.width as usize).saturating_sub(2);
-        let session_cap = (rect.height as usize).saturating_sub(3);
-        for &i in vis.iter() {
-            if lines.len() > session_cap {
+        let cap = (rect.height as usize).saturating_sub(3);
+        'groups: for group in state::group_rows(&self.filtered(ctx.rows)) {
+            if lines.len() >= cap {
                 break;
             }
-            let sel = self.selection.as_ref() == Some(&ctx.rows[i].id);
-            lines.push(rail_row(&ctx.rows[i], cw, sel));
+            // The group header: aggregate state only — glyph + name + count.
+            let marker = if group.needs_attention {
+                Span::styled(
+                    format!("{} ", theme::glyphs().full),
+                    Style::default().fg(theme::palette().waiting),
+                )
+            } else {
+                Span::styled(
+                    format!("{} ", theme::glyphs().dot),
+                    Style::default().fg(theme::palette().dim),
+                )
+            };
+            lines.push(Line::from(vec![
+                marker,
+                Span::styled(
+                    pad_trunc(&group.name, cw.saturating_sub(6)),
+                    Style::default()
+                        .fg(Color::Gray)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!(" {}", group.rows.len()),
+                    Style::default().fg(theme::palette().dim),
+                ),
+            ]));
+            for row in &group.rows {
+                if lines.len() >= cap {
+                    break 'groups;
+                }
+                let sel = self.selection.as_ref() == Some(&row.id);
+                lines.push(rail_row(row, cw.saturating_sub(1), sel));
+            }
         }
         f.render_widget(Paragraph::new(lines), rect);
+    }
+}
+
+impl Rail {
+    /// The rows that survive the filter (grouping input).
+    fn filtered(&self, rows: &[Row]) -> Vec<Row> {
+        if self.filter.is_empty() {
+            rows.to_vec()
+        } else {
+            rows.iter().filter(|r| self.matches(r)).cloned().collect()
+        }
     }
 }
 

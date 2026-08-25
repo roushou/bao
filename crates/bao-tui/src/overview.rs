@@ -136,12 +136,14 @@ impl Overview {
 
     async fn dispatch_key(&mut self, key: crossterm::event::KeyEvent) {
         let event = Event::Key(key);
+        let tabs = self.tab_views();
         let action = {
             let ctx = make_ctx(
                 &self.rows,
                 &self.host,
                 self.focus,
                 self.components.rail.selection().cloned(),
+                &tabs,
                 self.components.rail.filter().to_string(),
                 self.components.rail.filtering(),
                 self.status_line.clone(),
@@ -225,11 +227,13 @@ impl Overview {
     }
 
     fn render(&mut self, f: &mut Frame, cols: u16, rows: u16) {
+        let tabs = self.tab_views();
         let ctx = make_ctx(
             &self.rows,
             &self.host,
             self.focus,
             self.components.rail.selection().cloned(),
+            &tabs,
             self.components.rail.filter().to_string(),
             self.components.rail.filtering(),
             self.status_line.clone(),
@@ -247,6 +251,7 @@ impl Overview {
             Paragraph::new(crate::components::rule(l.rule1.width)),
             l.rule1,
         );
+        self.components.tabs.render(f, &ctx, l.tabs);
 
         if self.components.palette.is_open() {
             render_body(&mut self.components, f, &ctx, &l);
@@ -420,17 +425,34 @@ impl Overview {
     }
 
     async fn create(&mut self, name: Option<String>) {
-        match self
-            .writer
-            .launch(
-                None,
-                None,
-                name,
-                TerminalSize::default(),
-                SandboxSpec::default(),
-            )
-            .await
-        {
+        // Aim at the selected session's workspace when there is one — new
+        // sessions land next to what you're already watching.
+        let target = self.selected_row().and_then(|r| r.meta.workspace.clone());
+        let result = match &target {
+            Some(ws) => {
+                self.writer
+                    .launch_in(
+                        ws,
+                        None,
+                        name,
+                        TerminalSize::default(),
+                        SandboxSpec::default(),
+                    )
+                    .await
+            }
+            None => {
+                self.writer
+                    .launch(
+                        None,
+                        None,
+                        name,
+                        TerminalSize::default(),
+                        SandboxSpec::default(),
+                    )
+                    .await
+            }
+        };
+        match result {
             Ok(session) => {
                 // Select + dock the new session so its boot is visible in the
                 // terminal pane while the the overview stays focused (the
@@ -608,6 +630,28 @@ impl Overview {
             .and_then(|id| self.rows.iter().find(|r| &r.id == id))
     }
 
+    /// The tab bar's model: every open terminal, in open order, echoed as
+    /// glyph + title. Pure derivation from the pane's order and the rows.
+    fn tab_views(&self) -> Vec<crate::state::TabView> {
+        self.components
+            .terminal_pane
+            .open()
+            .iter()
+            .map(|sid| {
+                let row = self.rows.iter().find(|r| &r.id == sid);
+                crate::state::TabView {
+                    title: match row {
+                        Some(r) if !r.name.is_empty() => r.name.clone(),
+                        _ => sid.to_string(),
+                    },
+                    glyph: row.map(|r| r.glyph()).unwrap_or('·'),
+                    style: row.map(|r| r.style()).unwrap_or_default(),
+                    active: self.components.terminal_pane.active() == Some(sid),
+                }
+            })
+            .collect()
+    }
+
     fn flash(&mut self, msg: impl Into<String>) {
         self.flash = Some(Toast {
             text: msg.into(),
@@ -621,6 +665,7 @@ impl Overview {
 struct Layout {
     header: Rect,
     rule1: Rect,
+    tabs: Rect,
     body: Rect,
     rule2: Rect,
     footer: Rect,
@@ -631,27 +676,28 @@ struct Layout {
 }
 
 fn layout(cols: u16, rows: u16) -> Layout {
-    let body_h = rows.saturating_sub(4);
+    let body_h = rows.saturating_sub(5);
     let wide = cols >= WIDE_MIN_COLS;
     let (rail, divider, terminal_pane) = if wide {
         let rail_w = (cols * 30 / 100).clamp(26, 40);
         (
-            Rect::new(0, 2, rail_w, body_h),
-            Rect::new(rail_w, 2, 1, body_h),
-            Rect::new(rail_w + 1, 2, cols - rail_w - 1, body_h),
+            Rect::new(0, 3, rail_w, body_h),
+            Rect::new(rail_w, 3, 1, body_h),
+            Rect::new(rail_w + 1, 3, cols - rail_w - 1, body_h),
         )
     } else {
         let rail_h = (body_h / 3).clamp(4, 9);
         (
-            Rect::new(0, 2, cols, rail_h),
-            Rect::new(0, 2 + rail_h, 0, 0),
-            Rect::new(0, 2 + rail_h, cols, body_h - rail_h),
+            Rect::new(0, 3, cols, rail_h),
+            Rect::new(0, 3 + rail_h, 0, 0),
+            Rect::new(0, 3 + rail_h, cols, body_h - rail_h),
         )
     };
     Layout {
         header: Rect::new(0, 0, cols, 1),
         rule1: Rect::new(0, 1, cols, 1),
-        body: Rect::new(0, 2, cols, body_h),
+        tabs: Rect::new(0, 2, cols, 1),
+        body: Rect::new(0, 3, cols, body_h),
         rule2: Rect::new(0, rows - 2, cols, 1),
         footer: Rect::new(0, rows - 1, cols, 1),
         rail,
@@ -668,7 +714,7 @@ fn overlay(cols: u16, rows: u16, max_w: u16, min_h: u16, max_h: u16) -> Rect {
 }
 
 fn terminal_pane_size((cols, rows): (u16, u16)) -> (u16, u16) {
-    let body_h = rows.saturating_sub(4);
+    let body_h = rows.saturating_sub(5);
     if cols >= WIDE_MIN_COLS {
         let rail_w = (cols * 30 / 100).clamp(26, 40);
         (cols - rail_w - 1, body_h)
@@ -702,6 +748,7 @@ fn make_ctx<'a>(
     host: &'a str,
     focus: Focus,
     selection: Option<SessionId>,
+    tabs: &'a [crate::state::TabView],
     filter: String,
     filtering: bool,
     status_line: String,
@@ -714,6 +761,7 @@ fn make_ctx<'a>(
         host,
         focus,
         selection,
+        tabs,
         filter,
         filtering,
         status_line,

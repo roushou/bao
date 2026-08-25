@@ -17,6 +17,9 @@ pub struct Session {
     /// saga materializes the working copy (provisional → real); everything else
     /// reads it through [`Session::working_copy`].
     working_copy: Mutex<WorkingCopy>,
+    /// The registered workspace alias this session was aimed at (`None` when
+    /// launched at a raw directory). Set at registration, immutable after.
+    workspace: Mutex<Option<String>>,
     /// The materialized sandbox this session runs in (`None` before the
     /// launch saga materializes it, or for a session restored without a
     /// rehydrated backend).
@@ -173,6 +176,7 @@ impl Session {
             args: spec.command.clone(),
             cwd: spec.working_copy.path.clone(),
             working_copy: spec.working_copy.clone(),
+            workspace: spec.workspace.clone(),
             created,
             host: crate::hostname::resolve(),
             status: Status::Preparing,
@@ -190,6 +194,7 @@ impl Session {
             name: Mutex::new(spec.name.clone()),
             command: spec.command.clone(),
             working_copy: Mutex::new(spec.working_copy.clone()),
+            workspace: Mutex::new(spec.workspace.clone()),
             sandbox: Mutex::new(None),
             created,
             status: Mutex::new(Status::Preparing),
@@ -359,6 +364,11 @@ impl Session {
         self.working_copy.lock().unwrap().clone()
     }
 
+    /// The registered workspace alias this session was aimed at.
+    pub fn workspace(&self) -> Option<String> {
+        self.workspace.lock().unwrap().clone()
+    }
+
     /// Replace the working copy — the launch saga's step 1 materializes the real
     /// working copy over the provisional one, then re-persists and publishes.
     pub fn set_workspace(&self, working_copy: WorkingCopy) {
@@ -468,6 +478,7 @@ impl Session {
             args: self.command.clone(),
             cwd: working_copy.path.clone(),
             working_copy,
+            workspace: self.workspace.lock().unwrap().clone(),
             created: self.created,
             host: self.host.clone(),
             status,
@@ -569,6 +580,7 @@ impl Session {
                             name: stored.name,
                             command,
                             working_copy,
+                            workspace: stored.workspace,
                             created: stored.created,
                             status,
                         },
@@ -592,6 +604,7 @@ impl Session {
                             name: None,
                             command: Command::default(),
                             working_copy,
+                            workspace: None,
                             created: if loaded.first_ts > 0 {
                                 loaded.first_ts
                             } else {
@@ -619,6 +632,7 @@ impl Session {
             name,
             command,
             working_copy,
+            workspace,
             created,
             status,
         } = identity;
@@ -642,6 +656,7 @@ impl Session {
             args: command.clone(),
             cwd: working_copy.path.clone(),
             working_copy: working_copy.clone(),
+            workspace: workspace.clone(),
             created,
             host: crate::hostname::resolve(),
             status,
@@ -663,6 +678,7 @@ impl Session {
             name: Mutex::new(name),
             command,
             working_copy: Mutex::new(working_copy),
+            workspace: Mutex::new(workspace),
             sandbox: Mutex::new(None),
             created,
             status: Mutex::new(status),

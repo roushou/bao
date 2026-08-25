@@ -401,6 +401,7 @@ mod tests {
                 branch: Some("bao-abc12345".into()),
                 path: "/tmp/tree".into(),
             },
+            workspace: None,
             created: now - 60_000,
             host: Hostname::parse("localhost").unwrap(),
             status,
