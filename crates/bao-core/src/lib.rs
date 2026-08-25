@@ -13,3 +13,4 @@ pub mod event;
 pub mod lifecycle;
 pub mod sandbox;
 pub mod types;
+pub mod workspace;

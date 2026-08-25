@@ -12,6 +12,7 @@ pub mod sandbox;
 pub mod screen;
 pub mod server;
 pub mod session;
+pub mod workspace;
 
 pub use home::Home;
 pub use server::serve;

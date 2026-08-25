@@ -14,6 +14,7 @@ mod rename;
 mod resume;
 mod rm;
 mod stop;
+mod workspace;
 
 use std::{
     io::IsTerminal,
@@ -39,6 +40,7 @@ pub use rename::RenameCmd;
 pub use resume::ResumeCmd;
 pub use rm::RmCmd;
 pub use stop::StopCmd;
+pub use workspace::WorkspaceCmd;
 
 #[derive(Parser)]
 #[command(
@@ -68,6 +70,7 @@ pub enum Cmd {
     Stop(StopCmd),
     Rm(RmCmd),
     Profiles(ProfilesCmd),
+    Workspace(WorkspaceCmd),
 }
 
 /// Shared invocation state: resolved home, daemon address, and the loaded
@@ -221,6 +224,7 @@ impl Cli {
             Some(Cmd::Stop(c)) => c.run(&ctx).await,
             Some(Cmd::Rm(c)) => c.run(&ctx).await,
             Some(Cmd::Profiles(c)) => c.run(&ctx).await,
+            Some(Cmd::Workspace(c)) => c.run(&ctx).await,
         }
     }
 }

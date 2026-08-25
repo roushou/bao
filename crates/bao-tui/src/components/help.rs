@@ -50,7 +50,7 @@ impl Component for Help {
                     ("g / G", "first / last"),
                     ("Enter", "attach selected session"),
                     ("⌃p", "jump — quick switch"),
-                    ("/", "filter the ws"),
+                    ("/", "filter sessions"),
                     ("?", "this help"),
                 ],
             ),

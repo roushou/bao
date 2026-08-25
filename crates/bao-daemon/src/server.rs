@@ -466,7 +466,27 @@ impl<R: AsyncRead + Unpin + Send> Connection<R> {
                         }
                     },
                 };
-                let cwd = match launch.dir {
+                // A targeted launch names its workspace; the daemon resolves
+                // the alias against this host's registry. Alias wins over a
+                // raw dir — targeting is the intent, the path is a detail.
+                let dir = match &launch.workspace {
+                    Some(ws) => {
+                        let root = self
+                            .manager
+                            .workspaces()
+                            .resolve(ws)
+                            .map(|w| w.root.clone());
+                        match root {
+                            Some(d) => Some(d),
+                            None => {
+                                self.err(id, Error::UnknownWorkspace(ws.clone())).await?;
+                                return Ok(());
+                            }
+                        }
+                    }
+                    None => launch.dir,
+                };
+                let cwd = match dir {
                     Some(d) if d.is_dir() => d,
                     Some(d) => {
                         self.err(id, format!("directory does not exist: {}", d.display()))
@@ -567,6 +587,30 @@ impl<R: AsyncRead + Unpin + Send> Connection<R> {
                 Ok(()) => self.reply(id, Reply::Ok).await?,
                 Err(e) => self.err(id, e).await?,
             },
+            Rpc::WorkspaceList => {
+                let workspaces = self
+                    .manager
+                    .workspaces()
+                    .list()
+                    .into_iter()
+                    .cloned()
+                    .collect();
+                self.reply(id, Reply::Workspaces { workspaces }).await?;
+            }
+            Rpc::WorkspaceAdd { alias, path } => {
+                let result = self.manager.workspaces_mut().add(&alias, &path);
+                match result {
+                    Ok(workspace) => self.reply(id, Reply::Workspace { workspace }).await?,
+                    Err(e) => self.err(id, e).await?,
+                }
+            }
+            Rpc::WorkspaceRemove { alias } => {
+                let result = self.manager.workspaces_mut().remove(&alias);
+                match result {
+                    Ok(()) => self.reply(id, Reply::Ok).await?,
+                    Err(e) => self.err(id, e).await?,
+                }
+            }
         }
         Ok(())
     }
@@ -650,6 +694,7 @@ mod tests {
         LaunchRequest {
             command: Some(Command::parse(command).unwrap()),
             dir: Some(dir.to_path_buf()),
+            workspace: None,
             name: None,
             size: TerminalSize::default(),
             sandbox: SandboxSpec {
@@ -1073,5 +1118,87 @@ mod tests {
         .await;
         let err = reply.expect_err("attach to an unknown session must be refused");
         assert!(matches!(err, WireError::NotFound { .. }));
+    }
+
+    /// Workspaces: register → list → targeted launch lands in the
+    /// workspace's root → unknown alias is a typed refusal → remove.
+    #[tokio::test]
+    async fn workspaces_register_target_and_remove() {
+        let root = temp_root("workspaces");
+        std::fs::create_dir_all(root.join("app")).unwrap();
+        let manager = Arc::new(Manager::new(root.clone(), root.join("working-copies")));
+        let (mut control, _) = dial(&manager, ChannelKind::Control, 64 * 1024).await;
+
+        // Register.
+        let Reply::Workspace { workspace } = control
+            .call(Rpc::WorkspaceAdd {
+                alias: "myapp".into(),
+                path: root.join("app"),
+            })
+            .await
+            .unwrap()
+        else {
+            panic!("expected Workspace");
+        };
+        assert_eq!(workspace.alias, "myapp");
+        assert!(workspace.root.is_absolute());
+
+        // List shows it.
+        let Reply::Workspaces { workspaces } = control.call(Rpc::WorkspaceList).await.unwrap()
+        else {
+            panic!("expected Workspaces");
+        };
+        assert_eq!(workspaces.len(), 1);
+        assert_eq!(workspaces[0].alias, "myapp");
+
+        // A launch aimed at the workspace runs at its root — no dir sent.
+        let launched = match control
+            .call(Rpc::Launch(LaunchRequest {
+                command: Some(Command::parse("bash -c 'sleep 5'").unwrap()),
+                dir: None,
+                workspace: Some("myapp".into()),
+                name: None,
+                size: TerminalSize::default(),
+                sandbox: bao_core::sandbox::SandboxSpec {
+                    isolation: bao_core::sandbox::SandboxKind::InPlace,
+                },
+            }))
+            .await
+            .unwrap()
+        {
+            Reply::Launch { session } => session,
+            other => panic!("expected Launch, got {other:?}"),
+        };
+        assert!(launched.working_copy.path.starts_with(&workspace.root));
+
+        // An unknown alias is a typed refusal, not a guess.
+        let err = control
+            .call(Rpc::Launch(LaunchRequest {
+                command: Some(Command::parse("bash -c 'sleep 5'").unwrap()),
+                dir: None,
+                workspace: Some("nope".into()),
+                name: None,
+                size: TerminalSize::default(),
+                sandbox: bao_core::sandbox::SandboxSpec {
+                    isolation: bao_core::sandbox::SandboxKind::InPlace,
+                },
+            }))
+            .await
+            .expect_err("unknown workspace must refuse");
+        assert!(matches!(err, WireError::UnknownWorkspace { .. }));
+
+        // Remove; the alias stops resolving. The session itself is untouched.
+        control
+            .call(Rpc::WorkspaceRemove {
+                alias: "myapp".into(),
+            })
+            .await
+            .unwrap();
+        let Reply::Workspaces { workspaces } = control.call(Rpc::WorkspaceList).await.unwrap()
+        else {
+            panic!("expected Workspaces");
+        };
+        assert!(workspaces.is_empty());
+        manager.kill_all();
     }
 }

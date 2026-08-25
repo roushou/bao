@@ -6,13 +6,14 @@
 
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
 use bao_core::{
     sandbox::SandboxSpec,
     types::{Command, Hostname, SessionId, SessionMeta, TerminalSize},
+    workspace::Workspace,
 };
 use bao_protocol::{
     ChannelKind, DaemonInfo, FromHost, LaunchRequest, PROTOCOL_VERSION, Reply, Request, Rpc,
@@ -251,6 +252,38 @@ impl Conn {
         self.writer.launch(command, dir, name, size, sandbox).await
     }
 
+    /// Launch a session targeted at a registered workspace: the daemon
+    /// resolves the alias against this host's registry and runs the session
+    /// at the workspace's root.
+    pub async fn launch_in(
+        &mut self,
+        workspace: &str,
+        command: Option<Command>,
+        name: Option<String>,
+        size: TerminalSize,
+        sandbox: SandboxSpec,
+    ) -> Result<SessionMeta, Error> {
+        self.writer
+            .launch_in(workspace, command, name, size, sandbox)
+            .await
+    }
+
+    /// All workspaces registered on this host, sorted by alias.
+    pub async fn workspace_list(&mut self) -> Result<Vec<Workspace>, Error> {
+        self.writer.workspace_list().await
+    }
+
+    /// Register a workspace on this host (alias → root path).
+    pub async fn workspace_add(&mut self, alias: &str, path: &Path) -> Result<Workspace, Error> {
+        self.writer.workspace_add(alias, path).await
+    }
+
+    /// Forget a workspace by alias. Sessions already launched against it are
+    /// untouched.
+    pub async fn workspace_remove(&mut self, alias: &str) -> Result<(), Error> {
+        self.writer.workspace_remove(alias).await
+    }
+
     /// Attach to a session's terminal on its own channel: returns the
     /// consistent (seq, screen) snapshot; live bytes arrive on the shared
     /// event stream.
@@ -355,6 +388,7 @@ impl ConnWriter {
             .call(Rpc::Launch(LaunchRequest {
                 command,
                 dir,
+                workspace: None,
                 name,
                 size,
                 sandbox,
@@ -362,6 +396,64 @@ impl ConnWriter {
             .await?
         {
             Reply::Launch { session } => Ok(session),
+            _ => Err(Error::UnexpectedReply),
+        }
+    }
+
+    /// Launch targeted at a registered workspace (the daemon resolves the
+    /// alias; the client never needs the path).
+    pub async fn launch_in(
+        &mut self,
+        workspace: &str,
+        command: Option<Command>,
+        name: Option<String>,
+        size: TerminalSize,
+        sandbox: SandboxSpec,
+    ) -> Result<SessionMeta, Error> {
+        match self
+            .call(Rpc::Launch(LaunchRequest {
+                command,
+                dir: None,
+                workspace: Some(workspace.to_string()),
+                name,
+                size,
+                sandbox,
+            }))
+            .await?
+        {
+            Reply::Launch { session } => Ok(session),
+            _ => Err(Error::UnexpectedReply),
+        }
+    }
+
+    pub async fn workspace_list(&mut self) -> Result<Vec<Workspace>, Error> {
+        match self.call(Rpc::WorkspaceList).await? {
+            Reply::Workspaces { workspaces } => Ok(workspaces),
+            _ => Err(Error::UnexpectedReply),
+        }
+    }
+
+    pub async fn workspace_add(&mut self, alias: &str, path: &Path) -> Result<Workspace, Error> {
+        match self
+            .call(Rpc::WorkspaceAdd {
+                alias: alias.to_string(),
+                path: path.to_path_buf(),
+            })
+            .await?
+        {
+            Reply::Workspace { workspace } => Ok(workspace),
+            _ => Err(Error::UnexpectedReply),
+        }
+    }
+
+    pub async fn workspace_remove(&mut self, alias: &str) -> Result<(), Error> {
+        match self
+            .call(Rpc::WorkspaceRemove {
+                alias: alias.to_string(),
+            })
+            .await?
+        {
+            Reply::Ok => Ok(()),
             _ => Err(Error::UnexpectedReply),
         }
     }

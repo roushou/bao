@@ -48,13 +48,13 @@ self-disambiguating; the product name is read by users every day.
 
 ## Registration
 
-- `bao ws add <path>` registers a workspace: alias + resolved root path,
+- `bao workspace add <path>` registers a workspace: alias + resolved root path,
   stored daemon-side in `<home>/workspaces.json` (alongside `profiles.json`).
-  `bao ws rm/list` manage the registry.
+  `bao workspace rm/list` manage the registry.
 - Declared by path, not inferred: no magic scanning of `$HOME`. Fragile
   inference was rejected.
 - A path only means something on the host that can see it, so registration is
-  **per-host**: `bao ws add` registers on the daemon whose machine resolves
+  **per-host**: `bao workspace add` registers on the daemon whose machine resolves
   the path. Aliases are how clients target workspaces without knowing hosts;
   alias collision across hosts is an error surfaced at launch time, never
   silently resolved.
@@ -111,7 +111,7 @@ stays summary-state from `Watch`.
    type (alias, root path) — pure domain, no I/O.
 2. Daemon: `workspaces.json` store + resolution (alias → host + root) +
    `working-copies/` dir migration.
-3. CLI: `bao ws add/rm/list` + targeted `bao launch [WORKSPACE]`.
+3. CLI: `bao workspace add/rm/list` + targeted `bao launch [WORKSPACE]`.
 4. TUI: sidebar hierarchy, then tabs over the existing terminal pane.
 
 Each slice stands alone; targeted creation works from any terminal before the

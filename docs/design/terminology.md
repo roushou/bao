@@ -53,7 +53,7 @@ Two different things; never interchangeable:
 
 - A **workspace** is a user-declared target for sessions — a named alias plus
   a root path (`myapp` → `~/dev/myapp`), possibly containing several repos
-  (`backend/`, `frontend/`). Registered per host with `bao ws add`. Sessions
+  (`backend/`, `frontend/`). Registered per host with `bao workspace add`. Sessions
   are _aimed_ at workspaces. See [`workspaces.md`](workspaces.md).
 - A **working copy** is the isolated checkout one session runs in (the
   materialized sandbox: a git worktree, or the user's own directory when

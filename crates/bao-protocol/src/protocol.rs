@@ -2,12 +2,15 @@
 //! daemon→client, with `Reply` payloads. The JSON shape is an implementation
 //! detail of serde; nothing is matched as a string on the Rust side.
 
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use bao_core::{
     event::{EventKind, SessionEvent},
     sandbox::SandboxKind,
     types::{SessionId, SessionMeta, Status, TerminalSize},
+    workspace::Workspace,
 };
 
 use crate::types::{DaemonInfo, LaunchRequest, WireBytes};
@@ -82,6 +85,18 @@ pub enum Rpc {
     Rm {
         session: SessionId,
     },
+    /// List this host's registered workspaces.
+    WorkspaceList,
+    /// Register a workspace: alias → root path (must exist on this host).
+    WorkspaceAdd {
+        alias: String,
+        path: PathBuf,
+    },
+    /// Forget a workspace by alias. Sessions already launched against it
+    /// are untouched.
+    WorkspaceRemove {
+        alias: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +126,14 @@ pub enum Reply {
         /// The current screen, rebuilt as a byte stream — feed it to a
         /// fresh emulator to render the terminal's state without replay.
         screen: WireBytes,
+    },
+    /// The workspace just registered.
+    Workspace {
+        workspace: Workspace,
+    },
+    /// All workspaces registered on this host, sorted by alias.
+    Workspaces {
+        workspaces: Vec<Workspace>,
     },
     Ok,
 }
@@ -169,6 +192,10 @@ pub enum WireError {
     NotFound {
         query: String,
     },
+    /// No workspace registered under this alias on this host.
+    UnknownWorkspace {
+        alias: String,
+    },
     Ambiguous {
         query: String,
         ids: usize,
@@ -193,6 +220,9 @@ impl std::fmt::Display for WireError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             WireError::NotFound { query } => write!(f, "no session matches '{query}'"),
+            WireError::UnknownWorkspace { alias } => {
+                write!(f, "unknown workspace '{alias}' — see `bao workspace list`")
+            }
             WireError::Ambiguous { query, ids, names } => write!(
                 f,
                 "'{query}' is ambiguous ({ids} id(s), {names} name(s)) — be more specific"

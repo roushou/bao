@@ -40,6 +40,14 @@ pub enum Error {
     SandboxUnavailable(SandboxKind),
     #[error("worktree error: {0}")]
     Worktree(String),
+    #[error("unknown workspace '{0}' — see `bao workspace list`")]
+    UnknownWorkspace(String),
+    #[error("workspace '{0}' is already registered")]
+    DuplicateWorkspace(String),
+    #[error("bad workspace root '{0}': {1}")]
+    BadWorkspacePath(String, String),
+    #[error("'{0}' is already registered as workspace '{1}'")]
+    WorkspacePathTaken(String, String),
     #[error("failed to spawn: {0}")]
     Spawn(String),
     #[error("session meta uses format {0}, newer than this Bao supports")]
@@ -59,11 +67,17 @@ impl From<&Error> for WireError {
             Error::AlreadyRunning => WireError::AlreadyRunning,
             Error::NotRunning => WireError::NotRunning,
             Error::SandboxUnavailable(kind) => WireError::SandboxUnavailable { kind: *kind },
+            Error::UnknownWorkspace(alias) => WireError::UnknownWorkspace {
+                alias: alias.clone(),
+            },
             // User-correctable: they asked for something the daemon can't or
             // won't do given the current state.
             Error::ResumeNotInterrupted(_)
             | Error::NotAGitRepo
-            | Error::TransportUnsupported(_) => WireError::BadRequest {
+            | Error::TransportUnsupported(_)
+            | Error::DuplicateWorkspace(_)
+            | Error::BadWorkspacePath(_, _)
+            | Error::WorkspacePathTaken(_, _) => WireError::BadRequest {
                 message: e.to_string(),
             },
             // The daemon failed, not the caller.

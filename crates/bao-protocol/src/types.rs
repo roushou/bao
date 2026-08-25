@@ -57,6 +57,11 @@ pub struct LaunchRequest {
     pub command: Option<Command>,
     #[serde(default)]
     pub dir: Option<PathBuf>,
+    /// Launch target: a registered workspace alias. When set, the session
+    /// runs at the workspace's root — the launch is targeted, wherever the
+    /// client happens to be. Takes precedence over `dir`.
+    #[serde(default)]
+    pub workspace: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]

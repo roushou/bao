@@ -14,6 +14,8 @@ pub enum Error {
     BadHostname(String),
     #[error("unknown sandbox kind: {0:?} (expected inplace | worktree)")]
     BadSandboxKind(String),
+    #[error("invalid workspace alias: {0:?} (non-empty, no whitespace or path separators)")]
+    BadAlias(String),
     #[error("illegal lifecycle transition: {0} → {1}")]
     IllegalTransition(Status, &'static str),
 }
