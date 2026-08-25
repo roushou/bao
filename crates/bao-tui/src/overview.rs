@@ -125,6 +125,11 @@ impl Overview {
                 Tick::Key(Some(Ok(CrosstermEvent::Resize(_, _)))) => {
                     self.resize_terminal().await;
                 }
+                Tick::Key(Some(Ok(CrosstermEvent::Paste(text)))) => {
+                    if self.focus == Focus::Terminal {
+                        self.terminal_paste(&text).await;
+                    }
+                }
                 Tick::Key(Some(Ok(_))) => {}
                 Tick::Key(Some(Err(_))) | Tick::Key(None) => break,
                 Tick::Host(msg) => self.handle_host(msg).await,
@@ -390,6 +395,16 @@ impl Overview {
             self.focus = Focus::Rail;
             self.components.terminal_pane.set_fullscreen(false);
         }
+    }
+
+    /// Forward a paste to the active terminal — encoded per the harness's
+    /// bracketed-paste mode, which the overview previously dropped entirely.
+    async fn terminal_paste(&mut self, text: &str) {
+        let Some(mut writer) = self.twriter.take() else {
+            return;
+        };
+        self.components.terminal_pane.paste(text, &mut writer).await;
+        self.twriter = Some(writer);
     }
 
     async fn resume_selected(&mut self) {

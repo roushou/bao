@@ -12,7 +12,7 @@
 
 use bao_client::{ConnWriter, HostEvent};
 use bao_core::types::{SessionId, SessionMeta, Status, TerminalSize};
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, EventStream, KeyCode, KeyEvent};
 use futures_util::StreamExt;
 use ratatui::{
     Frame,
@@ -54,45 +54,6 @@ impl End {
             Status::Interrupted => Some(End::Interrupted),
             _ => None,
         }
-    }
-}
-
-/// Encode a keystroke to the exact bytes a terminal would send, so the
-/// harness receives native input (echo, line editing, history, and its own
-/// TUI all work). `None` for keys Bao keeps for itself.
-pub fn key_to_bytes(k: &KeyEvent) -> Option<Vec<u8>> {
-    let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-    let alt = k.modifiers.contains(KeyModifiers::ALT);
-    match k.code {
-        KeyCode::Char(c) if ctrl && !alt => {
-            // Ctrl + letter → control byte (Ctrl-A=1 .. Ctrl-Z=26).
-            let lo = c.to_ascii_lowercase();
-            if lo.is_ascii_lowercase() {
-                Some(vec![lo as u8 - b'a' + 1])
-            } else {
-                None
-            }
-        }
-        KeyCode::Char(c) if alt => {
-            let mut out = vec![0x1b]; // ESC-prefixed (meta) byte.
-            let mut buf = [0u8; 4];
-            out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
-            Some(out)
-        }
-        KeyCode::Char(c) => Some(c.to_string().into_bytes()),
-        KeyCode::Enter => Some(vec![b'\r']),
-        KeyCode::Backspace => Some(vec![0x7f]),
-        KeyCode::Tab => Some(vec![b'\t']),
-        KeyCode::Esc => Some(vec![0x1b]),
-        KeyCode::Up => Some(b"\x1b[A".to_vec()),
-        KeyCode::Down => Some(b"\x1b[B".to_vec()),
-        KeyCode::Left => Some(b"\x1b[D".to_vec()),
-        KeyCode::Right => Some(b"\x1b[C".to_vec()),
-        KeyCode::Home => Some(b"\x1b[H".to_vec()),
-        KeyCode::End => Some(b"\x1b[F".to_vec()),
-        KeyCode::Delete => Some(b"\x1b[3~".to_vec()),
-        KeyCode::Insert => Some(b"\x1b[2~".to_vec()),
-        _ => None,
     }
 }
 
@@ -204,12 +165,21 @@ impl Terminal {
                 Outcome::None
             }
             _ => {
-                if let Some(bytes) = key_to_bytes(k) {
+                let modes = self.emu.modes();
+                if let Some(bytes) = crate::input::Encoder::new(&modes).key(k) {
                     self.forward(writer, &bytes).await;
                 }
                 Outcome::None
             }
         }
+    }
+
+    /// Encode and forward a paste, honoring the harness's bracketed-paste
+    /// mode (wrapped iff it asked for it).
+    pub async fn paste(&mut self, writer: &mut ConnWriter, text: &str) {
+        let modes = self.emu.modes();
+        let bytes = crate::input::Encoder::new(&modes).paste(text);
+        self.forward(writer, &bytes).await;
     }
 
     /// Forward raw bytes to the harness's stdin (used for paste verbatim).
@@ -362,7 +332,7 @@ impl Session {
                             break;
                         }
                     }
-                    Some(Ok(Event::Paste(s))) => pane.forward(&mut writer, s.as_bytes()).await,
+                    Some(Ok(Event::Paste(s))) => pane.paste(&mut writer, &s).await,
                     Some(Ok(Event::Resize(cols, rows))) => {
                         if let Some(size) = pane.set_viewport(cols, rows) {
                             let _ = writer.resize(&pane.sid, size).await;
@@ -420,10 +390,6 @@ mod tests {
         }
     }
 
-    fn key(code: KeyCode) -> KeyEvent {
-        KeyEvent::new(code, KeyModifiers::empty())
-    }
-
     #[test]
     fn title_signal_follows_the_shared_status_language() {
         let sid = SessionId::from_str("abc12345").unwrap();
@@ -434,17 +400,5 @@ mod tests {
             meta: meta(Status::Running, 200),
         });
         assert_eq!(t.signal().glyph, '…');
-    }
-
-    #[test]
-    fn keys_encode_to_native_bytes() {
-        assert_eq!(key_to_bytes(&key(KeyCode::Char('a'))), Some(b"a".to_vec()));
-        assert_eq!(key_to_bytes(&key(KeyCode::Enter)), Some(b"\r".to_vec()));
-        assert_eq!(key_to_bytes(&key(KeyCode::Backspace)), Some(vec![0x7f]));
-        assert_eq!(key_to_bytes(&key(KeyCode::Up)), Some(b"\x1b[A".to_vec()));
-        assert_eq!(
-            key_to_bytes(&KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
-            Some(vec![0x03])
-        );
     }
 }

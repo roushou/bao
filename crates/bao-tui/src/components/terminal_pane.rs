@@ -100,6 +100,16 @@ impl TerminalPane {
         }
     }
 
+    /// Encode + forward a paste to the active terminal.
+    pub async fn paste(&mut self, text: &str, writer: &mut ConnWriter) {
+        let Some(sid) = self.active.clone() else {
+            return;
+        };
+        if let Some(t) = self.terminals.get_mut(&sid) {
+            t.paste(writer, text).await;
+        }
+    }
+
     pub fn handle_event(&mut self, sid: &SessionId, msg: HostEvent) {
         if let Some(t) = self.terminals.get_mut(sid) {
             t.handle_event(msg);
