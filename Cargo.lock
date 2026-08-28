@@ -90,7 +90,6 @@ dependencies = [
  "clap",
  "crossterm",
  "dirs",
- "serde_json",
  "tokio",
 ]
 
