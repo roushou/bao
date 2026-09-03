@@ -21,22 +21,23 @@ use std::{
 };
 
 use anyhow::Result;
-pub use attach::AttachCmd;
 use bao_client::Conn;
 use bao_core::types::{SessionId, TerminalSize};
 use bao_daemon::Home;
 use bao_transport::{Addr, DEFAULT_PORT};
 use clap::{Parser, Subcommand};
-pub use daemon::DaemonCmd;
-pub use info::InfoCmd;
-pub use launch::LaunchCmd;
-pub use list::ListCmd;
-pub use profile::ProfileCmd;
-pub use rename::RenameCmd;
-pub use resume::ResumeCmd;
-pub use rm::RmCmd;
-pub use stop::StopCmd;
-pub use workspace::WorkspaceCmd;
+
+use attach::AttachCmd;
+use daemon::DaemonCmd;
+use info::InfoCmd;
+use launch::LaunchCmd;
+use list::ListCmd;
+use profile::ProfileCmd;
+use rename::RenameCmd;
+use resume::ResumeCmd;
+use rm::RmCmd;
+use stop::StopCmd;
+use workspace::WorkspaceCmd;
 
 #[derive(Parser)]
 #[command(
@@ -47,15 +48,15 @@ pub use workspace::WorkspaceCmd;
 )]
 pub struct Cli {
     #[command(subcommand)]
-    pub cmd: Option<Cmd>,
+    cmd: Option<Cmd>,
 
     /// port the host daemon listens on
     #[arg(long, global = true)]
-    pub port: Option<u16>,
+    port: Option<u16>,
 }
 
 #[derive(Subcommand)]
-pub enum Cmd {
+enum Cmd {
     Daemon(DaemonCmd),
     Launch(LaunchCmd),
     Attach(AttachCmd),
