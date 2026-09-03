@@ -396,7 +396,7 @@ impl<R: AsyncRead + Unpin + Send> Connection<R> {
                         info: DaemonInfo {
                             host: crate::hostname::resolve(),
                             protocol_version: PROTOCOL_VERSION,
-                            sandbox_backends: crate::sandbox::available_backends(),
+                            sandbox_backends: crate::sandbox::Backend::available(),
                         },
                     },
                 )
