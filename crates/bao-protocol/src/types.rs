@@ -70,8 +70,8 @@ pub struct LaunchRequest {
     pub name: Option<String>,
     #[serde(default)]
     pub size: TerminalSize,
-    /// Requested isolation. `None` = resolve the strongest the machine
-    /// offers for the launch dir.
+    /// Requested isolation. `sandbox.isolation == None` = resolve the
+    /// strongest isolation the machine offers for the launch dir.
     #[serde(default)]
     pub sandbox: SandboxSpec,
 }

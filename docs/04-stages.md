@@ -40,8 +40,8 @@ The single-machine story is built and working:
   the overview shows "waiting for you" only when the harness can prove it — it
   never guesses what an session is doing.
 - **Isolation choice.** `bao launch --isolation inplace|worktree|seatbelt|bubblewrap`
-  requests an isolation level (default: worktree); the daemon never silently
-  delivers a weaker one.
+  requests an isolation level (default: strongest the machine can actually
+  provide); the daemon never silently delivers a weaker one.
 - **Machine identity and capability negotiation.** `bao info` reports the
   host, protocol version, and available sandbox backends; clients
   handshake before speaking.

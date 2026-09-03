@@ -658,7 +658,7 @@ mod tests {
             name: None,
             size: TerminalSize::default(),
             sandbox: SandboxSpec {
-                isolation: SandboxKind::InPlace,
+                isolation: Some(SandboxKind::InPlace),
             },
         }
     }
@@ -1121,7 +1121,7 @@ mod tests {
                 name: None,
                 size: TerminalSize::default(),
                 sandbox: SandboxSpec {
-                    isolation: SandboxKind::InPlace,
+                    isolation: Some(SandboxKind::InPlace),
                 },
             }))
             .await
@@ -1144,7 +1144,7 @@ mod tests {
                 name: None,
                 size: TerminalSize::default(),
                 sandbox: SandboxSpec {
-                    isolation: SandboxKind::InPlace,
+                    isolation: Some(SandboxKind::InPlace),
                 },
             }))
             .await
@@ -1160,7 +1160,7 @@ mod tests {
                 name: None,
                 size: TerminalSize::default(),
                 sandbox: SandboxSpec {
-                    isolation: SandboxKind::InPlace,
+                    isolation: Some(SandboxKind::InPlace),
                 },
             }))
             .await

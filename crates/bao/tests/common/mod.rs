@@ -29,11 +29,10 @@ pub fn free_port() -> u16 {
     l.local_addr().unwrap().port()
 }
 
-/// The explicit in-place spec for tests launching in a scratch (non-git)
-/// directory — the default spec is a worktree, which requires a repo.
+/// The explicit in-place spec for tests that need no isolation and no repo.
 pub fn in_place() -> bao_core::sandbox::SandboxSpec {
     bao_core::sandbox::SandboxSpec {
-        isolation: bao_core::sandbox::SandboxKind::InPlace,
+        isolation: Some(bao_core::sandbox::SandboxKind::InPlace),
     }
 }
 

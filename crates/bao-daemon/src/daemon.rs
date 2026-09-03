@@ -252,7 +252,7 @@ mod tests {
 
     fn sandbox() -> SandboxSpec {
         SandboxSpec {
-            isolation: SandboxKind::InPlace,
+            isolation: Some(SandboxKind::InPlace),
         }
     }
 

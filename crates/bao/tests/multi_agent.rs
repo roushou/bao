@@ -60,7 +60,9 @@ async fn two_agents_share_a_repo_without_stepping_on_each_other() {
                 cols: 120,
                 rows: 40,
             },
-            bao_core::sandbox::SandboxSpec::default(),
+            bao_core::sandbox::SandboxSpec {
+                isolation: Some(bao_core::sandbox::SandboxKind::Worktree),
+            },
         )
         .await
         .unwrap();
@@ -79,7 +81,9 @@ async fn two_agents_share_a_repo_without_stepping_on_each_other() {
                 cols: 120,
                 rows: 40,
             },
-            bao_core::sandbox::SandboxSpec::default(),
+            bao_core::sandbox::SandboxSpec {
+                isolation: Some(bao_core::sandbox::SandboxKind::Worktree),
+            },
         )
         .await
         .unwrap();

@@ -44,15 +44,25 @@ impl Sandbox {
         }
     }
 
-    /// Materialize the requested sandbox kind into `store`. A kind that
-    /// cannot be provided is an error — never a silent downgrade.
+    /// Materialize the requested sandbox kind into `store`. An explicit kind
+    /// that cannot be provided is an error — never a silent downgrade; a
+    /// `None` request resolves to the strongest backend this machine can
+    /// actually provide.
     pub fn create(
         store: &WorkingCopyStore,
         id: &SessionId,
         cwd: &Path,
         spec: &SandboxSpec,
     ) -> Result<Sandbox, Error> {
-        prepare_with(store, spec.isolation, id, cwd)
+        // `None` = "best available": resolve the concrete kind before prepare
+        // so the materialization path stays explicit (and honest).
+        let kind = match spec.isolation {
+            Some(kind) => kind,
+            // InPlace/Worktree are unconditional table entries, so `best_backend`
+            // is always `Some`; the fallback is defensive only.
+            None => best_backend().unwrap_or(SandboxKind::InPlace),
+        };
+        prepare_with(store, kind, id, cwd)
     }
 
     /// Re-create a backend from a persisted working copy (restore/resume).
@@ -146,20 +156,71 @@ fn backend(store: &WorkingCopyStore, kind: SandboxKind) -> Box<dyn SandboxBacken
     }
 }
 
+/// One sandbox this build might provide: its kind, how strongly it isolates,
+/// and how to tell whether it is actually available at runtime.
+///
+/// The `#[cfg]` gates on the table entries are the *platform* gate (Seatbelt
+/// is never compiled on Linux, Bubblewrap never on macOS); each entry's
+/// `available` probe is the *runtime* gate. `strength` orders them so
+/// "best available" is `max_by_key(strength)`.
+struct Capability {
+    kind: SandboxKind,
+    /// Higher = stronger isolation. Bubblewrap and Seatbelt share `2` because
+    /// they are mutually exclusive by platform, so they never compete.
+    strength: u8,
+    available: fn() -> bool,
+}
+
+/// The capability table — the single source of truth for what this build can
+/// provide. A new backend (Landlock, a container runtime) is one entry here,
+/// not a new branch in every caller.
+fn capabilities() -> Vec<Capability> {
+    let mut caps = vec![
+        Capability {
+            kind: SandboxKind::InPlace,
+            strength: 0,
+            available: || true,
+        },
+        Capability {
+            kind: SandboxKind::Worktree,
+            strength: 1,
+            available: || true,
+        },
+    ];
+    #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
+    caps.push(Capability {
+        kind: SandboxKind::Bubblewrap,
+        strength: 2,
+        available: bubblewrap::bwrap_available,
+    });
+    #[cfg(target_os = "macos")]
+    caps.push(Capability {
+        kind: SandboxKind::Seatbelt,
+        strength: 2,
+        available: seatbelt::seatbelt_available,
+    });
+    caps
+}
+
 /// The isolation backends this machine can actually provide, for the daemon's
 /// self-description. A client offers only these, never more.
 pub fn available_backends() -> Vec<SandboxKind> {
-    #[allow(unused_mut)]
-    let mut backends = vec![SandboxKind::InPlace, SandboxKind::Worktree];
-    #[cfg(all(feature = "bubblewrap", target_os = "linux"))]
-    if bubblewrap::bwrap_available() {
-        backends.push(SandboxKind::Bubblewrap);
-    }
-    #[cfg(target_os = "macos")]
-    if seatbelt::seatbelt_available() {
-        backends.push(SandboxKind::Seatbelt);
-    }
-    backends
+    capabilities()
+        .into_iter()
+        .filter(|c| (c.available)())
+        .map(|c| c.kind)
+        .collect()
+}
+
+/// The strongest isolation this machine can actually provide — the default
+/// when a launch asks for "best available". Always `Some`: `InPlace` and
+/// `Worktree` need no binary and are unconditional entries.
+pub fn best_backend() -> Option<SandboxKind> {
+    capabilities()
+        .into_iter()
+        .filter(|c| (c.available)())
+        .max_by_key(|c| c.strength)
+        .map(|c| c.kind)
 }
 
 #[cfg(test)]
@@ -206,7 +267,9 @@ mod tests {
             &store,
             &SessionId::from_str("abc12345").unwrap(),
             &repo,
-            &SandboxSpec::default(),
+            &SandboxSpec {
+                isolation: Some(SandboxKind::Worktree),
+            },
         )
         .unwrap();
         let ws = &sandbox.working_copy;
@@ -249,7 +312,7 @@ mod tests {
             &SessionId::from_str("deadbeef").unwrap(),
             &cwd,
             &SandboxSpec {
-                isolation: SandboxKind::InPlace,
+                isolation: Some(SandboxKind::InPlace),
             },
         )
         .unwrap();
@@ -267,7 +330,7 @@ mod tests {
         std::fs::create_dir_all(&cwd).unwrap();
         let store = WorkingCopyStore::new(root.join("working-copies"));
         let spec = SandboxSpec {
-            isolation: SandboxKind::Worktree,
+            isolation: Some(SandboxKind::Worktree),
         };
         assert!(matches!(
             Sandbox::create(
@@ -280,5 +343,25 @@ mod tests {
             Error::SandboxUnavailable(SandboxKind::Worktree)
         ));
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn capability_table_resolves_best_available() {
+        let available = available_backends();
+        // The two unconditional backends are always offered.
+        assert!(available.contains(&SandboxKind::InPlace));
+        assert!(available.contains(&SandboxKind::Worktree));
+
+        // Best is always present, and never weaker than a worktree: a worktree
+        // is always available, so "no isolation" can never be the best.
+        let best = best_backend().expect("InPlace/Worktree are unconditional");
+        assert!(available.contains(&best));
+        assert!(
+            matches!(
+                best,
+                SandboxKind::Worktree | SandboxKind::Bubblewrap | SandboxKind::Seatbelt
+            ),
+            "best must be at least worktree-strength: {best}"
+        );
     }
 }

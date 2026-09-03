@@ -17,7 +17,7 @@ use bao_core::{
 
 fn in_place() -> SandboxSpec {
     SandboxSpec {
-        isolation: SandboxKind::InPlace,
+        isolation: Some(SandboxKind::InPlace),
     }
 }
 

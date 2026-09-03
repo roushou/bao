@@ -302,7 +302,7 @@ mod tests {
             &SessionId::from_str("live0001").unwrap(),
             &dir,
             &SandboxSpec {
-                isolation: SandboxKind::InPlace,
+                isolation: Some(SandboxKind::InPlace),
             },
         )
         .unwrap();
@@ -315,7 +315,7 @@ mod tests {
                 None,
                 None,
                 &SandboxSpec {
-                    isolation: SandboxKind::InPlace,
+                    isolation: Some(SandboxKind::InPlace),
                 },
             )
             .unwrap();
@@ -581,7 +581,7 @@ mod tests {
             &SessionId::from_str("wait0001").unwrap(),
             &dir,
             &SandboxSpec {
-                isolation: SandboxKind::InPlace,
+                isolation: Some(SandboxKind::InPlace),
             },
         )
         .unwrap();
@@ -594,7 +594,7 @@ mod tests {
                 None,
                 None,
                 &SandboxSpec {
-                    isolation: SandboxKind::InPlace,
+                    isolation: Some(SandboxKind::InPlace),
                 },
             )
             .unwrap();
@@ -646,7 +646,7 @@ mod tests {
         // and the saga must compensate and forget.
         let command = Command::parse("bash -c 'echo hi'").unwrap();
         let spec = SandboxSpec {
-            isolation: SandboxKind::Worktree,
+            isolation: Some(SandboxKind::Worktree),
         };
         let err = match m.create(
             &command,

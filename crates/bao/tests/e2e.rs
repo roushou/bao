@@ -357,7 +357,7 @@ async fn failed_backgrounded_launch_signals_gone_on_attach_stream() {
                 rows: 40,
             },
             bao_core::sandbox::SandboxSpec {
-                isolation: bao_core::sandbox::SandboxKind::Worktree,
+                isolation: Some(bao_core::sandbox::SandboxKind::Worktree),
             },
         )
         .await

@@ -109,10 +109,13 @@ One isolated working copy per session, so sessions don't step on each other.
 `Sandbox` — a `WorkingCopy` plus the `SandboxBackend` that built it, placed in
 the `WorkingCopyStore` — and the daemon **never silently delivers a weaker
 isolation than requested**.
-Worktrees (file isolation) are the default backend. `Bubblewrap` (Linux, behind
-the `bubblewrap` feature) and `Seatbelt` (macOS) are the process-sandboxing
-backends; Landlock on Linux is next, matching Claude Code and Codex, with
-containers and MicroVMs later per-machine options.
+An explicit `--isolation` is materialized exactly, or fails honestly. With no
+explicit choice, the daemon resolves the **strongest isolation the machine can
+actually provide** — its capability table (`platform-gated entries + runtime
+probes`) orders backends by strength and picks the top available one: `Bubblewrap`
+on Linux (behind the `bubblewrap` feature), `Seatbelt` on macOS, a worktree as
+the always-available file-isolation floor. Landlock on Linux is next, matching
+Claude Code and Codex, with containers and MicroVMs later per-machine options.
 
 ### Harness adapters
 

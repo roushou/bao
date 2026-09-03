@@ -57,21 +57,22 @@ impl FromStr for SandboxKind {
     }
 }
 
-/// What a launch asks for in isolation. The kind is always explicit: the
-/// daemon materializes exactly this backend or fails — it never silently
-/// downgrades or substitutes.
+/// What a launch asks for in isolation. An explicit [`SandboxKind`] is
+/// materialized exactly, or fails — never silently downgraded or substituted.
+/// `None` asks the daemon for the strongest isolation the machine can
+/// actually provide ("best available"); the concrete kind chosen is reported
+/// back on the session's working copy, so nothing is ever guessed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SandboxSpec {
-    /// Requested isolation.
-    pub isolation: SandboxKind,
+    /// Requested isolation, or `None` for the machine's best available.
+    pub isolation: Option<SandboxKind>,
 }
 
 impl Default for SandboxSpec {
-    /// The default backend: a git worktree (file isolation).
+    /// No explicit request: resolve the strongest isolation the machine
+    /// running the session can actually provide.
     fn default() -> Self {
-        SandboxSpec {
-            isolation: SandboxKind::Worktree,
-        }
+        SandboxSpec { isolation: None }
     }
 }
 
@@ -135,5 +136,10 @@ mod tests {
         assert_eq!(SandboxKind::InPlace.to_string(), "inplace");
         assert_eq!(SandboxKind::Bubblewrap.to_string(), "bubblewrap");
         assert_eq!(SandboxKind::Seatbelt.to_string(), "seatbelt");
+    }
+
+    #[test]
+    fn default_spec_asks_for_best_available() {
+        assert_eq!(SandboxSpec::default().isolation, None);
     }
 }
